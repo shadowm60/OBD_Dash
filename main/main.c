@@ -15,9 +15,7 @@ void app_main()
    
     ESP_LOGI(TAG, "Display init done");
 
-    ui_init();
-
-    loadScreen(SCREEN_ID_STARTUP);
+    //loadScreen(SCREEN_ID_STARTUP);
     ESP_LOGI(TAG, "Screen Loaded");
 
     // Lock the mutex due to the LVGL APIs are not thread-safe

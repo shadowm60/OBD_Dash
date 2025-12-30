@@ -12,5 +12,6 @@
     "--query-driver=**",
     "--compile-commands-dir=c:\\UserData\\git\\OBD_Dash\\build"
   ],
-  "idf.portWin": "COM8"
+  "idf.portWin": "COM8",
+  "idf.flashType": "UART"
 }

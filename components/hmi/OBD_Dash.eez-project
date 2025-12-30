@@ -7,10 +7,10 @@
       "objID": "fd434352-2277-c4a8-e87e-e96cfcbf2305",
       "projectVersion": "v3",
       "projectType": "lvgl",
-      "lvglVersion": "9.0",
+      "lvglVersion": "8.3",
       "extensions": [],
       "imports": [],
-      "flowSupport": false,
+      "flowSupport": true,
       "displayWidth": 800,
       "displayHeight": 480,
       "displayBorderRadius": 0,
@@ -94,7 +94,7 @@
       "imageExportMode": "source",
       "fontExportMode": "source",
       "fileSystemPath": "",
-      "lvglInclude": "lvgl/lvgl.h",
+      "lvglInclude": "lvgl.h",
       "screensLifetimeSupport": false,
       "generateSourceCodeForEezFramework": false,
       "compressFlowDefinition": false,
@@ -138,7 +138,7 @@
             {
               "objID": "6437ee9d-9f7e-4c90-cb1d-0fa4f42163b3",
               "type": "LVGLButtonWidget",
-              "left": 13,
+              "left": 20,
               "top": 13,
               "width": 334,
               "height": 88,
@@ -318,8 +318,8 @@
             {
               "objID": "c7ec81ca-157a-4ed7-8103-d7ba008c7f4e",
               "type": "LVGLButtonWidget",
-              "left": 13,
-              "top": 149,
+              "left": 20,
+              "top": 144,
               "width": 334,
               "height": 88,
               "customInputs": [],
@@ -498,8 +498,8 @@
             {
               "objID": "4cb7fe6a-1147-41f1-880d-4359b411d0e1",
               "type": "LVGLButtonWidget",
-              "left": 14,
-              "top": 286,
+              "left": 21,
+              "top": 287,
               "width": 334,
               "height": 88,
               "customInputs": [],
@@ -674,6 +674,57 @@
               },
               "group": "",
               "groupIndex": 0
+            },
+            {
+              "objID": "0f43a33f-d839-423c-a66b-b3e9c197d76e",
+              "type": "LVGLLabelWidget",
+              "left": 38,
+              "top": 413,
+              "width": 297,
+              "height": 29,
+              "customInputs": [],
+              "customOutputs": [],
+              "style": {
+                "objID": "2c3a3847-5ca0-4755-ba2e-389ea645ee59",
+                "useStyle": "default",
+                "conditionalStyles": [],
+                "childStyles": []
+              },
+              "timeline": [],
+              "eventHandlers": [],
+              "identifier": "status_text",
+              "leftUnit": "px",
+              "topUnit": "px",
+              "widthUnit": "content",
+              "heightUnit": "content",
+              "children": [],
+              "widgetFlags": "CLICK_FOCUSABLE|GESTURE_BUBBLE|PRESS_LOCK|SCROLLABLE|SCROLL_CHAIN_HOR|SCROLL_CHAIN_VER|SCROLL_ELASTIC|SCROLL_MOMENTUM|SCROLL_WITH_ARROW|SNAPPABLE",
+              "hiddenFlagType": "literal",
+              "clickableFlagType": "literal",
+              "flagScrollbarMode": "",
+              "flagScrollDirection": "",
+              "scrollSnapX": "",
+              "scrollSnapY": "",
+              "checkedStateType": "literal",
+              "disabledStateType": "literal",
+              "states": "",
+              "localStyles": {
+                "objID": "2db48819-3e5a-4b69-d40f-6d79cd033786",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "text_color": "#00ff00",
+                      "text_font": "MONTSERRAT_26"
+                    }
+                  }
+                }
+              },
+              "group": "",
+              "groupIndex": 0,
+              "text": "Status: Not connected",
+              "textType": "literal",
+              "longMode": "WRAP",
+              "recolor": false
             }
           ],
           "widgetFlags": "CLICKABLE|PRESS_LOCK|CLICK_FOCUSABLE|GESTURE_BUBBLE|SNAPPABLE|SCROLLABLE|SCROLL_ELASTIC|SCROLL_MOMENTUM|SCROLL_CHAIN_HOR|SCROLL_CHAIN_VER",

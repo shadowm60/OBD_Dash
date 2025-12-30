@@ -1,1 +1,4 @@
+#build folder - do not store
 build/*
+#managed components by idf_components.yml - do not store
+managed_components/*

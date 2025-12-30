@@ -12,7 +12,7 @@ IRAM_ATTR static bool rgb_lcd_on_vsync_event(esp_lcd_panel_handle_t panel, const
     return lvgl_port_notify_rgb_vsync();
 }
 
-#if CONFIG_EXAMPLE_LCD_TOUCH_CONTROLLER_GT911
+#if CONFIG_LCD_TOUCH_CONTROLLER_GT911
 /**
  * @brief I2C master initialization
  */
@@ -78,9 +78,9 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
     esp_lcd_rgb_panel_config_t panel_config = {
         .clk_src = LCD_CLK_SRC_DEFAULT, // Set the clock source for the panel
         .timings = {
-            .pclk_hz = EXAMPLE_LCD_PIXEL_CLOCK_HZ, // Pixel clock frequency
-            .h_res = EXAMPLE_LCD_H_RES,            // Horizontal resolution
-            .v_res = EXAMPLE_LCD_V_RES,            // Vertical resolution
+            .pclk_hz = BSW_LCD_PIXEL_CLOCK_HZ, // Pixel clock frequency
+            .h_res = BSW_LCD_H_RES,            // Horizontal resolution
+            .v_res = BSW_LCD_V_RES,            // Vertical resolution
 #if ESP_PANEL_USE_1024_600_LCD
             .hsync_back_porch = 145, // Horizontal sync pulse width
             .hsync_front_porch = 170, // Horizontal back porch
@@ -100,34 +100,34 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
                 .pclk_active_neg = 1, // Active low pixel clock
             },
         },
-        .data_width = EXAMPLE_RGB_DATA_WIDTH,                    // Data width for RGB
-        .bits_per_pixel = EXAMPLE_RGB_BIT_PER_PIXEL,             // Bits per pixel
+        .data_width = BSW_RGB_DATA_WIDTH,                    // Data width for RGB
+        .bits_per_pixel = BSW_RGB_BIT_PER_PIXEL,             // Bits per pixel
         .num_fbs = LVGL_PORT_LCD_RGB_BUFFER_NUMS,                // Number of frame buffers
-        .bounce_buffer_size_px = EXAMPLE_RGB_BOUNCE_BUFFER_SIZE, // Bounce buffer size in pixels
+        .bounce_buffer_size_px = BSW_RGB_BOUNCE_BUFFER_SIZE, // Bounce buffer size in pixels
         .sram_trans_align = 4,                                   // SRAM transaction alignment
         .psram_trans_align = 64,                                 // PSRAM transaction alignment
-        .hsync_gpio_num = EXAMPLE_LCD_IO_RGB_HSYNC,              // GPIO number for horizontal sync
-        .vsync_gpio_num = EXAMPLE_LCD_IO_RGB_VSYNC,              // GPIO number for vertical sync
-        .de_gpio_num = EXAMPLE_LCD_IO_RGB_DE,                    // GPIO number for data enable
-        .pclk_gpio_num = EXAMPLE_LCD_IO_RGB_PCLK,                // GPIO number for pixel clock
-        .disp_gpio_num = EXAMPLE_LCD_IO_RGB_DISP,                // GPIO number for display
+        .hsync_gpio_num = BSW_LCD_IO_RGB_HSYNC,              // GPIO number for horizontal sync
+        .vsync_gpio_num = BSW_LCD_IO_RGB_VSYNC,              // GPIO number for vertical sync
+        .de_gpio_num = BSW_LCD_IO_RGB_DE,                    // GPIO number for data enable
+        .pclk_gpio_num = BSW_LCD_IO_RGB_PCLK,                // GPIO number for pixel clock
+        .disp_gpio_num = BSW_LCD_IO_RGB_DISP,                // GPIO number for display
         .data_gpio_nums = {
-            EXAMPLE_LCD_IO_RGB_DATA0,
-            EXAMPLE_LCD_IO_RGB_DATA1,
-            EXAMPLE_LCD_IO_RGB_DATA2,
-            EXAMPLE_LCD_IO_RGB_DATA3,
-            EXAMPLE_LCD_IO_RGB_DATA4,
-            EXAMPLE_LCD_IO_RGB_DATA5,
-            EXAMPLE_LCD_IO_RGB_DATA6,
-            EXAMPLE_LCD_IO_RGB_DATA7,
-            EXAMPLE_LCD_IO_RGB_DATA8,
-            EXAMPLE_LCD_IO_RGB_DATA9,
-            EXAMPLE_LCD_IO_RGB_DATA10,
-            EXAMPLE_LCD_IO_RGB_DATA11,
-            EXAMPLE_LCD_IO_RGB_DATA12,
-            EXAMPLE_LCD_IO_RGB_DATA13,
-            EXAMPLE_LCD_IO_RGB_DATA14,
-            EXAMPLE_LCD_IO_RGB_DATA15,
+            BSW_LCD_IO_RGB_DATA0,
+            BSW_LCD_IO_RGB_DATA1,
+            BSW_LCD_IO_RGB_DATA2,
+            BSW_LCD_IO_RGB_DATA3,
+            BSW_LCD_IO_RGB_DATA4,
+            BSW_LCD_IO_RGB_DATA5,
+            BSW_LCD_IO_RGB_DATA6,
+            BSW_LCD_IO_RGB_DATA7,
+            BSW_LCD_IO_RGB_DATA8,
+            BSW_LCD_IO_RGB_DATA9,
+            BSW_LCD_IO_RGB_DATA10,
+            BSW_LCD_IO_RGB_DATA11,
+            BSW_LCD_IO_RGB_DATA12,
+            BSW_LCD_IO_RGB_DATA13,
+            BSW_LCD_IO_RGB_DATA14,
+            BSW_LCD_IO_RGB_DATA15,
         },
         .flags = {
             .fb_in_psram = 1, // Use PSRAM for framebuffer
@@ -141,7 +141,7 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle)); // Initialize the LCD panel
 
     esp_lcd_touch_handle_t tp_handle = NULL; // Declare a handle for the touch panel
-#if CONFIG_EXAMPLE_LCD_TOUCH_CONTROLLER_GT911
+#if CONFIG_LCD_TOUCH_CONTROLLER_GT911
     ESP_LOGI(TAG, "Initialize I2C bus");   // Log the initialization of the I2C bus
     i2c_master_init();                     // Initialize the I2C master
     ESP_LOGI(TAG, "Initialize GPIO");      // Log GPIO initialization
@@ -157,10 +157,10 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
 
     ESP_LOGI(TAG, "Initialize touch controller GT911"); // Log touch controller initialization
     const esp_lcd_touch_config_t tp_cfg = {
-        .x_max = EXAMPLE_LCD_H_RES,                // Set maximum X coordinate
-        .y_max = EXAMPLE_LCD_V_RES,                // Set maximum Y coordinate
-        .rst_gpio_num = EXAMPLE_PIN_NUM_TOUCH_RST, // GPIO number for reset
-        .int_gpio_num = EXAMPLE_PIN_NUM_TOUCH_INT, // GPIO number for interrupt
+        .x_max = BSW_LCD_H_RES,                // Set maximum X coordinate
+        .y_max = BSW_LCD_V_RES,                // Set maximum Y coordinate
+        .rst_gpio_num = BSW_PIN_NUM_TOUCH_RST, // GPIO number for reset
+        .int_gpio_num = BSW_PIN_NUM_TOUCH_INT, // GPIO number for interrupt
         .levels = {
             .reset = 0,     // Reset level
             .interrupt = 0, // Interrupt level
@@ -172,13 +172,13 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
         },
     };
     ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, &tp_handle)); // Create new I2C GT911 touch controller
-#endif                                                                               // CONFIG_EXAMPLE_LCD_TOUCH_CONTROLLER_GT911
+#endif                                                                               // CONFIG_LCD_TOUCH_CONTROLLER_GT911
 
     ESP_ERROR_CHECK(lvgl_port_init(panel_handle, tp_handle)); // Initialize LVGL with the panel and touch handles
 
     // Register callbacks for RGB panel events
     esp_lcd_rgb_panel_event_callbacks_t cbs = {
-#if EXAMPLE_RGB_BOUNCE_BUFFER_SIZE > 0
+#if BSW_RGB_BOUNCE_BUFFER_SIZE > 0
         .on_bounce_frame_finish = rgb_lcd_on_vsync_event, // Callback for bounce frame finish
 #else
         .on_vsync = rgb_lcd_on_vsync_event, // Callback for vertical sync

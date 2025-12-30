@@ -271,7 +271,17 @@ void create_screen_startup() {
             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
             lv_obj_set_style_text_color(obj, lv_color_hex(0xff00ff00), LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_obj_set_style_text_font(obj, &lv_font_montserrat_26, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_label_set_text(obj, "Status: Not connected");
+            lv_label_set_text(obj, "Status: ");
+        }
+        {
+            // status_text_1
+            lv_obj_t *obj = lv_label_create(parent_obj);
+            objects.status_text_1 = obj;
+            lv_obj_set_pos(obj, 136, 413);
+            lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_set_style_text_color(obj, lv_color_hex(0xff00ff00), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_26, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_label_set_text(obj, "");
         }
     }
     
@@ -281,6 +291,15 @@ void create_screen_startup() {
 void tick_screen_startup() {
     void *flowState = getFlowState(0, 0);
     (void)flowState;
+    {
+        const char *new_val = evalTextProperty(flowState, 14, 3, "Failed to evaluate Text in Label widget");
+        const char *cur_val = lv_label_get_text(objects.status_text_1);
+        if (strcmp(new_val, cur_val) != 0) {
+            tick_value_change_obj = objects.status_text_1;
+            lv_label_set_text(objects.status_text_1, new_val);
+            tick_value_change_obj = NULL;
+        }
+    }
 }
 
 void create_screen_read_dtc() {
@@ -393,7 +412,7 @@ void tick_screen_system() {
 
 
 static const char *screen_names[] = { "startup", "readDTC", "clearDTC", "liveData", "freezFrame", "settings", "system" };
-static const char *object_names[] = { "startup", "read_dtc", "clear_dtc", "live_data", "freez_frame", "settings", "system", "obj0", "obj1", "obj2", "obj3", "obj4", "obj5", "status_text" };
+static const char *object_names[] = { "startup", "read_dtc", "clear_dtc", "live_data", "freez_frame", "settings", "system", "obj0", "obj1", "obj2", "obj3", "obj4", "obj5", "status_text", "status_text_1" };
 
 
 typedef void (*tick_screen_func_t)();

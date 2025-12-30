@@ -104,7 +104,15 @@
   },
   "variables": {
     "objID": "c6c71e16-53e1-217f-d03b-cef56c6b037a",
-    "globalVariables": [],
+    "globalVariables": [
+      {
+        "objID": "703d0705-d1a6-4fdc-ea37-dea26a20d12c",
+        "name": "conn_status",
+        "type": "string",
+        "defaultValue": "\"Not connected\"",
+        "persistent": false
+      }
+    ],
     "structures": [],
     "enums": []
   },
@@ -722,7 +730,7 @@
               "type": "LVGLLabelWidget",
               "left": 38,
               "top": 413,
-              "width": 297,
+              "width": 98,
               "height": 29,
               "customInputs": [],
               "customOutputs": [],
@@ -763,8 +771,59 @@
               },
               "group": "",
               "groupIndex": 0,
-              "text": "Status: Not connected",
+              "text": "Status: ",
               "textType": "literal",
+              "longMode": "WRAP",
+              "recolor": false
+            },
+            {
+              "objID": "d16f2c48-d36d-467f-ba85-25794ef615dd",
+              "type": "LVGLLabelWidget",
+              "left": 136,
+              "top": 413,
+              "width": 181,
+              "height": 29,
+              "customInputs": [],
+              "customOutputs": [],
+              "style": {
+                "objID": "52d5d201-4c96-4ea0-da9d-cf00abe984d2",
+                "useStyle": "default",
+                "conditionalStyles": [],
+                "childStyles": []
+              },
+              "timeline": [],
+              "eventHandlers": [],
+              "identifier": "status_text_1",
+              "leftUnit": "px",
+              "topUnit": "px",
+              "widthUnit": "content",
+              "heightUnit": "content",
+              "children": [],
+              "widgetFlags": "CLICK_FOCUSABLE|GESTURE_BUBBLE|PRESS_LOCK|SCROLLABLE|SCROLL_CHAIN_HOR|SCROLL_CHAIN_VER|SCROLL_ELASTIC|SCROLL_MOMENTUM|SCROLL_WITH_ARROW|SNAPPABLE",
+              "hiddenFlagType": "literal",
+              "clickableFlagType": "literal",
+              "flagScrollbarMode": "",
+              "flagScrollDirection": "",
+              "scrollSnapX": "",
+              "scrollSnapY": "",
+              "checkedStateType": "literal",
+              "disabledStateType": "literal",
+              "states": "",
+              "localStyles": {
+                "objID": "508c3684-b9a4-4776-efc2-798e98fa8bae",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "text_color": "#00ff00",
+                      "text_font": "MONTSERRAT_26"
+                    }
+                  }
+                }
+              },
+              "group": "",
+              "groupIndex": 0,
+              "text": "conn_status",
+              "textType": "expression",
               "longMode": "WRAP",
               "recolor": false
             }

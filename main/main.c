@@ -6,6 +6,7 @@
 
 #include "waveshare_rgb_lcd_port.h"
 #include "ui.h"
+#include "dpool.h"
 
 void app_main()
 {
@@ -17,6 +18,8 @@ void app_main()
 
     //loadScreen(SCREEN_ID_STARTUP);
     ESP_LOGI(TAG, "Screen Loaded");
+
+    init_dpool();
 
     // Lock the mutex due to the LVGL APIs are not thread-safe
     if (lvgl_port_lock(-1)) {

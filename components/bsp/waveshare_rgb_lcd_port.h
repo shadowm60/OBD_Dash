@@ -10,20 +10,13 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
 #include "esp_lcd_touch_gt911.h"
-#include "lv_demos.h"
 #include "lvgl_port.h"
+#include "i2c_io.h"
 
 
-#define I2C_MASTER_SCL_IO           CONFIG_I2C_MASTER_SCL //9       /*!< GPIO number used for I2C master clock */
-#define I2C_MASTER_SDA_IO           CONFIG_I2C_MASTER_SDA //8       /*!< GPIO number used for I2C master data  */
-#define I2C_MASTER_NUM              0       /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
-#define I2C_MASTER_FREQ_HZ          400000                     /*!< I2C master clock frequency */
-#define I2C_MASTER_TX_BUF_DISABLE   0                          /*!< I2C master doesn't need buffer */
-#define I2C_MASTER_RX_BUF_DISABLE   0                          /*!< I2C master doesn't need buffer */
-#define I2C_MASTER_TIMEOUT_MS       1000
-
-#define GPIO_INPUT_IO_4    4
-#define GPIO_INPUT_PIN_SEL  1ULL<<GPIO_INPUT_IO_4
+//CTP_IRQ
+#define GPIO_INPUT_IO_4             4
+#define GPIO_INPUT_PIN_SEL          1ULL<<GPIO_INPUT_IO_4
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////// Please update the following configuration according to your LCD spec //////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

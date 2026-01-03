@@ -7,6 +7,7 @@
 #include "waveshare_rgb_lcd_port.h"
 #include "ui.h"
 #include "dpool.h"
+#include "sd_card.h"
 
 void app_main()
 {
@@ -16,6 +17,8 @@ void app_main()
    
     ESP_LOGI(TAG, "Display init done");
 
+    waveshare_sd_card_init();
+    
     //loadScreen(SCREEN_ID_STARTUP);
     ESP_LOGI(TAG, "Screen Loaded");
 

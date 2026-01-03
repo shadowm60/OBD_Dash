@@ -256,7 +256,15 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "f52acdb7-bd2c-419b-f471-d6f66ad37144"
+                "objID": "f52acdb7-bd2c-419b-f471-d6f66ad37144",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "bg_color": "#1d613f",
+                      "text_color": "#b2f192"
+                    }
+                  }
+                }
               },
               "group": "",
               "groupIndex": 0
@@ -353,7 +361,15 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "157957f3-9a9c-4dac-e99c-13800ec9b1f2"
+                "objID": "157957f3-9a9c-4dac-e99c-13800ec9b1f2",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "bg_color": "#01613f",
+                      "text_color": "#b2f192"
+                    }
+                  }
+                }
               },
               "group": "",
               "groupIndex": 0
@@ -450,7 +466,15 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "cbc6b229-46f2-4a08-aff2-c96578f6ebc3"
+                "objID": "cbc6b229-46f2-4a08-aff2-c96578f6ebc3",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "bg_color": "#01613f",
+                      "text_color": "#b2f192"
+                    }
+                  }
+                }
               },
               "group": "",
               "groupIndex": 0
@@ -547,7 +571,15 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "90ffb030-88d7-4f69-da79-526403a7b2cc"
+                "objID": "90ffb030-88d7-4f69-da79-526403a7b2cc",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "bg_color": "#01613f",
+                      "text_color": "#b2f192"
+                    }
+                  }
+                }
               },
               "group": "",
               "groupIndex": 0
@@ -644,7 +676,15 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "66415cc3-a6c5-41fa-fd95-a065aeff1fce"
+                "objID": "66415cc3-a6c5-41fa-fd95-a065aeff1fce",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "bg_color": "#01613f",
+                      "text_color": "#b2f192"
+                    }
+                  }
+                }
               },
               "group": "",
               "groupIndex": 0
@@ -741,7 +781,15 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "7cd9ad8c-1d2d-46df-959b-30ed778407f8"
+                "objID": "7cd9ad8c-1d2d-46df-959b-30ed778407f8",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "bg_color": "#01613f",
+                      "text_color": "#b2f192"
+                    }
+                  }
+                }
               },
               "group": "",
               "groupIndex": 0

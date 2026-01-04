@@ -13,8 +13,8 @@ static esp_err_t ch422g_write_reg(uint8_t value)
 #ifdef CUSTOM
     uint8_t write_buf = 0x01;
     i2c_master_write_to_device(I2C_MASTER_NUM, 0x24, &write_buf, 1, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
-
-    return i2c_master_write_to_device(I2C_MASTER_NUM, 0x38, &value, 1, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
+    write_buf = value;
+    return i2c_master_write_to_device(I2C_MASTER_NUM, 0x38, &write_buf, 1, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 #else    
     uint8_t data[2] = { 0x40, value }; // 0x40 = output register command
     return i2c_master_write_to_device(

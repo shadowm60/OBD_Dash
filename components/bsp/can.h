@@ -23,7 +23,7 @@
 
 
 //#define CAN_BLOCK_MAX portMAX_DELAY
-#define CAN_BLOCK_MAX ((portTICK_PERIOD_MS ) /10)    //max 1ms/10
+#define CAN_BLOCK_MAX ((portTICK_PERIOD_MS ) /2)    //max 1ms/10
 
 //isotp defines
 #define ISOTP_BUFSIZE   128

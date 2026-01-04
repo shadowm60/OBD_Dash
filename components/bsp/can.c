@@ -18,7 +18,7 @@ static IsoTpLink g_link;
 static uint8_t g_isotpRecvBuf[ISOTP_BUFSIZE];
 static uint8_t g_isotpSendBuf[ISOTP_BUFSIZE];
 
-static const char *TAG = "FP_Dash_CAN";
+static const char *TAG = "CAN";
 
 static void log_twai_status(void) {
     twai_status_info_t status;
@@ -59,16 +59,46 @@ void can_send_message(twai_message_t *msg) {
 }
 
 static void can_receive_task(void *arg) {
-    esp_err_t result;
     while (1) {
-        twai_message_t rx_msg;
-        result = twai_receive(&rx_msg, CAN_BLOCK_MAX);
-        if (result == ESP_OK) {
-            //received a message, push it to queue
-            if (xQueueSend(rx_task_queue, &rx_msg, CAN_BLOCK_MAX) != pdPASS) {
-                ESP_LOGW(TAG, "Failed to push msg to queue!");
+        // Check if alert happened
+        uint32_t alerts_triggered;                                           // Variable to hold triggered alerts
+        twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(1));               // Read triggered alerts
+        twai_status_info_t twaistatus;                                       // Variable to hold TWAI status information
+        twai_get_status_info(&twaistatus);                                   // Get TWAI status information
+
+        // Handle alerts
+        if (alerts_triggered & TWAI_ALERT_ERR_PASS)
+        {                                                                              // Check for error passive alert
+            ESP_LOGI(TAG, "Alert: TWAI controller has become error passive."); // Log error passive alert
+        }
+        if (alerts_triggered & TWAI_ALERT_BUS_ERROR)
+        {                                                                                                  // Check for bus error alert
+            ESP_LOGI(TAG, "Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus."); // Log bus error alert
+            ESP_LOGI(TAG, "Bus error count: %" PRIu32, twaistatus.bus_error_count);                // Log bus error count
+        }
+
+        if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL)
+        {                                                                                              // Check for RX queue full alert
+            ESP_LOGI(TAG, "Alert: The RX queue is full causing a received frame to be lost."); // Log RX queue full alert
+            ESP_LOGI(TAG, "RX buffered: %" PRIu32, twaistatus.msgs_to_rx);                     // Log buffered RX messages
+            ESP_LOGI(TAG, "RX missed: %" PRIu32, twaistatus.rx_missed_count);                  // Log missed RX messages
+            ESP_LOGI(TAG, "RX overrun %" PRIu32, twaistatus.rx_overrun_count);                 // Log RX overrun count
+        }
+
+        // Check if message is received
+        if (alerts_triggered & TWAI_ALERT_RX_DATA)
+        {   // If RX data alert is triggered
+            // One or more messages received. Handle all.
+            twai_message_t message; // Variable to hold received message
+            while (twai_receive(&message, 0) == ESP_OK)
+            {                               // Receive messages until none are left
+                if (xQueueSend(rx_task_queue, &message, CAN_BLOCK_MAX) != pdPASS) {
+                    ESP_LOGW(TAG, "Failed to push msg to queue!");
+                }
             }
         }
+        vTaskDelay(pdMS_TO_TICKS(1)); 
+
     }
     vTaskDelete(NULL);
 }
@@ -79,7 +109,8 @@ static void can_send_task(void *arg) {
         if (xQueueReceive(tx_task_queue, &msg, CAN_BLOCK_MAX) == pdPASS) {
             //ESP_LOGI(TAG, "Transmit");
             twai_transmit(&msg, CAN_BLOCK_MAX);
-        }        
+        }   
+        vTaskDelay(pdMS_TO_TICKS(1));      
     }
     vTaskDelete(NULL);    
 }
@@ -109,6 +140,7 @@ static void can_process_task(void *arg) {
 
     while(1) {
         //vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(1)); 
 
         if (xQueueReceive(rx_task_queue, &msg, CAN_BLOCK_MAX) == pdPASS) {
             //process message
@@ -168,27 +200,36 @@ void init_can( void ) {
 
 void init_can_tasks(void) {
 
-    xTaskCreate(can_receive_task, "TWAI_rx", 4096, NULL, RX_TASK_PRIO, NULL);
-    xTaskCreate(can_send_task, "TWAI_tx", 4096, NULL, TX_TASK_PRIO, NULL);
-    xTaskCreate(can_process_task, "TWAI_ctrl", 4096, NULL, PROC_TSK_PRIO, NULL);
-    
-    ESP_LOGI(TAG, "TASKS created!");
-
     //ESP_ERROR_CHECK(twai_start());
     if (ESP_OK == twai_start()) {
         ESP_LOGI(TAG, "OK twai_start()");
+
+        // Reconfigure alerts to detect frame receive, Bus-Off error and RX queue full states
+        uint32_t alerts_to_enable = TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL; // Configure alerts
+        if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK)
+        {
+            ESP_LOGI(TAG, "CAN Alerts reconfigured"); // Log alert reconfiguration success
+            
+            xTaskCreate(can_receive_task, "TWAI_rx", 4096, NULL, RX_TASK_PRIO, NULL);
+            xTaskCreate(can_send_task, "TWAI_tx", 4096, NULL, TX_TASK_PRIO, NULL);
+            xTaskCreate(can_process_task, "TWAI_ctrl", 4096, NULL, PROC_TSK_PRIO, NULL);
+    
+            ESP_LOGI(TAG, "TASKS created!");        
+
+            //setup isotp
+            isotp_init_link(&g_link, TESTER_CAN_ID,
+                            g_isotpSendBuf, sizeof(g_isotpSendBuf), 
+					        g_isotpRecvBuf, sizeof(g_isotpRecvBuf));
+            ESP_LOGI(TAG, "ISOTP Init done");        
+            ESP_LOGI(TAG, "Driver started");
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Failed to reconfigure alerts"); // Log alert reconfiguration failure
+        }        
     } else {
         ESP_LOGI(TAG, "Faild twai_start()");
     }
-    ESP_LOGI(TAG, "Driver started");
-
-    //setup isotp
-    isotp_init_link(&g_link, TESTER_CAN_ID,
-                    g_isotpSendBuf, sizeof(g_isotpSendBuf), 
-					g_isotpRecvBuf, sizeof(g_isotpRecvBuf));
-    ESP_LOGI(TAG, "ISOTP Init done");
-
-    
 }
 //send from isr example
 //BaseType_t xHigherPriorityTaskWoken = pdFALSE;

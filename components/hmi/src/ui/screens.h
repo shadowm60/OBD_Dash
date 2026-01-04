@@ -30,17 +30,18 @@ typedef struct _objects_t {
     lv_obj_t *log_params_enabled;
     lv_obj_t *obj10;
     lv_obj_t *obj11;
+    lv_obj_t *obj12;
     lv_obj_t *status_text;
     lv_obj_t *status_text_1;
-    lv_obj_t *obj12;
+    lv_obj_t *obj13;
     lv_obj_t *read_dtc_bt;
     lv_obj_t *clear_dtc_bt;
     lv_obj_t *save_dtc_bt;
     lv_obj_t *rpm_gauge;
     lv_obj_t *afr_gauge;
     lv_obj_t *afr_sweet;
-    lv_obj_t *obj13;
     lv_obj_t *obj14;
+    lv_obj_t *obj15;
     lv_obj_t *con_method_label;
     lv_obj_t *con_method_select;
     lv_obj_t *rusefi_base_addr_label;
@@ -50,6 +51,8 @@ typedef struct _objects_t {
     lv_obj_t *select_params_label;
     lv_obj_t *sys_auto_brightness;
     lv_obj_t *sys_man_brightness;
+    lv_obj_t *obd_srv_table;
+    lv_obj_t *obj16;
 } objects_t;
 
 extern objects_t objects;

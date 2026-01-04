@@ -8,9 +8,14 @@
 #include "ui.h"
 #include "dpool.h"
 #include "sd_card.h"
+#include "can.h"
+
+static const char *TAG = "app_main";
 
 void app_main()
 {
+    i2c_io_init();
+
     waveshare_esp32_s3_rgb_lcd_init(); // Initialize the Waveshare ESP32-S3 RGB LCD 
     // wavesahre_rgb_lcd_bl_on();  //Turn on the screen backlight 
     // wavesahre_rgb_lcd_bl_off(); //Turn off the screen backlight 
@@ -18,11 +23,17 @@ void app_main()
     ESP_LOGI(TAG, "Display init done");
 
     waveshare_sd_card_init();
+
+    wavesahre_rgb_lcd_bl_on();
     
     //loadScreen(SCREEN_ID_STARTUP);
     ESP_LOGI(TAG, "Screen Loaded");
 
     init_dpool();
+
+    init_can();
+    init_can_tasks();
+
 
     // Lock the mutex due to the LVGL APIs are not thread-safe
     if (lvgl_port_lock(-1)) {

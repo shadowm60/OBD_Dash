@@ -6,6 +6,8 @@
 
 #include "waveshare_rgb_lcd_port.h"
 
+static const char *TAG = "LCD";
+
 // VSYNC event callback function
 IRAM_ATTR static bool rgb_lcd_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t *edata, void *user_ctx)
 {
@@ -105,8 +107,9 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
 
     esp_lcd_touch_handle_t tp_handle = NULL; // Declare a handle for the touch panel
 #if CONFIG_LCD_TOUCH_CONTROLLER_GT911
-    ESP_LOGI(TAG, "Initialize I2C bus");   // Log the initialization of the I2C bus
-    i2c_master_init();                     // Initialize the I2C master
+    //i2c port expander will be init before this
+    //ESP_LOGI(TAG, "Initialize I2C bus");   // Log the initialization of the I2C bus
+    //i2c_master_init();                     // Initialize the I2C master
     ESP_LOGI(TAG, "Initialize GPIO");      // Log GPIO initialization
     gpio_init();                           // Initialize GPIO pins
     ESP_LOGI(TAG, "Initialize Touch LCD"); // Log touch LCD initialization

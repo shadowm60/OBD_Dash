@@ -3,7 +3,7 @@
     "selectedUserPageObject": "[OBD_Dash.eez-project]:/userPages/7",
     "selectedGlobalVariableObject": "[OBD_Dash.eez-project]:/variables/globalVariables/9",
     "subnavigationSelectedItems": {
-      "variables-tab/sub-navigation/selected-item": "Global"
+      "variables-tab/sub-navigation/selected-item": "Widgets"
     }
   },
   "layoutModel": {
@@ -167,8 +167,7 @@
                       "enableClose": false,
                       "icon": "svg:hierarchy"
                     }
-                  ],
-                  "active": true
+                  ]
                 },
                 {
                   "type": "tabset",
@@ -226,7 +225,8 @@
                       "enableClose": false,
                       "icon": "svg:properties"
                     }
-                  ]
+                  ],
+                  "active": true
                 },
                 {
                   "type": "tabset",
@@ -1138,12 +1138,15 @@
     },
     "[OBD_Dash.eez-project]:/userPages/7[flow-state]": {
       "selection": {
-        "0": {}
+        "0": {
+          "0": {},
+          "2": {}
+        }
       },
       "transform": {
         "translate": {
-          "x": -400,
-          "y": -240
+          "x": -421.60499999999985,
+          "y": -140
         },
         "scale": 0.8
       },
@@ -1169,7 +1172,10 @@
   "selectedStylePropertyName": "",
   "lvglPart": "MAIN",
   "lvglState": "DEFAULT",
-  "lvglExpandedPropertiesGroup": [],
+  "lvglExpandedPropertiesGroup": [
+    "BACKGROUND",
+    "TEXT"
+  ],
   "showInactiveFlowsInDebugger": true,
   "globalFlowZoom": true,
   "flowZoom": 0.8,

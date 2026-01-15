@@ -226,6 +226,9 @@ typedef void (*ObdPidHandler)(uint16_t size, uint8_t *data);
 #define IS_DISCOVERY    0x08
 #define IS_BUSY         0x10
 
+#define IS_ENABLED      0x80
+
+
 typedef struct {
     uint32_t timeStamp;
     ObdPidService01 pid; 

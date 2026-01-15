@@ -3,6 +3,7 @@
 #include "obd_handler.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "comSM.h"
 
 static const char *TAG = "hmi_usr";
 
@@ -16,8 +17,17 @@ void action_log_params_enabled(lv_event_t * e) {
 
 extern objects_t objects;
 
-//void event_handler_cb_select_params(lv_event_t * e) {
-//}
+static void checkbox_event_handler(lv_event_t * e)
+{
+    lv_obj_t * cb = lv_event_get_target(e);
+
+    bool checked = lv_obj_has_state(cb, LV_STATE_CHECKED);
+    int *index_ptr = lv_event_get_user_data(e);
+    int index = *index_ptr;
+
+    set_row_checked_value(index, checked);
+
+}
 
 void action_obd_srv_screen_loaded(lv_event_t * e) {
     lv_event_code_t code = lv_event_get_code(e);
@@ -32,6 +42,9 @@ void action_obd_srv_screen_loaded(lv_event_t * e) {
 
         for (int i = 0; i < rows; i++) {
 
+            int *index_ptr = lv_mem_alloc(sizeof(int));
+            *index_ptr = i;
+
             // Create a list item (a container)
             lv_obj_t *item = lv_list_add_btn(list, NULL, NULL);
 
@@ -41,21 +54,26 @@ void action_obd_srv_screen_loaded(lv_event_t * e) {
             get_service_description(i,txt);
 
             lv_checkbox_set_text(cb, txt);
+            lv_obj_set_style_text_font(cb, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
             // Set checked state
-            if (false/*is_row_checked(i)*/)
+            if (is_row_checked(i))
                 lv_obj_add_state(cb, LV_STATE_CHECKED);
 
             // Set enabled/disabled
-            if (false /*!is_row_enabled(i)*/)
+            if (!is_row_enabled(i))
                 lv_obj_add_state(cb, LV_STATE_DISABLED);
 
             // Optional: store row index in user data
             lv_obj_set_user_data(cb, (void *)i);
 
             // Optional: add event handler for checkbox toggle
-            //lv_obj_add_event_cb(cb, checkbox_event_handler, LV_EVENT_VALUE_CHANGED, NULL);
+            lv_obj_add_event_cb(cb, checkbox_event_handler, LV_EVENT_VALUE_CHANGED, index_ptr);
         }
     }
 }
     
+/* Connect/Disconnect button */
+void action_conn_button_pressed(lv_event_t * e) {
+    con_button_pressed();
+}

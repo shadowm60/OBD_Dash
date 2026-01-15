@@ -22,6 +22,7 @@ typedef struct _objects_t {
     lv_obj_t *obj3;
     lv_obj_t *obj4;
     lv_obj_t *obj5;
+    lv_obj_t *conn_button;
     lv_obj_t *obj6;
     lv_obj_t *obj7;
     lv_obj_t *obj8;
@@ -33,6 +34,7 @@ typedef struct _objects_t {
     lv_obj_t *obj12;
     lv_obj_t *status_text;
     lv_obj_t *status_text_1;
+    lv_obj_t *conn_button_text;
     lv_obj_t *obj13;
     lv_obj_t *read_dtc_bt;
     lv_obj_t *clear_dtc_bt;

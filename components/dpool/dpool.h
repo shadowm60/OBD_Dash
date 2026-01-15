@@ -11,5 +11,6 @@ typedef struct {
 
 
 void init_dpool(void);
+void set_conn_button_text(int id);
 
 #endif

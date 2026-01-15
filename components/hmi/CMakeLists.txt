@@ -5,5 +5,5 @@ idf_component_register(SRCS "./src/ui/images.c"
                             "./src/ui/eez-flow.cpp"
                             "./user/actions.c"
                     INCLUDE_DIRS "./src/ui"
-                    REQUIRES lvgl obd_handler
+                    REQUIRES lvgl obd_handler comSM
                     )

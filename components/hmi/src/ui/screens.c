@@ -84,6 +84,17 @@ static void event_handler_cb_startup_obj5(lv_event_t *e) {
     }
 }
 
+static void event_handler_cb_startup_conn_button(lv_event_t *e) {
+    lv_event_code_t event = lv_event_get_code(e);
+    void *flowState = lv_event_get_user_data(e);
+    (void)flowState;
+    
+    if (event == LV_EVENT_PRESSED) {
+        e->user_data = (void *)0;
+        action_conn_button_pressed(e);
+    }
+}
+
 static void event_handler_cb_read_dtc_read_dtc(lv_event_t *e) {
     lv_event_code_t event = lv_event_get_code(e);
     void *flowState = lv_event_get_user_data(e);
@@ -405,6 +416,29 @@ void create_screen_startup() {
             lv_obj_set_style_text_font(obj, &lv_font_montserrat_26, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_label_set_text(obj, "");
         }
+        {
+            // conn_button
+            lv_obj_t *obj = lv_btn_create(parent_obj);
+            objects.conn_button = obj;
+            lv_obj_set_pos(obj, 437, 413);
+            lv_obj_set_size(obj, 334, 50);
+            lv_obj_add_event_cb(obj, event_handler_cb_startup_conn_button, LV_EVENT_ALL, flowState);
+            lv_obj_set_style_text_color(obj, lv_color_hex(0xffb2f192), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_color(obj, lv_color_hex(0xff01613f), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+            {
+                lv_obj_t *parent_obj = obj;
+                {
+                    // conn_button_text
+                    lv_obj_t *obj = lv_label_create(parent_obj);
+                    objects.conn_button_text = obj;
+                    lv_obj_set_pos(obj, 0, 0);
+                    lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+                    lv_obj_set_style_align(obj, LV_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+                    lv_label_set_text(obj, "");
+                }
+            }
+        }
     }
     
     tick_screen_startup();
@@ -419,6 +453,15 @@ void tick_screen_startup() {
         if (strcmp(new_val, cur_val) != 0) {
             tick_value_change_obj = objects.status_text_1;
             lv_label_set_text(objects.status_text_1, new_val);
+            tick_value_change_obj = NULL;
+        }
+    }
+    {
+        const char *new_val = evalTextProperty(flowState, 16, 3, "Failed to evaluate Text in Label widget");
+        const char *cur_val = lv_label_get_text(objects.conn_button_text);
+        if (strcmp(new_val, cur_val) != 0) {
+            tick_value_change_obj = objects.conn_button_text;
+            lv_label_set_text(objects.conn_button_text, new_val);
             tick_value_change_obj = NULL;
         }
     }
@@ -1050,7 +1093,7 @@ void tick_screen_select_params() {
 
 
 static const char *screen_names[] = { "startup", "readDTC", "clearDTC", "liveData", "freezFrame", "settings", "system", "select_params" };
-static const char *object_names[] = { "startup", "read_dtc", "clear_dtc", "live_data", "freez_frame", "settings", "system", "select_params", "obj0", "obj1", "obj2", "obj3", "obj4", "obj5", "obj6", "obj7", "obj8", "obj9", "log_raw_enabled", "log_params_enabled", "obj10", "obj11", "obj12", "status_text", "status_text_1", "obj13", "read_dtc_bt", "clear_dtc_bt", "save_dtc_bt", "rpm_gauge", "afr_gauge", "afr_sweet", "obj14", "obj15", "con_method_label", "con_method_select", "rusefi_base_addr_label", "rusefi_base_addr_input", "log_raw_label", "log_data_label", "select_params_label", "sys_auto_brightness", "sys_man_brightness", "obd_srv_table", "obj16" };
+static const char *object_names[] = { "startup", "read_dtc", "clear_dtc", "live_data", "freez_frame", "settings", "system", "select_params", "obj0", "obj1", "obj2", "obj3", "obj4", "obj5", "conn_button", "obj6", "obj7", "obj8", "obj9", "log_raw_enabled", "log_params_enabled", "obj10", "obj11", "obj12", "status_text", "status_text_1", "conn_button_text", "obj13", "read_dtc_bt", "clear_dtc_bt", "save_dtc_bt", "rpm_gauge", "afr_gauge", "afr_sweet", "obj14", "obj15", "con_method_label", "con_method_select", "rusefi_base_addr_label", "rusefi_base_addr_input", "log_raw_label", "log_data_label", "select_params_label", "sys_auto_brightness", "sys_man_brightness", "obd_srv_table", "obj16" };
 
 
 typedef void (*tick_screen_func_t)();

@@ -38,6 +38,10 @@ typedef enum {
 void init_obd_handler( void );
 int get_nbr_of_all_services(void);
 void get_service_description(int idx, char *text);
+bool is_row_checked(int idx);
+bool is_row_enabled(int idx);
+void set_row_enabled_value(int idx, bool val);
+void set_row_checked_value(int idx, bool val);
 
 
 #endif

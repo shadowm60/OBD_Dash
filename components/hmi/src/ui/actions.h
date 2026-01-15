@@ -10,6 +10,7 @@ extern "C" {
 extern void action_log_raw_enabled(lv_event_t * e);
 extern void action_log_params_enabled(lv_event_t * e);
 extern void action_obd_srv_screen_loaded(lv_event_t * e);
+extern void action_conn_button_pressed(lv_event_t * e);
 
 
 #ifdef __cplusplus

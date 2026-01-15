@@ -9,6 +9,7 @@
 #include "dpool.h"
 #include "sd_card.h"
 #include "can.h"
+#include "comSM.h"
 
 static const char *TAG = "app_main";
 
@@ -34,10 +35,11 @@ void app_main()
     init_can();
     init_can_tasks();
 
+    init_comSM();
+    init_comSM_task();
 
     // Lock the mutex due to the LVGL APIs are not thread-safe
     if (lvgl_port_lock(-1)) {
-
 
         // Release the mutex
         lvgl_port_unlock();

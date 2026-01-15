@@ -280,6 +280,39 @@ void get_service_description(int idx, char *text)
     }
 }
 
+bool is_row_checked(int idx) {
+    if (idx < MAX_PID_COUNT) {
+        return (obd_pid_info[idx].control & IS_ENABLED)?true:false;
+    }
+    return false;
+}
+
+bool is_row_enabled(int idx) {
+    if (idx < MAX_PID_COUNT) {
+        return (obd_pid_info[idx].control & IS_SUPPORTED)?true:false;
+    }
+    return false;
+}
+
+void set_row_enabled_value(int idx, bool val) {
+    if (idx < MAX_PID_COUNT) {
+        if (val) {
+            obd_pid_info[idx].control |= IS_SUPPORTED;
+        } else {
+            obd_pid_info[idx].control &= ~IS_SUPPORTED;
+        }
+    }
+}
+
+void set_row_checked_value(int idx, bool val) {
+    if (idx < MAX_PID_COUNT) {
+        if (val) {
+            obd_pid_info[idx].control |= IS_ENABLED;
+        } else {
+            obd_pid_info[idx].control &= ~IS_ENABLED;
+        }
+    }
+}
 
 void handle_pid_states( void ) {
     switch (obd_handler_pid_states) {

@@ -62,13 +62,11 @@ void set_read_dtc_txt(char *txt) {
 }
 
 void set_rpm_value_txt(int rpm) {
-    char *rpm_txt;
-    sprintf(rpm_txt,"%d",rpm);
-    setGlobalVariable_C(FLOW_GLOBAL_VARIABLE_RPM_VALUE, EEZ_C_INT,  rpm_txt);
+    setGlobalVariable_C(FLOW_GLOBAL_VARIABLE_RPM_VALUE, EEZ_C_INT,  &rpm);
 }
 
 void set_afr_value_txt(float afr) {
-    setGlobalVariable_C(FLOW_GLOBAL_VARIABLE_AFR_VALUE, EEZ_C_FLOAT, afr);
+    setGlobalVariable_C(FLOW_GLOBAL_VARIABLE_AFR_VALUE, EEZ_C_FLOAT, &afr);
 }
 
 void set_conn_button_text(int id) {

@@ -9,6 +9,10 @@ void init_comSM(void) {
 }
 
 void init_comSM_task(void) {
+
+}
+
+void con_button_pressed(void) {
     static uint8_t state = 0;
     if (state == 2) {
         state = 0;

@@ -1,86 +1,63 @@
-#include "eez-flow.h"   // whatever defines setGlobalVariable, Value, StringValue
+#include "eez-flow.h"
 #include "wrapper.h"
 
-//extern "C" void setGlobalVariable_C(uint32_t idx, const char *str) {
-//    eez::flow::setGlobalVariable(idx, eez::StringValue(str));
-//}
+extern "C" void setGlobalVariable_C(uint32_t idx, EezCValueType type, const void *value) {
+    using namespace eez::flow;
 
-extern "C" void setGlobalVariable_C(uint32_t idx, EezCValueType type, const void *value, uint32_t count) {
-    using namespace eez;
+    eez::Value v;
 
     switch (type) {
-        case EEZ_C_STRING:
-            flow::setGlobalVariable(idx, StringValue((const char *)value));
-            break;
+    case EEZ_C_STRING:
+        v.type = eez::VALUE_TYPE_STRING;
+        v.strValue = static_cast<const char *>(value);
+        break;
 
-        case EEZ_C_INT:
-            flow::setGlobalVariable(idx, eez::IntegerValue(*(const int32_t *)value));
-            break;
+    case EEZ_C_INT:
+        v.type = eez::VALUE_TYPE_INT32;
+        v.int32Value = *static_cast<const int32_t *>(value);
+        break;
 
-        case EEZ_C_FLOAT:
-            flow::setGlobalVariable(idx, eez::FloatValue(*(const float *)value));
-            break;
+    case EEZ_C_FLOAT:
+        v.type = eez::VALUE_TYPE_FLOAT;
+        v.floatValue = *static_cast<const float *>(value);
+        break;
 
-        case EEZ_C_BOOL:
-            flow::setGlobalVariable(idx, eez::BooleanValue(*(const bool *)value));
-            break;
-
-        case EEZ_C_STRING_ARRAY: 
-            eez::ArrayValue arr;
-            const char **items = (const char **)value;
-
-            for (uint32_t i = 0; i < count; i++) {
-                arr.append(eez::Value::makeString(items[i]));
-            }
-
-            flow::setGlobalVariable(idx, arr);
-            break;
-
-        case EEZ_C_BOOL_ARRAY: 
-            eez::ArrayValue arr;
-            const bool *items = (const bool *)value;
-
-            for (uint32_t i = 0; i < count; i++) {
-                arr.append(eez::Value::makeBool(items[i]));
-            }
-            
-            flow::setGlobalVariable(idx, arr);
-            break;
+    case EEZ_C_BOOL:
+        v.type = eez::VALUE_TYPE_BOOLEAN;
+        v.uint8Value = *static_cast<const bool *>(value)? 1 : 0 ;
+        break;
     }
+
+    setGlobalVariable(idx, v);
 }
 
-
-extern "C" bool setGlobalVariableSafe_C(uint32_t idx, EezCValueType type, const void *value, uint32_t count) {
-    using namespace eez;
-
-    const flow::VariableInfo *info = flow::getGlobalVariableInfo(idx);
-    if (!info) return false;
-
-    // Validate type compatibility
-    switch (type) {
-        case EEZ_C_STRING:
-            if (info->type != flow::VALUE_TYPE_STRING) return false;
-            break;
-
-        case EEZ_C_INT:
-            if (info->type != flow::VALUE_TYPE_INT) return false;
-            break;
-
-        case EEZ_C_FLOAT:
-            if (info->type != flow::VALUE_TYPE_FLOAT) return false;
-            break;
-
-        case EEZ_C_BOOL:
-            if (info->type != flow::VALUE_TYPE_BOOL) return false;
-            break;
-
-        case EEZ_C_STRING_ARRAY:
-        case EEZ_C_BOOL_ARRAY:
-            if (info->type != flow::VALUE_TYPE_ARRAY) return false;
-            break;
+extern "C" bool setGlobalVariableSafe_C(uint32_t idx, EezCValueType type, const void *value) {
+    using namespace eez::flow;
+#ifdef check
+    const VariableInfo *info = getGlobalVariableInfo(idx);
+    if (!info) {
+        return false;
     }
 
-    // If type matches, forward to generic setter
-    setGlobalVariable_C(idx, type, value, count);
+    // Type compatibility check
+    switch (type) {
+    case EEZ_C_STRING:
+        if (info->type != VALUE_TYPE_STRING) return false;
+        break;
+
+    case EEZ_C_INT:
+        if (info->type != VALUE_TYPE_INT) return false;
+        break;
+
+    case EEZ_C_FLOAT:
+        if (info->type != VALUE_TYPE_FLOAT) return false;
+        break;
+
+    case EEZ_C_BOOL:
+        if (info->type != VALUE_TYPE_BOOL) return false;
+        break;
+    }
+#endif
+    setGlobalVariable_C(idx, type, value);
     return true;
 }

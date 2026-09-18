@@ -352,7 +352,7 @@ void create_screen_startup() {
                     lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
                     lv_obj_set_style_align(obj, LV_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_text_font(obj, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
-                    lv_label_set_text(obj, "Freez Fame");
+                    lv_label_set_text(obj, "Freez Frame");
                 }
             }
         }

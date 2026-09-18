@@ -603,7 +603,7 @@
                   "type": "LVGLLabelWidget",
                   "left": 0,
                   "top": 0,
-                  "width": 178,
+                  "width": 190,
                   "height": 33,
                   "customInputs": [],
                   "customOutputs": [],
@@ -643,7 +643,7 @@
                   },
                   "group": "",
                   "groupIndex": 0,
-                  "text": "Freez Fame",
+                  "text": "Freez Frame",
                   "textType": "literal",
                   "longMode": "WRAP",
                   "recolor": false

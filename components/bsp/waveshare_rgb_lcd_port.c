@@ -5,6 +5,7 @@
  */
 
 #include "waveshare_rgb_lcd_port.h"
+#include "driver/i2c_master.h"
 
 static const char *TAG = "LCD";
 
@@ -66,11 +67,10 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
             },
         },
         .data_width = BSW_RGB_DATA_WIDTH,                    // Data width for RGB
-        .bits_per_pixel = BSW_RGB_BIT_PER_PIXEL,             // Bits per pixel
+        .in_color_format = LCD_COLOR_FMT_RGB565,
+        .out_color_format = LCD_COLOR_FMT_RGB565,
         .num_fbs = LVGL_PORT_LCD_RGB_BUFFER_NUMS,                // Number of frame buffers
         .bounce_buffer_size_px = BSW_RGB_BOUNCE_BUFFER_SIZE, // Bounce buffer size in pixels
-        .sram_trans_align = 4,                                   // SRAM transaction alignment
-        .psram_trans_align = 64,                                 // PSRAM transaction alignment
         .hsync_gpio_num = BSW_LCD_IO_RGB_HSYNC,              // GPIO number for horizontal sync
         .vsync_gpio_num = BSW_LCD_IO_RGB_VSYNC,              // GPIO number for vertical sync
         .de_gpio_num = BSW_LCD_IO_RGB_DE,                    // GPIO number for data enable
@@ -117,9 +117,11 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
 
     esp_lcd_panel_io_handle_t tp_io_handle = NULL;                                          // Declare a handle for touch panel I/O
     const esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG(); // Configure I2C for GT911 touch controller
+    i2c_master_bus_handle_t i2c_bus_handle = NULL;
+    ESP_ERROR_CHECK(i2c_master_get_bus_handle(I2C_MASTER_NUM, &i2c_bus_handle));
 
     ESP_LOGI(TAG, "Initialize I2C panel IO");                                                                          // Log I2C panel I/O initialization
-    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c((esp_lcd_i2c_bus_handle_t)I2C_MASTER_NUM, &tp_io_config, &tp_io_handle)); // Create new I2C panel I/O
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus_handle, &tp_io_config, &tp_io_handle)); // Create new I2C panel I/O
 
     ESP_LOGI(TAG, "Initialize touch controller GT911"); // Log touch controller initialization
     const esp_lcd_touch_config_t tp_cfg = {
@@ -144,11 +146,7 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
 
     // Register callbacks for RGB panel events
     esp_lcd_rgb_panel_event_callbacks_t cbs = {
-#if BSW_RGB_BOUNCE_BUFFER_SIZE > 0
-        .on_bounce_frame_finish = rgb_lcd_on_vsync_event, // Callback for bounce frame finish
-#else
         .on_vsync = rgb_lcd_on_vsync_event, // Callback for vertical sync
-#endif
     };
     ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(panel_handle, &cbs, NULL)); // Register event callbacks
 

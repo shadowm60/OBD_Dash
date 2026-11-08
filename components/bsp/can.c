@@ -12,6 +12,9 @@ static const twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPI
 static QueueHandle_t tx_task_queue;
 static QueueHandle_t rx_task_queue;
 
+//mutex for isotp link access
+static SemaphoreHandle_t s_isotp_mutex = NULL;
+
 static IsoTpLink g_link;
 
 /* Alloc send and receive buffer statically in RAM */
@@ -60,45 +63,66 @@ void can_send_message(twai_message_t *msg) {
 
 static void can_receive_task(void *arg) {
     while (1) {
-        // Check if alert happened
-        uint32_t alerts_triggered;                                           // Variable to hold triggered alerts
-        twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(1));               // Read triggered alerts
-        twai_status_info_t twaistatus;                                       // Variable to hold TWAI status information
-        twai_get_status_info(&twaistatus);                                   // Get TWAI status information
+        uint32_t alerts_triggered = 0;
+        esp_err_t ret = twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(20));
 
-        // Handle alerts
-        if (alerts_triggered & TWAI_ALERT_ERR_PASS)
-        {                                                                              // Check for error passive alert
-            ESP_LOGI(TAG, "Alert: TWAI controller has become error passive."); // Log error passive alert
-        }
-        if (alerts_triggered & TWAI_ALERT_BUS_ERROR)
-        {                                                                                                  // Check for bus error alert
-            ESP_LOGI(TAG, "Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus."); // Log bus error alert
-            ESP_LOGI(TAG, "Bus error count: %" PRIu32, twaistatus.bus_error_count);                // Log bus error count
-        }
+        if (ret == ESP_OK && alerts_triggered != 0) {
+            twai_status_info_t twaistatus;
 
-        if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL)
-        {                                                                                              // Check for RX queue full alert
-            ESP_LOGI(TAG, "Alert: The RX queue is full causing a received frame to be lost."); // Log RX queue full alert
-            ESP_LOGI(TAG, "RX buffered: %" PRIu32, twaistatus.msgs_to_rx);                     // Log buffered RX messages
-            ESP_LOGI(TAG, "RX missed: %" PRIu32, twaistatus.rx_missed_count);                  // Log missed RX messages
-            ESP_LOGI(TAG, "RX overrun %" PRIu32, twaistatus.rx_overrun_count);                 // Log RX overrun count
-        }
+            // Handle Bus-Off alert
+            if (alerts_triggered & TWAI_ALERT_BUS_OFF) {
+                ESP_LOGE(TAG, "Alert: TWAI controller entered Bus-Off! Initiating recovery...");
+                // Reset transmit queue to discard stale frames
+                xQueueReset(tx_task_queue);
+                esp_err_t err = twai_initiate_recovery();
+                if (err == ESP_OK) {
+                    ESP_LOGI(TAG, "Bus recovery initiated");
+                } else {
+                    ESP_LOGE(TAG, "Failed to initiate recovery: %s", esp_err_to_name(err));
+                }
+            }
 
-        // Check if message is received
-        if (alerts_triggered & TWAI_ALERT_RX_DATA)
-        {   // If RX data alert is triggered
-            // One or more messages received. Handle all.
-            twai_message_t message; // Variable to hold received message
-            while (twai_receive(&message, 0) == ESP_OK)
-            {                               // Receive messages until none are left
-                if (xQueueSend(rx_task_queue, &message, CAN_BLOCK_MAX) != pdPASS) {
-                    ESP_LOGW(TAG, "Failed to push msg to queue!");
+            // Handle Bus-Recovered alert
+            if (alerts_triggered & TWAI_ALERT_BUS_RECOVERED) {
+                ESP_LOGI(TAG, "Alert: TWAI bus recovery completed. Restarting TWAI driver...");
+                esp_err_t err = twai_start();
+                if (err == ESP_OK) {
+                    ESP_LOGI(TAG, "TWAI driver restarted successfully");
+                } else {
+                    ESP_LOGE(TAG, "Failed to restart TWAI driver: %s", esp_err_to_name(err));
+                }
+            }
+
+            // Handle error passive alert
+            if (alerts_triggered & TWAI_ALERT_ERR_PASS) {
+                ESP_LOGW(TAG, "Alert: TWAI controller has become error passive.");
+            }
+
+            // Handle bus error alert
+            if (alerts_triggered & TWAI_ALERT_BUS_ERROR) {
+                if (twai_get_status_info(&twaistatus) == ESP_OK) {
+                    ESP_LOGW(TAG, "Alert: Bus error occurred. Bus error count: %" PRIu32, twaistatus.bus_error_count);
+                }
+            }
+
+            // Handle RX queue full alert
+            if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
+                if (twai_get_status_info(&twaistatus) == ESP_OK) {
+                    ESP_LOGW(TAG, "Alert: RX queue full! Buffered: %" PRIu32 ", missed: %" PRIu32 ", overrun: %" PRIu32,
+                             twaistatus.msgs_to_rx, twaistatus.rx_missed_count, twaistatus.rx_overrun_count);
+                }
+            }
+
+            // Handle incoming data
+            if (alerts_triggered & TWAI_ALERT_RX_DATA) {
+                twai_message_t message;
+                while (twai_receive(&message, 0) == ESP_OK) {
+                    if (xQueueSend(rx_task_queue, &message, CAN_BLOCK_MAX) != pdPASS) {
+                        ESP_LOGW(TAG, "Failed to push msg to queue!");
+                    }
                 }
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(1)); 
-
     }
     vTaskDelete(NULL);
 }
@@ -144,13 +168,19 @@ static void can_process_task(void *arg) {
 
         if (xQueueReceive(rx_task_queue, &msg, CAN_BLOCK_MAX) == pdPASS) {
             //process message
-            if (ECU_CAN_ID == msg.identifier) {
-                isotp_on_can_message(&g_link, msg.data, msg.data_length_code);
+            if (msg.identifier >= ECU_CAN_ID && msg.identifier <= 0x7EF) {
+                if (xSemaphoreTake(s_isotp_mutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+                    isotp_on_can_message_with_id(&g_link, msg.identifier, msg.data, msg.data_length_code);
+                    xSemaphoreGive(s_isotp_mutex);
+                }
             }
         }
 
-        //poll the isotp cyclic function
-        isotp_poll(&g_link);
+        // Periodically poll ISO-TP link for timers and multi-frame progression
+        if (xSemaphoreTake(s_isotp_mutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+            isotp_poll(&g_link);
+            xSemaphoreGive(s_isotp_mutex);
+        }
 #ifdef DBG_TICK
         ctstamp = can_get_timestamp_ms();
         if (ctstamp > tstamp) {
@@ -175,19 +205,30 @@ static void can_process_task(void *arg) {
 
 
 void can_send_isotp_message( uint8_t *data, uint8_t len) {
-    //ESP_LOGI(TAG, "can_send_isotp_message");
-    isotp_send(&g_link, data, len);
+    if (xSemaphoreTake(s_isotp_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        isotp_send(&g_link, data, len);
+        xSemaphoreGive(s_isotp_mutex);
+    } else {
+        ESP_LOGE(TAG, "can_send_isotp_message: failed to take mutex");
+    }
 }
 
 int can_get_isotp_message(uint8_t *payload, const uint16_t payload_size, uint16_t *out_size) {
-    int ret;
-    ret = isotp_receive(&g_link, payload, payload_size, out_size);
+    int ret = ISOTP_RET_NO_DATA;
+    if (xSemaphoreTake(s_isotp_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        ret = isotp_receive(&g_link, payload, payload_size, out_size);
+        xSemaphoreGive(s_isotp_mutex);
+    }
     return ret;
 }
 
 void init_can( void ) {
-    tx_task_queue = xQueueCreate(RX_QUEUE_SIZE, sizeof(twai_message_t));
-    rx_task_queue = xQueueCreate(TX_QUEUE_SIZE, sizeof(twai_message_t));
+
+    s_isotp_mutex = xSemaphoreCreateMutex();
+    assert(s_isotp_mutex != NULL);
+
+    tx_task_queue = xQueueCreate(TX_QUEUE_SIZE, sizeof(twai_message_t));
+    rx_task_queue = xQueueCreate(RX_QUEUE_SIZE, sizeof(twai_message_t));
 
     if ((tx_task_queue == NULL) || (rx_task_queue == NULL)) {
         ESP_LOGE(TAG, "Failed to create Queue");
@@ -204,8 +245,9 @@ void init_can_tasks(void) {
     if (ESP_OK == twai_start()) {
         ESP_LOGI(TAG, "OK twai_start()");
 
-        // Reconfigure alerts to detect frame receive, Bus-Off error and RX queue full states
-        uint32_t alerts_to_enable = TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL; // Configure alerts
+        // Reconfigure alerts to detect frame receive, Bus-Off error and recovery, and RX queue full states
+        uint32_t alerts_to_enable = TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR |
+                                    TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED;
         if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK)
         {
             ESP_LOGI(TAG, "CAN Alerts reconfigured"); // Log alert reconfiguration success
@@ -228,7 +270,7 @@ void init_can_tasks(void) {
             ESP_LOGI(TAG, "Failed to reconfigure alerts"); // Log alert reconfiguration failure
         }        
     } else {
-        ESP_LOGI(TAG, "Faild twai_start()");
+        ESP_LOGI(TAG, "Failed twai_start()");
     }
 }
 //send from isr example

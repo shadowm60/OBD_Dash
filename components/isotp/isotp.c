@@ -38,6 +38,18 @@ static int isotp_send_flow_control(IsoTpLink* link, uint8_t flow_status, uint8_t
     IsoTpCanMessage message;
     int ret;
 
+    uint32_t fc_id = link->send_arbitration_id;
+    /* ISO 15765-4: Never transmit Flow Control on functional ID 0x7DF.
+     * If link was configured with 0x7DF or receiving from standard 11-bit OBD (0x7E8-0x7EF),
+     * route Flow Control to the ECU's physical request ID (rx_id - 8). */
+    if (fc_id == 0x7DF) {
+        if (link->receive_arbitration_id >= 0x7E8 && link->receive_arbitration_id <= 0x7EF) {
+            fc_id = link->receive_arbitration_id - 0x08; // 0x7E8 -> 0x7E0
+        } else {
+            fc_id = 0x7E0; // Default to Engine ECU physical request ID
+        }
+    }    
+
     /* setup message  */
     message.as.flow_control.type = ISOTP_PCI_TYPE_FLOW_CONTROL_FRAME;
     message.as.flow_control.FS = flow_status;
@@ -232,6 +244,11 @@ static int isotp_receive_flow_control_frame(IsoTpLink *link, IsoTpCanMessage *me
 ///////////////////////////////////////////////////////
 ///                 PUBLIC FUNCTIONS                ///
 ///////////////////////////////////////////////////////
+
+void isotp_on_can_message_with_id(IsoTpLink *link, uint32_t can_id, uint8_t *data, uint8_t len) {
+    link->receive_arbitration_id = can_id;
+    isotp_on_can_message(link, data, len);
+}
 
 int isotp_send(IsoTpLink *link, const uint8_t payload[], uint16_t size) {
     return isotp_send_with_id(link, link->send_arbitration_id, payload, size);

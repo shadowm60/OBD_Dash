@@ -12,7 +12,7 @@
     "--query-driver=**",
     "--compile-commands-dir=c:\\UserData\\git\\OBD_Dash\\build"
   ],
-  "idf.portWin": "COM8",
   "idf.flashType": "UART",
-  "idf.currentSetup": "c:\\UserData\\esp\\v5.5.1\\esp-idf"
+  "idf.currentSetup": "C:\\esp\\v6.1\\esp-idf",
+  "idf.port": "COM8"
 }

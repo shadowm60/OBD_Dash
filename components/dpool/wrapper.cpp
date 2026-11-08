@@ -1,5 +1,6 @@
 #include "eez-flow.h"
 #include "wrapper.h"
+#include "lvgl_port.h"
 
 extern "C" void setGlobalVariable_C(uint32_t idx, EezCValueType type, const void *value) {
     using namespace eez::flow;
@@ -28,7 +29,10 @@ extern "C" void setGlobalVariable_C(uint32_t idx, EezCValueType type, const void
         break;
     }
 
-    setGlobalVariable(idx, v);
+    if (lvgl_port_lock(-1)) {
+        setGlobalVariable(idx, v);
+        lvgl_port_unlock();
+    }
 }
 
 extern "C" bool setGlobalVariableSafe_C(uint32_t idx, EezCValueType type, const void *value) {

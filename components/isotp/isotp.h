@@ -87,6 +87,8 @@ void isotp_poll(IsoTpLink *link);
  */
 void isotp_on_can_message(IsoTpLink *link, uint8_t *data, uint8_t len);
 
+void isotp_on_can_message_with_id(IsoTpLink *link, uint32_t can_id, uint8_t *data, uint8_t len);
+
 /**
  * @brief Sends ISO-TP frames via CAN, using the ID set in the initialising function.
  *

@@ -1,4 +1,5 @@
 #include "actions.h"
+#include <stdint.h>
 #include "screens.h"
 #include "obd_handler.h"
 #include "esp_err.h"
@@ -22,8 +23,7 @@ static void checkbox_event_handler(lv_event_t * e)
     lv_obj_t * cb = lv_event_get_target(e);
 
     bool checked = lv_obj_has_state(cb, LV_STATE_CHECKED);
-    int *index_ptr = lv_event_get_user_data(e);
-    int index = *index_ptr;
+    int index = (int)(intptr_t)lv_obj_get_user_data(cb);
 
     set_row_checked_value(index, checked);
 
@@ -38,13 +38,11 @@ void action_obd_srv_screen_loaded(lv_event_t * e) {
 
         lv_obj_t *list = objects.obd_srv_table;
 
+        lv_obj_clean(list);
+
         int rows = get_nbr_of_all_services();
 
         for (int i = 0; i < rows; i++) {
-
-            int *index_ptr = lv_mem_alloc(sizeof(int));
-            *index_ptr = i;
-
             // Create a list item (a container)
             lv_obj_t *item = lv_list_add_btn(list, NULL, NULL);
 
@@ -65,10 +63,10 @@ void action_obd_srv_screen_loaded(lv_event_t * e) {
                 lv_obj_add_state(cb, LV_STATE_DISABLED);
 
             // Optional: store row index in user data
-            lv_obj_set_user_data(cb, (void *)i);
+            lv_obj_set_user_data(cb, (void *)(intptr_t)i);
 
             // Optional: add event handler for checkbox toggle
-            lv_obj_add_event_cb(cb, checkbox_event_handler, LV_EVENT_VALUE_CHANGED, index_ptr);
+            lv_obj_add_event_cb(cb, checkbox_event_handler, LV_EVENT_VALUE_CHANGED, NULL);
         }
     }
 }

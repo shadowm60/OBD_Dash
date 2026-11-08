@@ -134,6 +134,90 @@
         "persistent": false
       },
       {
+        "objID": "5d5c6e13-b19f-4b3f-9e5d-1bb8d02f90a1",
+        "name": "vehicle_speed",
+        "type": "integer",
+        "defaultValue": "0",
+        "persistent": false
+      },
+      {
+        "objID": "6d5c6e13-b19f-4b3f-9e5d-1bb8d02f90a2",
+        "name": "coolant_temp",
+        "type": "integer",
+        "defaultValue": "0",
+        "persistent": false
+      },
+      {
+        "objID": "7d5c6e13-b19f-4b3f-9e5d-1bb8d02f90a3",
+        "name": "engine_load",
+        "type": "integer",
+        "defaultValue": "0",
+        "persistent": false
+      },
+      {
+        "objID": "8d5c6e13-b19f-4b3f-9e5d-1bb8d02f90a4",
+        "name": "intake_temp",
+        "type": "integer",
+        "defaultValue": "0",
+        "persistent": false
+      },
+      {
+        "objID": "9d5c6e13-b19f-4b3f-9e5d-1bb8d02f90a5",
+        "name": "maf_value",
+        "type": "integer",
+        "defaultValue": "0",
+        "persistent": false
+      },
+      {
+        "objID": "ad5c6e13-b19f-4b3f-9e5d-1bb8d02f90a6",
+        "name": "fuel_level",
+        "type": "integer",
+        "defaultValue": "0",
+        "persistent": false
+      },
+      {
+        "objID": "bd5c6e13-b19f-4b3f-9e5d-1bb8d02f90a7",
+        "name": "battery_voltage",
+        "type": "float",
+        "defaultValue": "0",
+        "persistent": false
+      },
+      {
+        "objID": "cd5c6e13-b19f-4b3f-9e5d-1bb8d02f90a8",
+        "name": "oil_temp",
+        "type": "integer",
+        "defaultValue": "0",
+        "persistent": false
+      },
+      {
+        "objID": "dd5c6e13-b19f-4b3f-9e5d-1bb8d02f90a9",
+        "name": "fuel_rate",
+        "type": "float",
+        "defaultValue": "0",
+        "persistent": false
+      },
+      {
+        "objID": "ed5c6e13-b19f-4b3f-9e5d-1bb8d02f90aa",
+        "name": "startup_screen",
+        "type": "integer",
+        "defaultValue": "0",
+        "persistent": true
+      },
+      {
+        "objID": "fd5c6e13-b19f-4b3f-9e5d-1bb8d02f90ab",
+        "name": "clt_alarm_limit",
+        "type": "integer",
+        "defaultValue": "105",
+        "persistent": true
+      },
+      {
+        "objID": "0d5c6e13-b19f-4b3f-9e5d-1bb8d02f90ac",
+        "name": "oil_pressure_alarm_limit",
+        "type": "float",
+        "defaultValue": "0",
+        "persistent": true
+      },
+      {
         "objID": "5e818cc6-251d-4746-cec0-81598adf92fa",
         "name": "conn_select",
         "type": "array:string",

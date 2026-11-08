@@ -1,6 +1,7 @@
 #include "dpool.h"
 #include "vars.h"
 #include "wrapper.h"
+#include "lvgl_port.h"
 
 /**
  * Get Variable Value:
@@ -54,7 +55,16 @@ const char *conn_button_text[] = {
 };
 
 static void update_con_status(void) {
-    setGlobalVariable_C(FLOW_GLOBAL_VARIABLE_CONN_STATUS, EEZ_C_STRING, con_stat_decode[DPool.con_status]);
+    if (DPool.con_status < (sizeof(con_stat_decode) / sizeof(con_stat_decode[0]))) {
+        setGlobalVariable_C(FLOW_GLOBAL_VARIABLE_CONN_STATUS, EEZ_C_STRING, con_stat_decode[DPool.con_status]);
+    }
+}
+
+void set_con_status(uint8_t status) {
+    if (status < (sizeof(con_stat_decode) / sizeof(con_stat_decode[0]))) {
+        DPool.con_status = status;
+        update_con_status();
+    }
 }
 
 void set_read_dtc_txt(char *txt) {
@@ -70,12 +80,21 @@ void set_afr_value_txt(float afr) {
 }
 
 void set_conn_button_text(int id) {
-    setGlobalVariable_C(FLOW_GLOBAL_VARIABLE_CONN_BUTTON_TEXT, EEZ_C_STRING,  conn_button_text[id]);
+    if (id >= 0 && id < (int)(sizeof(conn_button_text) / sizeof(conn_button_text[0]))) {
+        setGlobalVariable_C(FLOW_GLOBAL_VARIABLE_CONN_BUTTON_TEXT, EEZ_C_STRING,  conn_button_text[id]);
+    }
+}
+
+bool dpool_lock(int timeout_ms) {
+    return lvgl_port_lock(timeout_ms);
+}
+
+void dpool_unlock(void) {
+    lvgl_port_unlock();
 }
 
 void init_dpool(void) {
     DPool.con_status = 1;
     update_con_status();
     set_conn_button_text(0);
-
 }

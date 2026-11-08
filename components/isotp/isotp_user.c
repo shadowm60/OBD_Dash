@@ -23,7 +23,7 @@ int  isotp_user_send_can(const uint32_t arbitration_id, const uint8_t* data, con
         // Message type and format settings
         .extd = 0,              // Standard Format message (11-bit ID)
         .rtr = 0,               // Send a data frame
-        .ss = 1,                // Is single shot (won't retry on error or NACK)
+        .ss = 0,                // Is single shot (won't retry on error or NACK - so swithced to 1)
         .self = 0,              // Not a self reception request
         .dlc_non_comp = 0,      // DLC is less than 8
         // Message ID and payload

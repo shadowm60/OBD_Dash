@@ -4,6 +4,8 @@
 
 static const char *TAG = "OBD_Handler";
 
+static obd_live_data_t obd_live_data;
+
 void obd_handler_process_supported_pid(uint16_t size, uint8_t *data);
 void obd_handler_monitor_sts(uint16_t size, uint8_t *data);
 void obd_handler_unhandled_pid(uint16_t size, uint8_t *data);
@@ -20,6 +22,10 @@ void obd_handler_advance(uint16_t size, uint8_t *data);
 void obd_handler_iat(uint16_t size, uint8_t *data);
 void obd_handler_maf(uint16_t size, uint8_t *data);
 void obd_handler_tps(uint16_t size, uint8_t *data);
+void obd_handler_fuel_level(uint16_t size, uint8_t *data);
+void obd_handler_battery_voltage(uint16_t size, uint8_t *data);
+void obd_handler_oil_temp(uint16_t size, uint8_t *data);
+void obd_handler_fuel_rate(uint16_t size, uint8_t *data);
 
 static ObdPidServiceData obd_pid_info[MAX_PID_COUNT] = 
 {
@@ -75,7 +81,7 @@ static ObdPidServiceData obd_pid_info[MAX_PID_COUNT] =
 { .pid = PID_2C_COMMANDED_EGR,                .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_2C_COMMANDED_EGR",  },
 { .pid = PID_2D_EGR_ERROR,                    .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_2D_EGR_ERROR",  },
 { .pid = PID_2E_EVAP_PURGE,                   .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_2E_EVAP_PURGE",  },
-{ .pid = PID_2F_FUEL_TANK_LEVEL,              .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_2F_FUEL_TANK_LEVEL",  },
+{ .pid = PID_2F_FUEL_TANK_LEVEL,              .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_fuel_level, .description = "PID_2F_FUEL_TANK_LEVEL",  },
 
 /* 0x30 - 0x3F */
 { .pid = PID_30_WARMUPS_SINCE_CLEAR,             .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_30_WARMUPS_SINCE_CLEAR",  },
@@ -98,7 +104,7 @@ static ObdPidServiceData obd_pid_info[MAX_PID_COUNT] =
 /* 0x40 - 0x4F */
 { .pid = PID_40_SUPPORTED_41_60,                    .pid_data_len = 4, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_process_supported_pid, .description = "PID_40_SUPPORTED_41_60",  },
 { .pid = PID_41_MONITOR_STATUS_THIS_CYCLE,          .pid_data_len = 4, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_41_MONITOR_STATUS_THIS_CYCLE",  },
-{ .pid = PID_42_CONTROL_MODULE_VOLTAGE,             .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_42_CONTROL_MODULE_VOLTAGE",  },
+{ .pid = PID_42_CONTROL_MODULE_VOLTAGE,             .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_battery_voltage, .description = "PID_42_CONTROL_MODULE_VOLTAGE",  },
 { .pid = PID_43_ABSOLUTE_LOAD,                      .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_43_ABSOLUTE_LOAD",  },
 { .pid = PID_44_COMMANDED_EQUIV_RATIO,              .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_44_COMMANDED_EQUIV_RATIO",  },
 { .pid = PID_45_RELATIVE_THROTTLE_POS,              .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_45_RELATIVE_THROTTLE_POS",  },
@@ -126,9 +132,9 @@ static ObdPidServiceData obd_pid_info[MAX_PID_COUNT] =
 { .pid = PID_59_FUEL_RAIL_ABS_PRESSURE,   .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_59_FUEL_RAIL_ABS_PRESSURE",  },
 { .pid = PID_5A_REL_ACCEL_POS,            .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_5A_REL_ACCEL_POS",  },
 { .pid = PID_5B_HYBRID_BATTERY_LIFE,      .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_5B_HYBRID_BATTERY_LIFE",  },
-{ .pid = PID_5C_ENGINE_OIL_TEMP,          .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_5C_ENGINE_OIL_TEMP",  },
-{ .pid = PID_5D_FUEL_INJECTION_TIMING,    .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_4D_TIME_MIL_ON",  },
-{ .pid = PID_5E_ENGINE_FUEL_RATE,         .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_5E_ENGINE_FUEL_RATE",  },
+{ .pid = PID_5C_ENGINE_OIL_TEMP,          .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_oil_temp, .description = "PID_5C_ENGINE_OIL_TEMP",  },
+{ .pid = PID_5D_FUEL_INJECTION_TIMING,    .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_5D_FUEL_INJECTION_TIMING",  },
+{ .pid = PID_5E_ENGINE_FUEL_RATE,         .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_fuel_rate, .description = "PID_5E_ENGINE_FUEL_RATE",  },
 { .pid = PID_5F_EMISSION_REQUIREMENTS,    .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_5F_EMISSION_REQUIREMENTS",  },
 
 /* 0x60 - 0x6F */
@@ -155,7 +161,7 @@ static ObdPidServiceData obd_pid_info[MAX_PID_COUNT] =
 { .pid = PID_72_WASTEGATE_CONTROL,          .pid_data_len =  5, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_72_WASTEGATE_CONTROL",  },
 { .pid = PID_73_EXHAUST_PRESSURE,           .pid_data_len =  5, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_73_EXHAUST_PRESSURE",  },
 { .pid = PID_74_TURBOCHARGER_RPM,           .pid_data_len =  5, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_74_TURBOCHARGER_RPM",  },
-{ .pid = PID_75_TURBO_TEMP_1,               .pid_data_len =  7, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_65_AUX_IO_SUPPORTED",  },
+{ .pid = PID_75_TURBO_TEMP_1,               .pid_data_len =  7, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_75_TURBO_TEMP_1",  },
 { .pid = PID_76_TURBO_TEMP_2,               .pid_data_len =  7, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_76_TURBO_TEMP_2",  },
 { .pid = PID_77_CHARGE_AIR_COOLER_TEMP,     .pid_data_len =  5, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_77_CHARGE_AIR_COOLER_TEMP",  },
 { .pid = PID_78_EGT_BANK1,                  .pid_data_len =  9, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_78_EGT_BANK1",  },
@@ -249,7 +255,7 @@ static ObdPidServiceData obd_pid_info[MAX_PID_COUNT] =
 { .pid = PID_C6_PARTICULATE_CONTROL_STATUS,     .pid_data_len = 7, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_C6_PARTICULATE_CONTROL_STATUS",  },
 { .pid = PID_C7_DISTANCE_SINCE_REFLASH,         .pid_data_len = 2, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_C7_DISTANCE_SINCE_REFLASH",  },
 { .pid = PID_C8_NOX_PARTICULATE_WARNING_LAMP,   .pid_data_len = 1, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_C8_NOX_PARTICULATE_WARNING_LAMP",  },
-{ .pid = 0xC9,                                  .pid_data_len = 4, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_A9_ABS_DISABLE_SWITCH",  },
+{ .pid = 0xC9,                                  .pid_data_len = 0, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "PID_C9_UNASSIGNED",  },
 { .pid = 0xCA,                                  .pid_data_len = 0, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "N/A",  },
 { .pid = 0xCB,                                  .pid_data_len = 0, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "N/A",  },
 { .pid = 0xCC,                                  .pid_data_len = 0, .control = NO_DATA, .timeStamp = 0, .handler = obd_handler_unhandled_pid, .description = "N/A",  },
@@ -264,10 +270,22 @@ static obd_handler_state_t      obd_handler_state;
 static obd_handler_pid_states_t obd_handler_pid_states;
 static uint8_t cyclic_read_idx = 0; // last pid that was read
 
+#define DISCOVERY_TIMEOUT_MS   500
+#define DISCOVERY_MAX_RETRIES  3
+
+static uint32_t discovery_req_timestamp = 0;
+static uint8_t discovery_retries = 0;
+static uint8_t current_discovery_pid = PID_00_SUPPORTED_01_20;
+
 static void obd_handler_discover_supported_pids(uint16_t size, uint8_t next_pid);
 static void obd_handler_discover_supported_pids_cyclic( void );
-
 static void obd_handler_cyclic_read( void );
+
+static uint32_t get_timestamp_ms ( void ) {
+    TickType_t ticks = xTaskGetTickCount();
+    uint32_t time_ms = ticks * portTICK_PERIOD_MS;
+    return time_ms;
+}
 
 int get_nbr_of_all_services(void) {
     return sizeof(obd_pid_info)/sizeof(ObdPidServiceData);
@@ -307,9 +325,9 @@ void set_row_enabled_value(int idx, bool val) {
 void set_row_checked_value(int idx, bool val) {
     if (idx < MAX_PID_COUNT) {
         if (val) {
-            obd_pid_info[idx].control |= IS_ENABLED;
+            obd_pid_info[idx].control |= (IS_ENABLED | IS_CYCLIC);
         } else {
-            obd_pid_info[idx].control &= ~IS_ENABLED;
+            obd_pid_info[idx].control &= ~(IS_ENABLED | IS_CYCLIC);
         }
     }
 }
@@ -317,9 +335,15 @@ void set_row_checked_value(int idx, bool val) {
 void handle_pid_states( void ) {
     switch (obd_handler_pid_states) {
         case STANDBY:
-            //we should init or clear any data for a clean startup
-            ESP_LOGI(TAG, "Send discovery req for PID_00");
-            //send out request for supported pids 0x01-0x20
+            ESP_LOGI(TAG, "Resetting PID table and starting discovery at PID_00");
+            for (int i = 1; i < MAX_PID_COUNT; i++) {
+                obd_pid_info[i].control = NO_DATA;
+            }
+            obd_pid_info[PID_00_SUPPORTED_01_20].control = IS_SUPPORTED;
+
+            current_discovery_pid = PID_00_SUPPORTED_01_20;
+            discovery_retries = 0;
+            discovery_req_timestamp = get_timestamp_ms();
             obd_handler_discover_supported_pids(SIZE_PARAM_NOT_USED, PID_00_SUPPORTED_01_20);
             obd_handler_pid_states = READ_SUPPORTED_PIDS;
         break;
@@ -374,144 +398,212 @@ void init_obd_handler( void ) {
     xTaskCreate(obd_handler_task, "OBD", 4096, NULL, 6, NULL);
 }
 
+const obd_live_data_t *obd_get_live_data(void) {
+    return &obd_live_data;
+}
+
+bool obd_pid_is_supported(uint8_t pid) {
+    if (pid >= MAX_PID_COUNT) {
+        return false;
+    }
+
+    return (obd_pid_info[pid].control & IS_SUPPORTED) != 0;
+}
+
 
 /* Based on pid, we send out the discovery request */
 static void obd_handler_discover_supported_pids(uint16_t size, uint8_t next_pid) {
-    uint8_t tx_req[8];
-    tx_req[0] = 0x01; //length of message
+    uint8_t tx_req[2];
+    tx_req[0] = 0x01; // Service 0x01: Show current data
     tx_req[1] = next_pid;
 
-    can_send_isotp_message(tx_req, 2);
+    can_send_isotp_message(tx_req, sizeof(tx_req));
 }
 
-/* Cyclic function to get response for dicovery request */
+/* Cyclic function to get response for discovery request with timeout & retry */
 static void obd_handler_discover_supported_pids_cyclic( void ) {
     uint8_t rx_resp[8];
-    uint16_t size = 8;
-    uint16_t out_size;
+    uint16_t size = sizeof(rx_resp);
+    uint16_t out_size = 0;
     int ret = ISOTP_RET_NO_DATA;
 
-    //try to read response
+    // Try to read response
     ret = can_get_isotp_message(rx_resp, size, &out_size);
 
     if (ret == ISOTP_RET_OK) {
-        //process data
-        ESP_LOGI(TAG, "Rx: Discovery PID size: %d outsize: %d", size, out_size);
+        ESP_LOGI(TAG, "Rx: Discovery PID resp, outsize: %d", out_size);
         obd_handler_process_supported_pid(out_size, rx_resp);
-        
     } else {
-        //ESP_LOGI(TAG, "Rx: No data");
-    }
-
-}
-
-/* decodes what are the supported PIDs reported by the ECU and sets the IS_SUPPORTED flag for the accepted PIDs */
-void obd_handler_process_supported_pid(uint16_t size, uint8_t *data) {
-    uint32_t bitcode = (data[2] << 24) | (data[3] << 16) | (data[4] << 8) | data[5];
-    //uint8_t datalen = data[0];
-    uint8_t response = data[0]; //0x41 is positive, if different reset all states!
-    uint8_t itr;
-    uint8_t pid = data[1];
-
-    ESP_LOGI(TAG, "Rx: PID: %x", pid);
-    if (response != 0x41) {
-        ESP_LOGI(TAG, "obd_handler_process_supported_pid: Unhandled response! Reseting state machine");
-        obd_handler_state = UNCONNECTED;
-        obd_handler_pid_states = STANDBY;
-    } else {
-        switch (pid) {
-            case PID_00_SUPPORTED_01_20:
-            for (itr = 0; itr < 32; itr++) {
-                if ((bitcode >> (31-itr)) &0x0000001) {
-                    //bit active service supported
-                    obd_pid_info[itr+1].control |= IS_SUPPORTED;
-                    //todo: till we can select what we want to read, we read all of them cyclically
-                    obd_pid_info[itr+1].control |= IS_CYCLIC;
+        // Check discovery timeout
+        uint32_t now = get_timestamp_ms();
+        if ((now - discovery_req_timestamp) > DISCOVERY_TIMEOUT_MS) {
+            discovery_retries++;
+            if (discovery_retries < DISCOVERY_MAX_RETRIES) {
+                ESP_LOGW(TAG, "Discovery timeout for PID 0x%02X, retry %d/%d",
+                         current_discovery_pid, discovery_retries, DISCOVERY_MAX_RETRIES);
+                discovery_req_timestamp = now;
+                obd_handler_discover_supported_pids(SIZE_PARAM_NOT_USED, current_discovery_pid);
+            } else {
+                ESP_LOGW(TAG, "Discovery timed out for PID 0x%02X after %d retries",
+                         current_discovery_pid, DISCOVERY_MAX_RETRIES);
+                if (current_discovery_pid == PID_00_SUPPORTED_01_20) {
+                    // No ECU responded to PID 00 at all
+                    ESP_LOGE(TAG, "ECU not responding to initial discovery. Resetting to STANDBY");
+                    obd_handler_state = UNCONNECTED;
+                    obd_handler_pid_states = STANDBY;
+                } else {
+                    // An extended discovery query (e.g. 0x20 or 0x40) didn't reply;
+                    // proceed with the PIDs discovered so far rather than freezing.
+                    ESP_LOGI(TAG, "Proceeding with discovered PIDs -> CYCLIC_READ");
+                    obd_handler_pid_states = CYCLIC_READ;
+                    cyclic_read_idx = 0;
                 }
             }
-            if ((obd_pid_info[PID_20_SUPPORTED_21_40].control & IS_SUPPORTED) == IS_SUPPORTED)
-            {
-                //we need to send out the request for the next step
-                ESP_LOGI(TAG, "Read supported PID_20_SUPPORTED_21_40");
-                obd_handler_discover_supported_pids(SIZE_PARAM_NOT_USED, PID_20_SUPPORTED_21_40);
-                //clear cyclic since this is not needed
-                obd_pid_info[itr+1].control &= ~IS_CYCLIC;
-            } else {
-                obd_handler_pid_states = CYCLIC_READ;
-                ESP_LOGI(TAG, "Switching to CYCLIC_READ");
-            }
-            break;
-            case PID_20_SUPPORTED_21_40:
-            break;
-            case PID_40_SUPPORTED_41_60:
-            break;
-            case PID_60_SUPPORTED_61_80:
-            break;
-            case PID_80_SUPPORTED_81_A0:
-            break;
-            case PID_A0_SUPPORTED_A1_C0:
-            break;
-            case PID_C0_SUPPORTED_C1_E0:
-            break;
         }
     }
 }
 
-static uint32_t get_timestamp_ms ( void ) {
-    TickType_t ticks = xTaskGetTickCount();
-    uint32_t time_ms = ticks * portTICK_PERIOD_MS;
+/* Decodes the supported PIDs reported by the ECU and chains through subsequent PID ranges (0x20, 0x40, etc.) */
+void obd_handler_process_supported_pid(uint16_t size, uint8_t *data) {
+    if (data == NULL || size < 6) {
+        ESP_LOGW(TAG, "Discovery response invalid or too short: size=%d", size);
+        return;
+    }
 
-    return time_ms;
+    uint8_t response = data[0]; // 0x41 is positive response (Service 0x01 + 0x40)
+    uint8_t pid = data[1];
+
+    ESP_LOGI(TAG, "Rx: Discovery Resp: 0x%02X PID: 0x%02X", response, pid);
+
+    if (response != 0x41) {
+        ESP_LOGW(TAG, "obd_handler_process_supported_pid: Non-positive response 0x%02X for PID 0x%02X", response, pid);
+        if (pid == PID_00_SUPPORTED_01_20) {
+            obd_handler_state = UNCONNECTED;
+            obd_handler_pid_states = STANDBY;
+        } else {
+            // Extended PID discovery rejected, switch to CYCLIC_READ with existing PIDs
+            ESP_LOGI(TAG, "Switching to CYCLIC_READ");
+            obd_handler_pid_states = CYCLIC_READ;
+            cyclic_read_idx = 0;
+        }
+        return;
+    }
+
+    // Must be a known discovery PID: 0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0
+    if ((pid % 0x20) != 0 || pid > 0xC0) {
+        ESP_LOGW(TAG, "Unexpected discovery PID: 0x%02X", pid);
+        return;
+    }
+
+    uint32_t bitcode = ((uint32_t)data[2] << 24) |
+                       ((uint32_t)data[3] << 16) |
+                       ((uint32_t)data[4] << 8)  |
+                       (uint32_t)data[5];
+
+    ESP_LOGI(TAG, "Rx: Supported PIDs for 0x%02X: 0x%08" PRIX32, pid, bitcode);
+
+    uint8_t next_discovery_pid = pid + 0x20;
+
+    // Decode 32 bits for PIDs (pid + 1) to (pid + 32)
+    for (uint8_t itr = 0; itr < 32; itr++) {
+        uint8_t target_pid = pid + 1 + itr;
+        if (target_pid >= MAX_PID_COUNT) {
+            break;
+        }
+
+        if ((bitcode >> (31 - itr)) & 0x01) {
+            obd_pid_info[target_pid].control |= (IS_SUPPORTED | IS_ENABLED);
+            // Only mark cyclic if it's an actual sensor PID, not a discovery marker PID
+            if (target_pid != next_discovery_pid) {
+                obd_pid_info[target_pid].control |= IS_CYCLIC;
+            }
+        }
+    }
+
+    // Check if the next discovery block (e.g. 0x20, 0x40, 0x60, etc.) is supported
+    if (next_discovery_pid < MAX_PID_COUNT &&
+        (obd_pid_info[next_discovery_pid].control & IS_SUPPORTED))
+    {
+        // Discovery PIDs should never be queried cyclically
+        obd_pid_info[next_discovery_pid].control &= ~IS_CYCLIC;
+
+        ESP_LOGI(TAG, "Next discovery PID 0x%02X is supported, querying...", next_discovery_pid);
+        current_discovery_pid = next_discovery_pid;
+        discovery_retries = 0;
+        discovery_req_timestamp = get_timestamp_ms();
+        obd_handler_discover_supported_pids(SIZE_PARAM_NOT_USED, next_discovery_pid);
+    } else {
+        ESP_LOGI(TAG, "Supported PID discovery complete. Switching to CYCLIC_READ");
+        obd_handler_pid_states = CYCLIC_READ;
+        cyclic_read_idx = 0;
+    }
 }
 
 static void obd_handler_cyclic_read( void ) {
-    
     uint8_t itr;
     uint8_t step;
-    uint8_t tx_req[8];
+    uint8_t tx_req[2];
     uint8_t rx_resp[8];
-    uint16_t size = 8;
-    uint16_t out_size;
+    uint16_t size = sizeof(rx_resp);
+    uint16_t out_size = 0;
     int ret = ISOTP_RET_NO_DATA;
     uint32_t ts = get_timestamp_ms();
 
     if ((obd_pid_info[cyclic_read_idx].control & IS_BUSY) == IS_BUSY) {
-        //we should wait for response
+        // We should wait for response
         ret = can_get_isotp_message(rx_resp, size, &out_size);
 
         if (ret == ISOTP_RET_OK) {
-            obd_pid_info[cyclic_read_idx].handler(out_size, rx_resp);
+            uint16_t min_response_size = 2 + obd_pid_info[cyclic_read_idx].pid_data_len;
+            if (min_response_size < 3) {
+                min_response_size = 3;
+            }
+
+            // Validate the complete PID payload before any handler reads it.
+            if (out_size <= size && out_size >= min_response_size &&
+                rx_resp[0] == 0x41 && rx_resp[1] == cyclic_read_idx) {
+                obd_pid_info[cyclic_read_idx].handler(out_size, rx_resp);
+            } else if (out_size >= 3 && out_size <= size &&
+                       rx_resp[0] == 0x7F && rx_resp[1] == CURENT_DATA) {
+                uint8_t nrc = rx_resp[2];
+                ESP_LOGW(TAG, "NRC 0x%02X for PID 0x%02X", nrc, cyclic_read_idx);
+                if (nrc == 0x12) {
+                    obd_pid_info[cyclic_read_idx].control &= ~(IS_SUPPORTED | IS_ENABLED | IS_CYCLIC);
+                }
+            } else {
+                ESP_LOGW(TAG, "Mismatched or incomplete response for PID 0x%02X (size=%u)",
+                         cyclic_read_idx, out_size);
+            }
             obd_pid_info[cyclic_read_idx].control &= ~IS_BUSY;
         }
-        //check timeout
+        // Check timeout
         if ((ts - obd_pid_info[cyclic_read_idx].timeStamp) > READ_TIMEOUT)
         {
-            ESP_LOGI(TAG, "obd_handler_cyclic_read timeout PID: %d", cyclic_read_idx);
+            ESP_LOGW(TAG, "obd_handler_cyclic_read timeout PID: 0x%02X", cyclic_read_idx);
             obd_pid_info[cyclic_read_idx].control &= ~IS_BUSY;
         }
 
     } else {
-    
         if (cyclic_read_idx == 0) {
             step = 1;
         } else {
             step = cyclic_read_idx;
         }
 
-        for (itr = 1; itr < (MAX_PID_COUNT - 1); itr++) {
-            step++; //jump to the next index
-            if (step > (MAX_PID_COUNT - 1)) {
-                step = 1; //wrap around
+        for (itr = 1; itr < MAX_PID_COUNT; itr++) {
+            step++;
+            if (step >= MAX_PID_COUNT) {
+                step = 1; // Wrap around
             }
             if ((obd_pid_info[step].control & IS_CYCLIC) == IS_CYCLIC) {
                 cyclic_read_idx = step;
                 obd_pid_info[step].control |= IS_BUSY;
                 obd_pid_info[step].timeStamp = ts;
 
-                //send out request
-                tx_req[0] = 0x01; // Service
-                tx_req[1] = step; // PID
-                can_send_isotp_message(tx_req, 2);
+                // Send out request: Service 0x01, PID = step
+                tx_req[0] = 0x01;
+                tx_req[1] = step;
+                can_send_isotp_message(tx_req, sizeof(tx_req));
                 break;
             }
         }
@@ -576,12 +668,16 @@ void obd_handler_fuel_system_sts(uint16_t size, uint8_t *data) {
 
 // PID_04
 void obd_handler_engine_load(uint16_t size, uint8_t *data) {
-    ESP_LOGI(TAG,"Calculated engine load %d", ((data[2] * 100 + 127) / 255));
+    obd_live_data.engine_load = (data[2] * 100 + 127) / 255;
+    obd_live_data.valid_mask |= OBD_LIVE_LOAD;
+    ESP_LOGI(TAG,"Calculated engine load %d", obd_live_data.engine_load);
 }
 
 // PID_05
 void obd_handler_engine_coolant(uint16_t size, uint8_t *data) {
-    ESP_LOGI(TAG,"Engine Coolant %d", (data[2] - 40 ));
+    obd_live_data.coolant_temp = data[2] - 40;
+    obd_live_data.valid_mask |= OBD_LIVE_COOLANT;
+    ESP_LOGI(TAG,"Engine Coolant %d", obd_live_data.coolant_temp);
 }
 
 // PID_06
@@ -606,27 +702,61 @@ void obd_handler_LTFT_B2(uint16_t size, uint8_t *data) {
 
 // PID_0C
 void obd_handler_rpm(uint16_t size, uint8_t *data) {
-    ESP_LOGI(TAG,"RPM %d", ((data[2] << 8 | data[3])/4));
+    obd_live_data.rpm = (data[2] << 8 | data[3]) / 4;
+    obd_live_data.valid_mask |= OBD_LIVE_RPM;
+    ESP_LOGI(TAG,"RPM %d", obd_live_data.rpm);
 }
 
 // PID_0D
 void obd_handler_vss(uint16_t size, uint8_t *data) {
-    ESP_LOGI(TAG,"VSS %d", data[2]);
+    obd_live_data.vehicle_speed = data[2];
+    obd_live_data.valid_mask |= OBD_LIVE_SPEED;
+    ESP_LOGI(TAG,"VSS %d", obd_live_data.vehicle_speed);
 }
 
 // PID_0E
 void obd_handler_advance(uint16_t size, uint8_t *data) {
-    ESP_LOGI(TAG,"Ign T: %d", (data[2]/2)-64);
+    obd_live_data.timing_advance = (data[2] / 2) - 64;
+    obd_live_data.valid_mask |= OBD_LIVE_ADVANCE;
+    ESP_LOGI(TAG,"Ign T: %d", obd_live_data.timing_advance);
 }
 
 // PID_0F
 void obd_handler_iat(uint16_t size, uint8_t *data) {
-    ESP_LOGI(TAG,"IAT: %d", (data[2]-40));
+    obd_live_data.intake_temp = data[2] - 40;
+    obd_live_data.valid_mask |= OBD_LIVE_IAT;
+    ESP_LOGI(TAG,"IAT: %d", obd_live_data.intake_temp);
 }
 
 // PID_10
 void obd_handler_maf(uint16_t size, uint8_t *data) {
-    ESP_LOGI(TAG,"MAF: %d", (((data[2]<<8)|data[3])/100));
+    obd_live_data.maf = ((data[2] << 8) | data[3]) / 100;
+    obd_live_data.valid_mask |= OBD_LIVE_MAF;
+    ESP_LOGI(TAG,"MAF: %d", obd_live_data.maf);
+}
+
+// PID 0x2F: fuel tank level in percent.
+void obd_handler_fuel_level(uint16_t size, uint8_t *data) {
+    obd_live_data.fuel_level = (data[2] * 100) / 255;
+    obd_live_data.valid_mask |= OBD_LIVE_FUEL_LEVEL;
+}
+
+// PID 0x42: control module voltage in millivolts.
+void obd_handler_battery_voltage(uint16_t size, uint8_t *data) {
+    obd_live_data.battery_voltage_mv = ((data[2] << 8) | data[3]) * 10;
+    obd_live_data.valid_mask |= OBD_LIVE_BATTERY;
+}
+
+// PID 0x5C: engine oil temperature in degrees Celsius.
+void obd_handler_oil_temp(uint16_t size, uint8_t *data) {
+    obd_live_data.oil_temp = data[2] - 40;
+    obd_live_data.valid_mask |= OBD_LIVE_OIL_TEMP;
+}
+
+// PID 0x5E: engine fuel rate in millilitres per hour.
+void obd_handler_fuel_rate(uint16_t size, uint8_t *data) {
+    obd_live_data.fuel_rate_ml_per_hour = ((data[2] << 8) | data[3]) * 50;
+    obd_live_data.valid_mask |= OBD_LIVE_FUEL_RATE;
 }
 
 // PID_11

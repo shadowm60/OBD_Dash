@@ -2,6 +2,7 @@
 #define _CAN_H_
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -29,10 +30,14 @@
 #define ISOTP_BUFSIZE   128
 //all these will transact true iso-tp even for Single frame communication
 //TX ID
-#define TESTER_CAN_ID       0x7DF   //functional id, all ECUs will receive this
-//RX IDs
-#define ECU_CAN_ID          0x7E8   //physical Engine control unit ID
-#define TCU_CAN_ID          0x7E9   //physical Transmission control unit ID
+// Functional broadcast TX ID (Single-Frame requests only)
+#define TESTER_CAN_ID       0x7DF
+// Physical Request IDs (Tester -> ECU, used for Flow Control and direct physical requests)
+#define ECU_REQ_CAN_ID      0x7E0   // Engine ECU physical request (0x7E8 - 8)
+#define TCU_REQ_CAN_ID      0x7E1   // Transmission ECU physical request (0x7E9 - 8)
+// Physical Response IDs (ECU -> Tester)
+#define ECU_CAN_ID          0x7E8   // Engine ECU response
+#define TCU_CAN_ID          0x7E9   // Transmission ECU response
 
 void init_can( void );
 void init_can_tasks( void );

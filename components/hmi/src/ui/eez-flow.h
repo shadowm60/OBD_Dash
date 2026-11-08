@@ -1062,7 +1062,7 @@ struct Value {
 #       pragma GCC diagnostic ignored "-Wdangling-pointer"
 #   endif
 #endif
-            strValue = (const char *)((uint8_t *)&value.int32Value + value.int32Value);
+            strValue = (const char *)((uintptr_t)&value.int32Value + (intptr_t)value.int32Value);
 #ifdef SUPPRESSING
 #   undef SUPPRESSING
 #   pragma GCC diagnostic pop
@@ -1078,7 +1078,7 @@ struct Value {
 #       pragma GCC diagnostic ignored "-Wdangling-pointer"
 #   endif
 #endif
-            arrayValue = (ArrayValue *)((uint8_t *)&value.int32Value + value.int32Value);
+            arrayValue = (ArrayValue *)((uintptr_t)&value.int32Value + (intptr_t)value.int32Value);
 #ifdef SUPPRESSING
 #   undef SUPPRESSING
 #   pragma GCC diagnostic pop

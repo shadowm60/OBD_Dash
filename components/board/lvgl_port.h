@@ -147,6 +147,18 @@ esp_err_t lvgl_port_init(esp_lcd_panel_handle_t lcd_handle, esp_lcd_touch_handle
  */
 bool lvgl_port_lock(int timeout_ms);
 
+typedef void (*lvgl_port_hook_t)(void);
+
+/**
+ * @brief Register application UI hooks. Must be called before lvgl_port_init().
+ *
+ * @param init_hook Called once from the LVGL task (lock held) to build the UI.
+ * @param tick_hook Called on every LVGL loop iteration (lock held).
+ *
+ * Keeps the board layer free of any dependency on the application UI.
+ */
+void lvgl_port_set_ui_hooks(lvgl_port_hook_t init_hook, lvgl_port_hook_t tick_hook);
+
 /**
  * @brief Give LVGL mutex
  *

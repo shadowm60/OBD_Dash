@@ -1,0 +1,33 @@
+/*
+ * Vehicle signal list (X-macro). One line per signal:
+ *   VD_SIGNAL(id, "name", "unit", min, max, decimals)
+ *
+ * Adding a signal here makes it available to every producer (OBD, later rusEFI)
+ * and consumer (UI, logger). min/max are display hints for gauges.
+ */
+VD_SIGNAL(RPM,           "Engine speed",      "rpm",   0,    8000, 0)
+VD_SIGNAL(SPEED,         "Vehicle speed",     "km/h",  0,    260,  0)
+VD_SIGNAL(ENGINE_LOAD,   "Engine load",       "%",     0,    100,  0)
+VD_SIGNAL(THROTTLE,      "Throttle",          "%",     0,    100,  0)
+VD_SIGNAL(THROTTLE_REL,  "Relative throttle", "%",     0,    100,  0)
+VD_SIGNAL(MAP,           "Manifold pressure", "kPa",   0,    255,  0)
+VD_SIGNAL(BARO,          "Barometric press.", "kPa",   0,    255,  0)
+VD_SIGNAL(TIMING,        "Timing advance",    "deg",  -64,   64,   1)
+VD_SIGNAL(MAF,           "MAF",               "g/s",   0,    655,  1)
+VD_SIGNAL(COOLANT,       "Coolant temp",      "C",    -40,   215,  0)
+VD_SIGNAL(INTAKE_TEMP,   "Intake air temp",   "C",    -40,   215,  0)
+VD_SIGNAL(OIL_TEMP,      "Oil temp",          "C",    -40,   215,  0)
+VD_SIGNAL(AMBIENT_TEMP,  "Ambient temp",      "C",    -40,   215,  0)
+VD_SIGNAL(STFT_B1,       "STFT bank 1",       "%",    -100,  99,   1)
+VD_SIGNAL(LTFT_B1,       "LTFT bank 1",       "%",    -100,  99,   1)
+VD_SIGNAL(STFT_B2,       "STFT bank 2",       "%",    -100,  99,   1)
+VD_SIGNAL(LTFT_B2,       "LTFT bank 2",       "%",    -100,  99,   1)
+VD_SIGNAL(LAMBDA,        "Lambda (O2 S1)",    "",      0,    2,    3)
+VD_SIGNAL(LAMBDA_CMD,    "Commanded lambda",  "",      0,    2,    3)
+VD_SIGNAL(FUEL_PRESSURE, "Fuel pressure",     "kPa",   0,    765,  0)
+VD_SIGNAL(FUEL_LEVEL,    "Fuel level",        "%",     0,    100,  0)
+VD_SIGNAL(FUEL_RATE,     "Fuel rate",         "L/h",   0,    3277, 1)
+VD_SIGNAL(BATTERY,       "Module voltage",    "V",     0,    20,   1)
+VD_SIGNAL(RUNTIME,       "Run time",          "s",     0,    65535,0)
+VD_SIGNAL(MIL,           "MIL on",            "",      0,    1,    0)
+VD_SIGNAL(DTC_COUNT,     "Stored DTCs",       "",      0,    127,  0)

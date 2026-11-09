@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "main.c"
     INCLUDE_DIRS "."
-    REQUIRES "hmi" "dpool" "bsp"
+    PRIV_REQUIRES board hmi can_if comsm vehicle_data
     )
 
 idf_component_get_property(lvgl_lib lvgl__lvgl COMPONENT_LIB)

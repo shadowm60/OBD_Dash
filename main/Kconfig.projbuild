@@ -198,5 +198,28 @@ menu "BSW Configuration"
             default 1
             help
                 GPIO number for CAN RX.
-    endmenu    
+
+        config CAN_BITRATE
+            int "CAN bitrate (bit/s)"
+            default 500000
+            help
+                Bus bitrate. OBD-II over CAN (ISO 15765-4) uses 500000 or 250000.
+    endmenu
+
+    menu "OBD"
+        config OBD_RESPONSE_TIMEOUT_MS
+            int "ECU response timeout (ms)"
+            default 150
+            help
+                Time to wait for an ECU response (P2 timeout). Extended
+                automatically when the ECU answers with NRC 0x78 (response pending).
+
+        config OBD_MAX_CONSECUTIVE_TIMEOUTS
+            int "Timeouts before the connection is considered lost"
+            default 8
+
+        config OBD_RECONNECT_DELAY_MS
+            int "Delay between automatic reconnect attempts (ms)"
+            default 2000
+    endmenu
 endmenu

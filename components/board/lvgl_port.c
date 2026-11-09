@@ -14,11 +14,12 @@
 #include "esp_log.h"
 #include "lvgl.h"
 #include "lvgl_port.h"
-#include "ui.h"
 
 static const char *TAG = "lv_port";                      // Tag for logging
 static SemaphoreHandle_t lvgl_mux;                       // LVGL mutex for synchronization
 static TaskHandle_t lvgl_task_handle = NULL;             // Handle for the LVGL task
+static lvgl_port_hook_t s_ui_init_hook = NULL;           // Called once inside the LVGL task (UI build)
+static lvgl_port_hook_t s_ui_tick_hook = NULL;           // Called every LVGL loop with the lock held
 
 #if BSW_LVGL_PORT_ROTATION_DEGREE != 0
 // Function to get the next frame buffer for double buffering
@@ -490,12 +491,18 @@ static void lvgl_port_task(void *arg)
 
     uint32_t task_delay_ms = LVGL_PORT_TASK_MAX_DELAY_MS; // Set initial task delay
 
-    ui_init();
+    if (s_ui_init_hook) {
+        lvgl_port_lock(-1);
+        s_ui_init_hook();
+        lvgl_port_unlock();
+    }
 
     while (1) {
         if (lvgl_port_lock(-1)) { // Try to lock the LVGL mutex
             task_delay_ms = lv_timer_handler(); // Handle LVGL timer events
-            ui_tick();
+            if (s_ui_tick_hook) {
+                s_ui_tick_hook();
+            }
             lvgl_port_unlock(); // Unlock the mutex
         }
         // Ensure the delay time is within limits
@@ -546,6 +553,12 @@ esp_err_t lvgl_port_init(esp_lcd_panel_handle_t lcd_handle, esp_lcd_touch_handle
     }
 
     return ESP_OK; // Return success
+}
+
+void lvgl_port_set_ui_hooks(lvgl_port_hook_t init_hook, lvgl_port_hook_t tick_hook)
+{
+    s_ui_init_hook = init_hook;
+    s_ui_tick_hook = tick_hook;
 }
 
 bool lvgl_port_lock(int timeout_ms)

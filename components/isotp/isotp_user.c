@@ -1,47 +1,32 @@
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdarg.h>
 #include "isotp_user.h"
 #include "isotp_defines.h"
-#include "can.h"
+#include "can_if.h"
 #include "esp_log.h"
-#include <stdarg.h>
 
-static const char *TAG = "ISOTP_DEBUG";
+static const char *TAG = "isotp";
 
 void isotp_user_debug(const char* message, ...) {
     va_list args;
     va_start(args, message);
-    ESP_LOGW(TAG, "%s", "");  // Initialize log line (optional)
-    esp_log_writev(ESP_LOG_WARN, TAG, message, args);
+    esp_log_writev(ESP_LOG_DEBUG, TAG, message, args);
     va_end(args);
 }
 
-
-int  isotp_user_send_can(const uint32_t arbitration_id, const uint8_t* data, const uint8_t size) {
-    uint8_t i;
-    twai_message_t tp_message = {
-        // Message type and format settings
-        .extd = 0,              // Standard Format message (11-bit ID)
-        .rtr = 0,               // Send a data frame
-        .ss = 0,                // Is single shot (won't retry on error or NACK - so swithced to 1)
-        .self = 0,              // Not a self reception request
-        .dlc_non_comp = 0,      // DLC is less than 8
-        // Message ID and payload
-        .identifier = arbitration_id,
-        .data_length_code = size,
-        .data = {0},
+int isotp_user_send_can(const uint32_t arbitration_id, const uint8_t* data, const uint8_t size) {
+    can_frame_t f = {
+        .id  = arbitration_id,
+        .dlc = size > CAN_IF_MAX_DLC ? CAN_IF_MAX_DLC : size,
+        .ext = arbitration_id > 0x7FF,
     };
-
-    for (i=0; i<size; i++) {
-        tp_message.data[i] = data[i];
+    for (uint8_t i = 0; i < f.dlc; i++) {
+        f.data[i] = data[i];
     }
-
-    can_send_message(&tp_message);
-
-    return ISOTP_RET_OK;
+    return (can_if_send(&f, 5) == ESP_OK) ? ISOTP_RET_OK : ISOTP_RET_ERROR;
 }
 
 /* user implemented, get millisecond */
 uint32_t isotp_user_get_ms(void) {
-    return can_get_timestamp_ms();
+    return can_if_now_ms();
 }

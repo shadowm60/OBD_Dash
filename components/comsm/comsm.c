@@ -9,6 +9,7 @@
 #include "obd_client.h"
 #include "obd_pids.h"
 #include "vehicle_data.h"
+#include "comsm_diag.h"
 
 static const char *TAG = "comsm";
 
@@ -16,9 +17,9 @@ static const char *TAG = "comsm";
 #define TASK_PRIO           6
 #define CONNECT_ATTEMPTS    3
 
-typedef enum { CMD_CONNECT, CMD_DISCONNECT, CMD_TOGGLE } cmd_t;
+typedef enum { CMD_CONNECT, CMD_DISCONNECT, CMD_TOGGLE, CMD_READ_DTC, CMD_CLEAR_DTC, CMD_FREEZE_FRAME } cmd_t;
 
-typedef enum { REQ_NONE, REQ_PROBE, REQ_DISCOVERY, REQ_POLL } req_kind_t;
+typedef enum { REQ_NONE, REQ_PROBE, REQ_DISCOVERY, REQ_POLL, REQ_DIAG } req_kind_t;
 
 static QueueHandle_t  s_cmd_queue;
 static comsm_status_t s_status;
@@ -78,16 +79,22 @@ static void st_rate(comsm_status_t *s, uint32_t arg)        { s->request_rate = 
 
 /* ---------------------------------------------------------------- transitions */
 
+static void send_raw(req_kind_t kind, const uint8_t *req, uint16_t len)
+{
+    /* A send failure is reported as OBD_REQ_ERROR by the next obd_client_process(). */
+    obd_client_request(req, len);
+    s_pending = kind;
+}
+
 static void send_request(req_kind_t kind, uint8_t sid, uint8_t pid)
 {
     uint8_t req[2] = { sid, pid };
-    /* A send failure is reported as OBD_REQ_ERROR by the next obd_client_process(). */
-    obd_client_request(req, sizeof(req));
-    s_pending = kind;
+    send_raw(kind, req, sizeof(req));
 }
 
 static void go_idle(void)
 {
+    diag_abort("Disconnected");
     obd_client_abort();
     s_pending = REQ_NONE;
     vd_invalidate_all();
@@ -97,6 +104,7 @@ static void go_idle(void)
 
 static void go_retry_wait(void)
 {
+    diag_abort("Connection lost");
     obd_client_abort();
     s_pending = REQ_NONE;
     vd_invalidate_all();
@@ -201,6 +209,10 @@ static void on_request_finished(obd_req_status_t st)
         }
         break;
 
+    case REQ_DIAG:
+        diag_on_result(st, r, len, obd_client_nrc());
+        break;
+
     case REQ_NONE:
         break;
     }
@@ -208,6 +220,16 @@ static void on_request_finished(obd_req_status_t st)
 
 static void step_running(uint32_t now)
 {
+    /* Diagnostic jobs take priority over live data polling. */
+    if (diag_active()) {
+        uint8_t req[4];
+        uint16_t len;
+        if (diag_next_request(req, &len)) {
+            send_raw(REQ_DIAG, req, len);
+            return;
+        }
+    }
+
     int idx = obd_pid_next_due(now);
     if (idx < 0) {
         vTaskDelay(pdMS_TO_TICKS(5));
@@ -279,6 +301,19 @@ static void handle_cmd(cmd_t cmd)
             go_idle();
         }
         break;
+    case CMD_READ_DTC:
+    case CMD_CLEAR_DTC:
+    case CMD_FREEZE_FRAME: {
+        diag_job_t job = cmd == CMD_READ_DTC  ? DIAG_JOB_READ_DTC
+                       : cmd == CMD_CLEAR_DTC ? DIAG_JOB_CLEAR_DTC
+                                              : DIAG_JOB_FREEZE_FRAME;
+        if (s_state == COMSM_RUNNING) {
+            diag_start(job);
+        } else {
+            diag_reject(job, "Not connected");
+        }
+        break;
+    }
     }
 }
 
@@ -310,6 +345,9 @@ static void post(cmd_t cmd)
 void comsm_connect(void)    { post(CMD_CONNECT); }
 void comsm_disconnect(void) { post(CMD_DISCONNECT); }
 void comsm_toggle(void)     { post(CMD_TOGGLE); }
+void comsm_read_dtcs(void)  { post(CMD_READ_DTC); }
+void comsm_clear_dtcs(void) { post(CMD_CLEAR_DTC); }
+void comsm_read_freeze_frame(void) { post(CMD_FREEZE_FRAME); }
 
 void comsm_get_status(comsm_status_t *out)
 {

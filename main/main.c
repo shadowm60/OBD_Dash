@@ -6,6 +6,7 @@
  *   can_if       TWAI driver, TX queue, RX dispatch
  *   comsm        connection state machine, owns the OBD client
  *   vehicle_data latest value of every signal (OBD -> UI / logger)
+ *   settings     persistent user configuration (NVS)
  */
 #include "esp_log.h"
 #include "waveshare_rgb_lcd_port.h"
@@ -14,12 +15,24 @@
 #include "can_if.h"
 #include "comsm.h"
 #include "vehicle_data.h"
+#include "settings.h"
+#include "obd_pids.h"
 
 static const char *TAG = "app_main";
 
+/* Restore the user's PID selection before the UI or comsm can use it. */
+static void apply_pid_selection(void)
+{
+    for (size_t i = 0; i < obd_pid_count(); i++) {
+        obd_pid_set_enabled(i, settings_pid_enabled(obd_pid_desc(i)->pid));
+    }
+}
+
 void app_main(void)
 {
+    settings_init();            /* NVS: must come before anything reading settings */
     vd_init();
+    apply_pid_selection();
 
     i2c_io_init();
     lvgl_port_set_ui_hooks(hmi_init, hmi_tick);

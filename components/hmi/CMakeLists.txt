@@ -8,7 +8,9 @@ idf_component_register(SRCS "./src/ui/images.c"
                             "./bridge/actions.c"
                             "./bridge/eez_vars.cpp"
                             "./bridge/ui_bridge.c"
+                            "./bridge/settings_view.c"
+                            "./bridge/diag_view.c"
                     INCLUDE_DIRS "./bridge"
                     PRIV_INCLUDE_DIRS "./src/ui"
                     REQUIRES lvgl
-                    PRIV_REQUIRES comsm obd vehicle_data)
+                    PRIV_REQUIRES comsm obd vehicle_data settings esp_timer)

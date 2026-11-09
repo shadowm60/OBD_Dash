@@ -10,26 +10,29 @@
 #include "comsm.h"
 #include "obd_pids.h"
 #include "vehicle_data.h"
+#include "settings.h"
 
 static const char *TAG = "hmi_actions";
 
 extern objects_t objects;
 
+/* Log checkboxes: state is persisted by settings_view (polled, because these
+ * actions fire on PRESSED before the checkbox toggles). Logging itself: phase 4. */
 void action_log_raw_enabled(lv_event_t *e)
 {
-    /* SD logging: phase 4 */
 }
 
 void action_log_params_enabled(lv_event_t *e)
 {
-    /* SD logging: phase 4 */
 }
 
 static void pid_checkbox_cb(lv_event_t *e)
 {
     lv_obj_t *cb = lv_event_get_target(e);
     size_t idx = (size_t)(intptr_t)lv_obj_get_user_data(cb);
-    obd_pid_set_enabled(idx, lv_obj_has_state(cb, LV_STATE_CHECKED));
+    bool on = lv_obj_has_state(cb, LV_STATE_CHECKED);
+    obd_pid_set_enabled(idx, on);
+    settings_set_pid_enabled(obd_pid_desc(idx)->pid, on);
 }
 
 /* PID selection list: one checkbox per catalogue PID. While connected,

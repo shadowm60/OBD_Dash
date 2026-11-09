@@ -24,3 +24,8 @@ extern "C" void eez_var_set_bool(uint32_t idx, bool value)
 {
     flow::setGlobalVariable(idx, BooleanValue(value));
 }
+
+extern "C" int32_t eez_var_get_int(uint32_t idx)
+{
+    return flow::getGlobalVariable(idx).getInt();
+}

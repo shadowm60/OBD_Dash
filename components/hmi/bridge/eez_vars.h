@@ -19,6 +19,8 @@ void eez_var_set_int(uint32_t idx, int32_t value);
 void eez_var_set_float(uint32_t idx, float value);
 void eez_var_set_bool(uint32_t idx, bool value);
 
+int32_t eez_var_get_int(uint32_t idx);
+
 #ifdef __cplusplus
 }
 #endif

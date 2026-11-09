@@ -18,6 +18,7 @@
 #include "eez_vars.h"
 #include "comsm.h"
 #include "vehicle_data.h"
+#include "views.h"
 
 static const char *TAG = "ui_bridge";
 
@@ -127,11 +128,15 @@ static void bridge_timer_cb(lv_timer_t *t)
     uint32_t now = lv_tick_get();
     refresh_connection(now);
     refresh_signals();
+    settings_view_refresh();
+    diag_view_refresh();
 }
 
 void hmi_init(void)
 {
     ui_init();
+    settings_view_init();
+    diag_view_init();
     lv_timer_create(bridge_timer_cb, REFRESH_PERIOD_MS, NULL);
     ESP_LOGI(TAG, "UI bridge started (%u ms refresh)", REFRESH_PERIOD_MS);
 }

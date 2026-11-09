@@ -38,8 +38,10 @@ typedef struct {
 } binding_t;
 
 static binding_t s_bindings[] = {
-    { VD_RPM,    FLOW_GLOBAL_VARIABLE_RPM_VALUE, BIND_INT,   1.0f,                NAN },
-    { VD_LAMBDA, FLOW_GLOBAL_VARIABLE_AFR_VALUE, BIND_FLOAT, AFR_STOICH_GASOLINE, NAN },
+    { VD_RPM,    FLOW_GLOBAL_VARIABLE_RPM_VALUE, BIND_INT,   1.0f, NAN },
+    /* AFR x10, rounded: the gauge needle is integer only (see live_view.c) */
+    { VD_LAMBDA, FLOW_GLOBAL_VARIABLE_AFR_VALUE, BIND_INT,
+      AFR_STOICH_GASOLINE * AFR_GAUGE_SCALE, NAN },
     /* After regenerating EEZ code with the new variables, e.g.:
      * { VD_SPEED,   FLOW_GLOBAL_VARIABLE_VEHICLE_SPEED,   BIND_INT,   1.0f, NAN },
      * { VD_COOLANT, FLOW_GLOBAL_VARIABLE_COOLANT_TEMP,    BIND_INT,   1.0f, NAN },
@@ -138,6 +140,7 @@ void hmi_init(void)
 {
     ui_init();
     settings_view_init();
+    live_view_init();
     diag_view_init();
     lv_timer_create(bridge_timer_cb, REFRESH_PERIOD_MS, NULL);
     ESP_LOGI(TAG, "UI bridge started (%u ms refresh)", REFRESH_PERIOD_MS);

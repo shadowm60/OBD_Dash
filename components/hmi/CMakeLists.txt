@@ -11,6 +11,7 @@ idf_component_register(SRCS "./src/ui/images.c"
                             "./bridge/settings_view.c"
                             "./bridge/diag_view.c"
                             "./bridge/pid_select_view.c"
+                            "./bridge/live_view.c"
                     INCLUDE_DIRS "./bridge"
                     PRIV_INCLUDE_DIRS "./src/ui"
                     REQUIRES lvgl

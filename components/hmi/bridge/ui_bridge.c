@@ -25,6 +25,8 @@
 static const char *TAG = "ui_bridge";
 
 #define REFRESH_PERIOD_MS   100
+#define SIGNAL_PERIOD_MS    20      /* needle smoothing runs at this rate */
+#define SMOOTH_ALPHA        0.3f    /* per step: ~90 % of a change within ~130 ms */
 #define STALE_AFTER_MS      3000
 #define AFR_STOICH_GASOLINE 14.7f
 
@@ -35,18 +37,21 @@ typedef struct {
     uint32_t    eez_var;
     bind_type_t type;
     float       scale;          /* displayed = value * scale */
+    float       step;           /* > 0: needle smoothing, output quantised to this step */
     float       last;           /* cache, NAN = never sent */
+    float       shown;          /* smoothed value (step > 0) */
 } binding_t;
 
 static binding_t s_bindings[] = {
-    { VD_RPM,    FLOW_GLOBAL_VARIABLE_RPM_VALUE, BIND_INT,   1.0f, NAN },
+    { VD_RPM,    FLOW_GLOBAL_VARIABLE_RPM_VALUE, BIND_INT, 1.0f, 10.0f, NAN, NAN },
     /* AFR x10, rounded: the gauge needle is integer only (see live_view.c) */
     { VD_LAMBDA, FLOW_GLOBAL_VARIABLE_AFR_VALUE, BIND_INT,
-      AFR_STOICH_GASOLINE * AFR_GAUGE_SCALE, NAN },
+      AFR_STOICH_GASOLINE * AFR_GAUGE_SCALE, 1.0f, NAN, NAN },
     /* After regenerating EEZ code with the new variables, e.g.:
-     * { VD_SPEED,   FLOW_GLOBAL_VARIABLE_VEHICLE_SPEED,   BIND_INT,   1.0f, NAN },
-     * { VD_COOLANT, FLOW_GLOBAL_VARIABLE_COOLANT_TEMP,    BIND_INT,   1.0f, NAN },
-     * { VD_BATTERY, FLOW_GLOBAL_VARIABLE_BATTERY_VOLTAGE, BIND_FLOAT, 1.0f, NAN },
+     * { VD_SPEED,   FLOW_GLOBAL_VARIABLE_VEHICLE_SPEED,   BIND_INT,   1.0f, 0, NAN, NAN },
+     * { VD_COOLANT, FLOW_GLOBAL_VARIABLE_COOLANT_TEMP,    BIND_INT,   1.0f, 0, NAN, NAN },
+     * { VD_BATTERY, FLOW_GLOBAL_VARIABLE_BATTERY_VOLTAGE, BIND_FLOAT, 1.0f, 0, NAN, NAN },
+     * step > 0 only for needles; numeric readouts should show the real value.
      */
 };
 
@@ -120,6 +125,17 @@ static void refresh_signals(void)
         vd_sample_t smp;
         float v = vd_get(b->signal, STALE_AFTER_MS, &smp) ? smp.value * b->scale : 0.0f;
 
+        /* Data arrives every 100-300 ms; easing the needle towards it makes the
+         * gauges move fluidly instead of jumping. Quantising avoids redrawing
+         * for sub-pixel needle moves. */
+        if (b->step > 0.0f) {
+            if (isnan(b->shown) || fabsf(v - b->shown) < b->step * 0.5f) {
+                b->shown = v;
+            } else {
+                b->shown += (v - b->shown) * SMOOTH_ALPHA;
+            }
+            v = roundf(b->shown / b->step) * b->step;
+        }
         if (b->type == BIND_INT) {
             v = roundf(v);
         }
@@ -139,10 +155,14 @@ static void bridge_timer_cb(lv_timer_t *t)
 {
     uint32_t now = lv_tick_get();
     refresh_connection(now);
-    refresh_signals();
     settings_view_refresh();
     diag_view_refresh();
     pid_select_view_refresh();
+}
+
+static void signal_timer_cb(lv_timer_t *t)
+{
+    refresh_signals();
 }
 
 void hmi_init(void)
@@ -152,6 +172,7 @@ void hmi_init(void)
     live_view_init();
     diag_view_init();
     lv_timer_create(bridge_timer_cb, REFRESH_PERIOD_MS, NULL);
+    lv_timer_create(signal_timer_cb, SIGNAL_PERIOD_MS, NULL);
     ESP_LOGI(TAG, "UI bridge started (%u ms refresh)", REFRESH_PERIOD_MS);
 }
 

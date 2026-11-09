@@ -12,14 +12,25 @@
  * ui_init(), so a regenerated UI keeps working as long as the widgets keep these
  * identifiers.
  *
+ * Performance: drawing the scales (anti-aliased ticks, tick labels, arcs) is
+ * by far the most expensive part, and it was redone for every needle move.
+ * After setup, the whole static screen is rendered once into an image
+ * (lv_snapshot, ~750 KB in PSRAM). Ticks, meter backgrounds, arcs and labels are
+ * then removed from the live widgets, so a frame only blits the image and draws
+ * the needles. Consequence: labels/arcs on this screen are static. A widget that
+ * must stay live needs to be excluded in is_static_decoration().
+ *
  * Navigation: the EEZ screen has no way back, so a swipe (any direction) or a
  * long press anywhere goes back to the previous screen. Gauges and arcs are made
  * non-clickable so touches reach the screen (and the arcs can't be dragged).
  */
 #include "lvgl.h"
+#include "esp_log.h"
 #include "screens.h"
 #include "ui.h"
 #include "views.h"
+
+static const char *TAG = "live_view";
 
 extern objects_t objects;
 
@@ -52,6 +63,72 @@ static void rescale(lv_obj_t *meter, const gauge_fix_t *fix)
     lv_obj_add_event_cb(meter, tick_label_cb, LV_EVENT_DRAW_PART_BEGIN, (void *)fix);
 }
 
+/* ---------------------------------------------------------------- background cache */
+
+static void set_needles_opa(lv_obj_t *meter, lv_opa_t opa)
+{
+    lv_meter_indicator_t *ind;
+    _LV_LL_READ(&((lv_meter_t *)meter)->indicator_ll, ind) {
+        ind->opa = opa;
+    }
+}
+
+static bool is_meter(lv_obj_t *o)  { return lv_obj_check_type(o, &lv_meter_class); }
+
+static bool is_static_decoration(lv_obj_t *o)
+{
+    return lv_obj_check_type(o, &lv_arc_class) || lv_obj_check_type(o, &lv_label_class);
+}
+
+static void bake_background(lv_obj_t *scr)
+{
+    uint32_t n = lv_obj_get_child_cnt(scr);
+
+    for (uint32_t i = 0; i < n; i++) {
+        lv_obj_t *c = lv_obj_get_child(scr, i);
+        if (is_meter(c)) {
+            set_needles_opa(c, LV_OPA_TRANSP);
+        }
+    }
+    lv_obj_update_layout(scr);
+    lv_img_dsc_t *bg = lv_snapshot_take(scr, LV_IMG_CF_TRUE_COLOR);
+    for (uint32_t i = 0; i < n; i++) {
+        lv_obj_t *c = lv_obj_get_child(scr, i);
+        if (is_meter(c)) {
+            set_needles_opa(c, LV_OPA_COVER);
+        }
+    }
+    if (bg == NULL) {
+        ESP_LOGW(TAG, "snapshot failed (out of memory?), gauges drawn the slow way");
+        return;
+    }
+
+    /* Strip what is now in the image. */
+    for (uint32_t i = 0; i < n; i++) {
+        lv_obj_t *c = lv_obj_get_child(scr, i);
+        if (is_meter(c)) {
+            lv_meter_scale_t *scale;
+            _LV_LL_READ(&((lv_meter_t *)c)->scale_ll, scale) {
+                scale->tick_cnt = 0;            /* nothing to draw, range is kept */
+            }
+            lv_obj_set_style_bg_opa(c, LV_OPA_TRANSP, LV_PART_MAIN);
+            lv_obj_set_style_border_width(c, 0, LV_PART_MAIN);
+            lv_obj_set_style_shadow_width(c, 0, LV_PART_MAIN);
+        } else if (is_static_decoration(c)) {
+            lv_obj_add_flag(c, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    lv_obj_t *img = lv_img_create(scr);
+    lv_img_set_src(img, bg);
+    lv_obj_set_pos(img, 0, 0);
+    lv_obj_clear_flag(img, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_move_to_index(img, 0);                       /* behind the needles */
+    ESP_LOGI(TAG, "gauge background cached (%lux%lu)", (unsigned long)bg->header.w, (unsigned long)bg->header.h);
+}
+
+/* ---------------------------------------------------------------- navigation */
+
 static void go_back_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_GESTURE) {
@@ -82,4 +159,5 @@ void live_view_init(void)
 
     rescale(objects.rpm_gauge, &s_rpm_fix);
     rescale(objects.afr_gauge, &s_afr_fix);
+    bake_background(scr);
 }

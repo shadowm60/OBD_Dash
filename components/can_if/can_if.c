@@ -31,6 +31,7 @@ static volatile bool      s_need_recover;
 
 static subscriber_t       s_subs[CAN_IF_MAX_SUBSCRIBERS];
 static volatile uint8_t   s_sub_count;
+static QueueHandle_t volatile s_monitor;
 
 static can_if_stats_t     s_stats;
 static portMUX_TYPE       s_stats_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -41,6 +42,16 @@ uint32_t can_if_now_ms(void)
 }
 
 /* ---------------------------------------------------------------- ISR callbacks */
+
+static void monitor_push_from_isr(const can_frame_t *f, BaseType_t *woken)
+{
+    QueueHandle_t q = s_monitor;
+    if (q != NULL && xQueueSendFromISR(q, f, woken) != pdTRUE) {
+        portENTER_CRITICAL_ISR(&s_stats_lock);
+        s_stats.mon_dropped++;
+        portEXIT_CRITICAL_ISR(&s_stats_lock);
+    }
+}
 
 static bool on_rx_done(twai_node_handle_t handle, const twai_rx_done_event_data_t *edata, void *ctx)
 {
@@ -57,12 +68,15 @@ static bool on_rx_done(twai_node_handle_t handle, const twai_rx_done_event_data_
         .ts_ms = can_if_now_ms(),
         .dlc   = rx.header.dlc > CAN_IF_MAX_DLC ? CAN_IF_MAX_DLC : rx.header.dlc,
         .ext   = rx.header.ide,
+        .tx    = false,
     };
     memcpy(f.data, buf, f.dlc);
 
     portENTER_CRITICAL_ISR(&s_stats_lock);
     s_stats.rx_frames++;
     portEXIT_CRITICAL_ISR(&s_stats_lock);
+
+    monitor_push_from_isr(&f, &woken);
 
     for (uint8_t i = 0; i < s_sub_count; i++) {
         if (f.id >= s_subs[i].id_min && f.id <= s_subs[i].id_max) {
@@ -156,6 +170,17 @@ static void can_tx_task(void *arg)
             s_stats.tx_failed++;
         }
         portEXIT_CRITICAL(&s_stats_lock);
+
+        QueueHandle_t mon = s_monitor;
+        if (ok && mon != NULL) {
+            cur.ts_ms = can_if_now_ms();
+            cur.tx = true;
+            if (xQueueSend(mon, &cur, 0) != pdTRUE) {
+                portENTER_CRITICAL(&s_stats_lock);
+                s_stats.mon_dropped++;
+                portEXIT_CRITICAL(&s_stats_lock);
+            }
+        }
     }
 }
 
@@ -189,6 +214,11 @@ esp_err_t can_if_subscribe(uint32_t id_min, uint32_t id_max, QueueHandle_t queue
     __sync_synchronize();
     s_sub_count++;
     return ESP_OK;
+}
+
+void can_if_set_monitor(QueueHandle_t queue)
+{
+    s_monitor = queue;
 }
 
 void can_if_get_stats(can_if_stats_t *out)

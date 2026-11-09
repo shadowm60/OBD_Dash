@@ -23,6 +23,7 @@ obd             obd_client (one request in flight, timeout, NRC, addressing)
                 obd_pids   (Service 01 catalogue in flash, support/enable state, scheduler)
 isotp           ISO 15765-2 transport (isotp-c) + glue to can_if
 can_if          esp_twai driver: TX queue, RX dispatch by ID range, bus stats
+datalog         SD logging task: raw CAN (candump .log) + polled parameters (.csv)
 vehicle_data    latest value + timestamp of every signal (producers -> consumers)
 settings        persistent user config in NVS (one versioned blob, saved 2 s after last change)
 board           LCD, touch, IO expander, SD card, LVGL port (no app knowledge)
@@ -38,6 +39,7 @@ board           LCD, touch, IO expander, SD card, LVGL port (no app knowledge)
 | change bitrate / timeouts          | `idf.py menuconfig` -> BSW Configuration -> CAN / OBD        |
 | persist a new setting              | field in `settings.h` + setter, bump `SETTINGS_VER`, sync in `settings_view.c` |
 | add a diagnostic job               | new steps in `comsm/comsm_diag.c`, command in `comsm.c`      |
+| log row rate / full bus capture    | `idf.py menuconfig` -> BSW Configuration -> Data logging / CAN |
 
 ### Connection sequence
 
@@ -51,9 +53,22 @@ board           LCD, touch, IO expander, SD card, LVGL port (no app knowledge)
 CAN: 11-bit IDs, `CONFIG_CAN_BITRATE` (default 500 kbit/s), hardware filter `0x7E8/0x7F8`,
 ISO-TP frames padded to 8 bytes, flow control sent to the physical request ID.
 
+## Logging
+
+Switched with the two checkboxes on the Settings screen (state is saved). Files go to the
+SD card root, numbered so nothing is overwritten. Times are seconds since boot (no RTC).
+
+| Checkbox | File | Content |
+|---|---|---|
+| Log raw CAN | `can_NNN.log` | every frame received and sent, candump format (`(1.234000) can0 7E8#04410C1AF8`), opens in SavvyCAN / python-can / `canplayer`. Only `0x7E8..0x7EF` + our requests unless `CONFIG_CAN_ACCEPT_ALL` is set |
+| Log parameters | `par_NNN.csv` | one row per `CONFIG_DATALOG_PARAM_PERIOD_MS` (200 ms), one column per polled PID, empty cell = no fresh value. A new file starts on every connect or PID selection change |
+
+Files are synced every `CONFIG_DATALOG_SYNC_PERIOD_MS` (2 s); untick the box before
+pulling the card. Status line shows `REC` while a log is open.
+
 ## Roadmap
 
 1. Communication layer (done: can_if, obd, comsm, vehicle_data, ui_bridge)
 2. Settings in NVS, DTC read/clear (Service 03/07/0A/04), freeze frame (Service 02) (done)
 3. Live data screens (EEZ Studio)
-4. SD card logging
+4. SD card logging (done)

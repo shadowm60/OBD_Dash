@@ -18,6 +18,7 @@
 #include "eez_vars.h"
 #include "comsm.h"
 #include "obd_pids.h"
+#include "datalog.h"
 #include "vehicle_data.h"
 #include "views.h"
 
@@ -52,6 +53,13 @@ static binding_t s_bindings[] = {
 static uint32_t s_last_status_change = UINT32_MAX;
 static uint32_t s_status_refresh_ms;
 
+static bool logging_active(void)
+{
+    datalog_status_t ls;
+    datalog_get_status(&ls);
+    return ls.raw_active || ls.params_active;
+}
+
 static const char *button_text(comsm_state_t st)
 {
     switch (st) {
@@ -74,8 +82,9 @@ static void format_status(const comsm_status_t *s, char *buf, size_t len)
         snprintf(buf, len, "ECU %03lX - reading supported PIDs", (unsigned long)s->ecu_id);
         break;
     case COMSM_RUNNING:
-        snprintf(buf, len, "ECU %03lX - %u/%u PIDs - %.0f/s",
-                 (unsigned long)s->ecu_id, obd_pid_active_count(), s->supported_pids, s->request_rate);
+        snprintf(buf, len, "ECU %03lX - %u/%u PIDs - %.0f/s%s",
+                 (unsigned long)s->ecu_id, obd_pid_active_count(), s->supported_pids, s->request_rate,
+                 logging_active() ? " - REC" : "");
         break;
     case COMSM_RETRY_WAIT:
         snprintf(buf, len, "No response - retrying");

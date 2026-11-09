@@ -134,7 +134,7 @@ static void msgbox_close_cb(lv_event_t *e)
     lv_msgbox_close_async(mbox);   /* deleting inside its own event is unsafe */
 }
 
-static void show_message(const char *title, const char *text)
+void view_show_message(const char *title, const char *text)
 {
     static const char *btns[] = { "OK", "" };
     lv_obj_t *mbox = lv_msgbox_create(NULL, title, text, btns, false);
@@ -180,7 +180,7 @@ static void save_btn_cb(lv_event_t *e)
     static comsm_dtc_report_t r;
     comsm_get_dtc_report(&r);
     if (r.state != COMSM_DIAG_DONE) {
-        show_message("Save", "Read the trouble codes first.");
+        view_show_message("Save", "Read the trouble codes first.");
         return;
     }
 
@@ -196,7 +196,7 @@ static void save_btn_cb(lv_event_t *e)
 
     FILE *f = (n < 1000) ? fopen(path, "w") : NULL;
     if (f == NULL) {
-        show_message("Save failed", "Could not write to the SD card.");
+        view_show_message("Save failed", "Could not write to the SD card.");
         return;
     }
     comsm_status_t cs;
@@ -207,7 +207,7 @@ static void save_btn_cb(lv_event_t *e)
 
     char msg[64];
     snprintf(msg, sizeof(msg), "Saved to %s", path);
-    show_message("Saved", msg);
+    view_show_message("Saved", msg);
     ESP_LOGI(TAG, "%s", msg);
 }
 

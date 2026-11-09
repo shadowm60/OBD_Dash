@@ -12,11 +12,13 @@
 #include "vars.h"
 #include "eez_vars.h"
 #include "settings.h"
+#include "datalog.h"
 #include "views.h"
 
 extern objects_t objects;
 
-static char s_last_conn_options[96];
+static char     s_last_conn_options[96];
+static uint32_t s_log_errors;
 
 static void set_checked(lv_obj_t *cb, bool on)
 {
@@ -61,8 +63,20 @@ void settings_view_refresh(void)
     settings_get(&cfg);
 
     sync_conn_method(&cfg);
-    settings_set_log_raw(lv_obj_has_state(objects.log_raw_enabled, LV_STATE_CHECKED));
-    settings_set_log_params(lv_obj_has_state(objects.log_params_enabled, LV_STATE_CHECKED));
+    bool log_raw = lv_obj_has_state(objects.log_raw_enabled, LV_STATE_CHECKED);
+    bool log_params = lv_obj_has_state(objects.log_params_enabled, LV_STATE_CHECKED);
+    settings_set_log_raw(log_raw);
+    settings_set_log_params(log_params);
+    datalog_enable_raw(log_raw);
+    datalog_enable_params(log_params);
+
+    /* Tell the user once per failure (e.g. no SD card); the logger retries itself. */
+    datalog_status_t ls;
+    datalog_get_status(&ls);
+    if (ls.error_count != s_log_errors) {
+        s_log_errors = ls.error_count;
+        view_show_message("Logging", ls.error);
+    }
 
     int32_t id = eez_var_get_int(FLOW_GLOBAL_VARIABLE_RUSEFI_BASE_ADDR);
     if (id >= 0 && id <= 0x7FF) {

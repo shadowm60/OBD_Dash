@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
+#include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
@@ -27,10 +28,11 @@ extern "C" {
 
 typedef struct {
     uint32_t id;
-    uint32_t ts_ms;             /* receive timestamp (ms since boot), unused for TX */
+    uint32_t ts_ms;             /* RX / TX-done timestamp (ms since boot); ignored by can_if_send */
     uint8_t  dlc;
     bool     ext;               /* 29-bit identifier */
     uint8_t  data[CAN_IF_MAX_DLC];
+    bool     tx;                /* monitor queue only: frame was sent by us */
 } can_frame_t;
 
 typedef struct {
@@ -54,14 +56,21 @@ typedef struct {
     uint32_t tx_failed;         /* not acknowledged / arbitration lost after retries */
     uint32_t tx_dropped;        /* TX queue full */
     uint32_t bus_errors;
+    uint32_t mon_dropped;       /* monitor queue full */
     can_if_bus_state_t state;
 } can_if_stats_t;
 
-/* Default config: bitrate from Kconfig, filter for OBD-II responses 0x7E8..0x7EF. */
-#define CAN_IF_CONFIG_OBD_DEFAULT() {           \
-    .bitrate     = CONFIG_CAN_BITRATE,          \
-    .filter_id   = 0x7E8,                       \
-    .filter_mask = 0x7F8,                       \
+/* Default config: bitrate from Kconfig, filter for OBD-II responses 0x7E8..0x7EF,
+ * or no filter with CONFIG_CAN_ACCEPT_ALL (full bus capture for raw logging). */
+#ifdef CONFIG_CAN_ACCEPT_ALL
+#define CAN_IF_DEFAULT_FILTER_MASK  0x000
+#else
+#define CAN_IF_DEFAULT_FILTER_MASK  0x7F8
+#endif
+#define CAN_IF_CONFIG_OBD_DEFAULT() {               \
+    .bitrate     = CONFIG_CAN_BITRATE,              \
+    .filter_id   = 0x7E8,                           \
+    .filter_mask = CAN_IF_DEFAULT_FILTER_MASK,      \
 }
 
 esp_err_t can_if_init(const can_if_config_t *cfg);
@@ -72,6 +81,11 @@ esp_err_t can_if_send(const can_frame_t *frame, int timeout_ms);
 /* Copy every received frame with id_min <= id <= id_max into `queue`
  * (item size must be sizeof(can_frame_t)). Frames are dropped if the queue is full. */
 esp_err_t can_if_subscribe(uint32_t id_min, uint32_t id_max, QueueHandle_t queue);
+
+/* Bus monitor: every accepted RX frame and every successfully sent TX frame
+ * (tx = true) is copied into `queue`, regardless of subscriptions. One monitor
+ * at a time; NULL detaches. Frames are dropped (mon_dropped) if the queue is full. */
+void can_if_set_monitor(QueueHandle_t queue);
 
 void can_if_get_stats(can_if_stats_t *out);
 

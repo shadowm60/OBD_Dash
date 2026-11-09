@@ -204,6 +204,33 @@ menu "BSW Configuration"
             default 500000
             help
                 Bus bitrate. OBD-II over CAN (ISO 15765-4) uses 500000 or 250000.
+
+        config CAN_ACCEPT_ALL
+            bool "Accept all CAN IDs (full bus capture in the raw log)"
+            default n
+            help
+                By default the hardware filter only passes OBD-II responses
+                (0x7E8..0x7EF), so the raw CAN log contains the OBD conversation
+                only. Enable to receive every frame on the bus, e.g. on a rusEFI
+                or other open bus. Costs CPU on a busy bus; OBD is unaffected.
+    endmenu
+
+    menu "Data logging"
+        config DATALOG_PARAM_PERIOD_MS
+            int "Parameter log row period (ms)"
+            range 50 10000
+            default 200
+            help
+                One CSV row with the latest value of every polled parameter is
+                written per period.
+
+        config DATALOG_SYNC_PERIOD_MS
+            int "SD card sync period (ms)"
+            range 500 60000
+            default 2000
+            help
+                Log files are flushed to the card this often. This bounds the data
+                lost when power is cut without stopping the log.
     endmenu
 
     menu "OBD"

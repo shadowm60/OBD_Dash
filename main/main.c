@@ -7,6 +7,7 @@
  *   comsm        connection state machine, owns the OBD client
  *   vehicle_data latest value of every signal (OBD -> UI / logger)
  *   settings     persistent user configuration (NVS)
+ *   datalog      SD card logging (raw CAN, parameters); switched by the Settings screen
  */
 #include "esp_log.h"
 #include "waveshare_rgb_lcd_port.h"
@@ -17,6 +18,7 @@
 #include "vehicle_data.h"
 #include "settings.h"
 #include "obd_pids.h"
+#include "datalog.h"
 
 static const char *TAG = "app_main";
 
@@ -41,12 +43,13 @@ void app_main(void)
     ESP_LOGI(TAG, "display up");
 
     if (waveshare_sd_card_init() != ESP_OK) {
-        ESP_LOGW(TAG, "no SD card, logging disabled");
+        ESP_LOGW(TAG, "no SD card, logging will fail until one is inserted and the board restarted");
     }
 
     const can_if_config_t can_cfg = CAN_IF_CONFIG_OBD_DEFAULT();
     ESP_ERROR_CHECK(can_if_init(&can_cfg));
     ESP_ERROR_CHECK(comsm_init());
+    ESP_ERROR_CHECK(datalog_init(MOUNT_POINT));
 
     ESP_LOGI(TAG, "init done, press Connect to start");
 }

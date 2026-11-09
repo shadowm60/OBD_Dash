@@ -24,7 +24,7 @@ static const char *TAG = "app_main";
 static void apply_pid_selection(void)
 {
     for (size_t i = 0; i < obd_pid_count(); i++) {
-        obd_pid_set_enabled(i, settings_pid_enabled(obd_pid_desc(i)->pid));
+        obd_pid_set_enabled(i, settings_pid_selected(obd_pid_desc(i)->pid));
     }
 }
 

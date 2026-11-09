@@ -16,7 +16,7 @@ hmi             EEZ Studio UI (src/ui, generated) + bridge/ (hand written)
   bridge/         ui_bridge.c  lv_timer: comsm + vehicle_data -> EEZ variables
                   actions.c    EEZ actions -> comsm / obd calls
                   eez_vars.cpp typed EEZ variable setters (strings are copied)
-                  settings_view.c / diag_view.c  per-screen controllers
+                  settings_view.c / diag_view.c / pid_select_view.c  per-screen controllers
 comsm           connection state machine task, owns the OBD client
                 comsm_diag: DTC read/clear + freeze frame jobs (pause polling while running)
 obd             obd_client (one request in flight, timeout, NRC, addressing)
@@ -43,7 +43,9 @@ board           LCD, touch, IO expander, SD card, LVGL port (no app knowledge)
 
 1. `Connect` -> `01 00` functional on `0x7DF`; first responder in `0x7E8..0x7EF` is used.
 2. Switch to physical addressing (`0x7E0` -> `0x7E8`), read `01 20`, `01 40`, ... while supported.
-3. Poll enabled + supported PIDs: fast group continuously, medium every 500 ms, slow every 2 s.
+3. Poll the PIDs selected in Settings > Select Params (only ECU-supported ones can be
+   selected): fast group continuously, medium every 500 ms, slow every 2 s. With nothing
+   due, `01 00` is sent once a second as a keepalive.
 4. `CONFIG_OBD_MAX_CONSECUTIVE_TIMEOUTS` timeouts in a row -> reconnect after `CONFIG_OBD_RECONNECT_DELAY_MS`.
 
 CAN: 11-bit IDs, `CONFIG_CAN_BITRATE` (default 500 kbit/s), hardware filter `0x7E8/0x7F8`,

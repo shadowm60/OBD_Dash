@@ -11,7 +11,7 @@ static const char *TAG = "settings";
 
 #define NVS_NAMESPACE   "obd_dash"
 #define NVS_KEY         "cfg"
-#define SETTINGS_VER    1
+#define SETTINGS_VER    2     /* 2: PID selection became opt-in */
 #define SAVE_DELAY_MS   2000
 
 typedef struct {
@@ -30,6 +30,12 @@ static void set_defaults(app_settings_t *c)
     memset(c, 0, sizeof(*c));
     c->conn_method = SETTINGS_CONN_OBD;
     c->rusefi_base_id = 512;
+    /* Default selection: what the current dashboard shows. */
+    static const uint8_t default_pids[] = { 0x05 /* coolant */, 0x0C /* rpm */,
+                                            0x0D /* speed */, 0x24 /* lambda */ };
+    for (size_t i = 0; i < sizeof(default_pids); i++) {
+        c->pid_selected[default_pids[i] >> 3] |= (uint8_t)(1u << (default_pids[i] & 7));
+    }
 }
 
 esp_err_t settings_flush(void)
@@ -154,15 +160,15 @@ void settings_set_rusefi_base_id(uint16_t id)   { SETTINGS_SETTER(rusefi_base_id
 void settings_set_log_raw(bool on)              { SETTINGS_SETTER(log_raw, on); }
 void settings_set_log_params(bool on)           { SETTINGS_SETTER(log_params, on); }
 
-void settings_set_pid_enabled(uint8_t pid, bool enabled)
+void settings_set_pid_selected(uint8_t pid, bool selected)
 {
     uint8_t mask = (uint8_t)(1u << (pid & 7));
     bool changed = false;
     portENTER_CRITICAL(&s_lock);
-    uint8_t cur = s_cfg.pid_disabled[pid >> 3];
-    uint8_t next = enabled ? (uint8_t)(cur & ~mask) : (uint8_t)(cur | mask);
+    uint8_t cur = s_cfg.pid_selected[pid >> 3];
+    uint8_t next = selected ? (uint8_t)(cur | mask) : (uint8_t)(cur & ~mask);
     if (next != cur) {
-        s_cfg.pid_disabled[pid >> 3] = next;
+        s_cfg.pid_selected[pid >> 3] = next;
         s_dirty = changed = true;
     }
     portEXIT_CRITICAL(&s_lock);
@@ -171,10 +177,34 @@ void settings_set_pid_enabled(uint8_t pid, bool enabled)
     }
 }
 
-bool settings_pid_enabled(uint8_t pid)
+bool settings_pid_selected(uint8_t pid)
 {
     portENTER_CRITICAL(&s_lock);
-    bool disabled = (s_cfg.pid_disabled[pid >> 3] >> (pid & 7)) & 1;
+    bool sel = (s_cfg.pid_selected[pid >> 3] >> (pid & 7)) & 1;
     portEXIT_CRITICAL(&s_lock);
-    return !disabled;
+    return sel;
+}
+
+void settings_set_ecu_supported(const uint8_t bitmap[256 / 8])
+{
+    bool changed = false;
+    portENTER_CRITICAL(&s_lock);
+    if (!s_cfg.ecu_support_valid || memcmp(s_cfg.ecu_supported, bitmap, sizeof(s_cfg.ecu_supported)) != 0) {
+        memcpy(s_cfg.ecu_supported, bitmap, sizeof(s_cfg.ecu_supported));
+        s_cfg.ecu_support_valid = true;
+        s_dirty = changed = true;
+    }
+    portEXIT_CRITICAL(&s_lock);
+    if (changed) {
+        mark_dirty();
+    }
+}
+
+bool settings_get_ecu_supported(uint8_t bitmap[256 / 8])
+{
+    portENTER_CRITICAL(&s_lock);
+    bool valid = s_cfg.ecu_support_valid;
+    memcpy(bitmap, s_cfg.ecu_supported, sizeof(s_cfg.ecu_supported));
+    portEXIT_CRITICAL(&s_lock);
+    return valid;
 }

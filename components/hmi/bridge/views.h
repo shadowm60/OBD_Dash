@@ -9,5 +9,9 @@ void diag_view_init(void);
 /* Called from the bridge timer (LVGL task). */
 void settings_view_refresh(void);
 void diag_view_refresh(void);
+void pid_select_view_refresh(void);
+
+/* Settings > Select Params list, (re)built on screen load. */
+void pid_select_view_build(void);
 
 #endif

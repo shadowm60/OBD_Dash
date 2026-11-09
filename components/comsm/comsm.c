@@ -16,6 +16,7 @@ static const char *TAG = "comsm";
 #define TASK_STACK          4096
 #define TASK_PRIO           6
 #define CONNECT_ATTEMPTS    3
+#define KEEPALIVE_MS        1000    /* "01 00" when no selected PID is due, to detect a lost ECU */
 
 typedef enum { CMD_CONNECT, CMD_DISCONNECT, CMD_TOGGLE, CMD_READ_DTC, CMD_CLEAR_DTC, CMD_FREEZE_FRAME } cmd_t;
 
@@ -35,6 +36,7 @@ static uint8_t        s_consecutive_timeouts;
 static uint32_t       s_retry_at_ms;
 static uint32_t       s_rate_window_start;
 static uint32_t       s_rate_window_count;
+static uint32_t       s_last_tx_ms;
 
 const char *comsm_state_name(comsm_state_t st)
 {
@@ -84,6 +86,7 @@ static void send_raw(req_kind_t kind, const uint8_t *req, uint16_t len)
     /* A send failure is reported as OBD_REQ_ERROR by the next obd_client_process(). */
     obd_client_request(req, len);
     s_pending = kind;
+    s_last_tx_ms = can_if_now_ms();
 }
 
 static void send_request(req_kind_t kind, uint8_t sid, uint8_t pid)
@@ -196,7 +199,7 @@ static void on_request_finished(obd_req_status_t st)
         } else if (st == OBD_REQ_NEGATIVE) {
             s_consecutive_timeouts = 0;
             uint8_t nrc = obd_client_nrc();
-            const obd_pid_desc_t *d = obd_pid_desc(s_pending_idx);
+            const obd_pid_desc_t *d = (s_pending_idx >= 0) ? obd_pid_desc((size_t)s_pending_idx) : NULL;
             if (d && (nrc == 0x12 || nrc == 0x31)) {      /* sub-function / out of range */
                 obd_pid_mark_unsupported(d->pid);
             }
@@ -232,7 +235,12 @@ static void step_running(uint32_t now)
 
     int idx = obd_pid_next_due(now);
     if (idx < 0) {
-        vTaskDelay(pdMS_TO_TICKS(5));
+        if (now - s_last_tx_ms >= KEEPALIVE_MS) {
+            s_pending_idx = -1;
+            send_request(REQ_POLL, 0x01, 0x00);
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
         return;
     }
     const obd_pid_desc_t *d = obd_pid_desc(idx);

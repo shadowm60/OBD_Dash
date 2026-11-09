@@ -16,24 +16,13 @@ static const uint32_t s_rate_period_ms[] = {
 };
 
 static uint8_t      s_supported[256 / 8];           /* bitmap over all PIDs */
-static bool         s_enabled[MAX_CATALOGUE];       /* user selection, default on */
+static bool         s_enabled[MAX_CATALOGUE];       /* user selection, default off */
 static uint32_t     s_last_poll[MAX_CATALOGUE];
-static bool         s_enabled_init;
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 
 static inline bool bit_get(uint8_t pid)  { return (s_supported[pid >> 3] >> (pid & 7)) & 1; }
 static inline void bit_set(uint8_t pid)  { s_supported[pid >> 3] |= (uint8_t)(1u << (pid & 7)); }
 static inline void bit_clr(uint8_t pid)  { s_supported[pid >> 3] &= (uint8_t)~(1u << (pid & 7)); }
-
-static void ensure_enabled_init(void)
-{
-    if (!s_enabled_init) {
-        for (size_t i = 0; i < MAX_CATALOGUE; i++) {
-            s_enabled[i] = true;
-        }
-        s_enabled_init = true;
-    }
-}
 
 size_t obd_pid_count(void)
 {
@@ -58,7 +47,6 @@ int obd_pid_find(uint8_t pid)
 void obd_pid_reset_supported(void)
 {
     portENTER_CRITICAL(&s_lock);
-    ensure_enabled_init();
     memset(s_supported, 0, sizeof(s_supported));
     memset(s_last_poll, 0, sizeof(s_last_poll));
     portEXIT_CRITICAL(&s_lock);
@@ -109,13 +97,30 @@ uint16_t obd_pid_supported_count(void)
     return n;
 }
 
+void obd_pid_get_supported_bitmap(uint8_t out[256 / 8])
+{
+    portENTER_CRITICAL(&s_lock);
+    memcpy(out, s_supported, sizeof(s_supported));
+    portEXIT_CRITICAL(&s_lock);
+}
+
+uint16_t obd_pid_active_count(void)
+{
+    uint16_t n = 0;
+    portENTER_CRITICAL(&s_lock);
+    for (size_t i = 0; i < obd_pid_count(); i++) {
+        n += s_enabled[i] && bit_get(g_obd_pids[i].pid);
+    }
+    portEXIT_CRITICAL(&s_lock);
+    return n;
+}
+
 bool obd_pid_is_enabled(size_t idx)
 {
     if (idx >= obd_pid_count()) {
         return false;
     }
     portENTER_CRITICAL(&s_lock);
-    ensure_enabled_init();
     bool e = s_enabled[idx];
     portEXIT_CRITICAL(&s_lock);
     return e;
@@ -127,7 +132,6 @@ void obd_pid_set_enabled(size_t idx, bool enabled)
         return;
     }
     portENTER_CRITICAL(&s_lock);
-    ensure_enabled_init();
     s_enabled[idx] = enabled;
     portEXIT_CRITICAL(&s_lock);
     if (!enabled) {
@@ -141,7 +145,6 @@ int obd_pid_next_due(uint32_t now_ms)
     int32_t best_overdue = INT32_MIN;
 
     portENTER_CRITICAL(&s_lock);
-    ensure_enabled_init();
     for (size_t i = 0; i < obd_pid_count(); i++) {
         const obd_pid_desc_t *d = &g_obd_pids[i];
         if (!s_enabled[i] || !bit_get(d->pid)) {

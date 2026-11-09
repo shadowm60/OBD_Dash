@@ -49,8 +49,13 @@ void obd_pid_mark_unsupported(uint8_t pid);
 bool obd_pid_is_supported(uint8_t pid);
 uint16_t obd_pid_supported_count(void);         /* catalogue entries supported */
 
+/* Copy of the support bitmap over all PIDs (bit = pid & 7 of byte pid >> 3). */
+void obd_pid_get_supported_bitmap(uint8_t out[256 / 8]);
+
+/* User selection, default off. Only enabled AND supported PIDs are polled. */
 bool obd_pid_is_enabled(size_t idx);
 void obd_pid_set_enabled(size_t idx, bool enabled);
+uint16_t obd_pid_active_count(void);            /* enabled and supported */
 
 /* --- polling --- */
 /* Catalogue index of the PID to request next, or -1 if nothing is due. */

@@ -17,6 +17,7 @@
 #include "hmi.h"
 #include "eez_vars.h"
 #include "comsm.h"
+#include "obd_pids.h"
 #include "vehicle_data.h"
 #include "views.h"
 
@@ -71,8 +72,8 @@ static void format_status(const comsm_status_t *s, char *buf, size_t len)
         snprintf(buf, len, "ECU %03lX - reading supported PIDs", (unsigned long)s->ecu_id);
         break;
     case COMSM_RUNNING:
-        snprintf(buf, len, "ECU %03lX - %u PIDs - %.0f/s",
-                 (unsigned long)s->ecu_id, s->supported_pids, s->request_rate);
+        snprintf(buf, len, "ECU %03lX - %u/%u PIDs - %.0f/s",
+                 (unsigned long)s->ecu_id, obd_pid_active_count(), s->supported_pids, s->request_rate);
         break;
     case COMSM_RETRY_WAIT:
         snprintf(buf, len, "No response - retrying");
@@ -130,6 +131,7 @@ static void bridge_timer_cb(lv_timer_t *t)
     refresh_signals();
     settings_view_refresh();
     diag_view_refresh();
+    pid_select_view_refresh();
 }
 
 void hmi_init(void)

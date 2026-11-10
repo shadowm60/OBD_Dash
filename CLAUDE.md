@@ -168,7 +168,6 @@ Done:
     timeout and the ISO-TP library's 100 ms N_Cr, so the dash fell back to 1 PID.
     Fixed after `4d0ff78`: N_Cr is 1000 ms (ISO 15765-2) and the deadline is extended
     on every frame of a multi-frame reply. Not yet re-tested.
-  - Earlier note, kept for reference: whether the simulator answers multi-PID requests was unknown. If the
     System screen says "ECU accepts 1 PID per request", the simulator needs to support
     `01 0C 0D 05` -> `41 0C xx xx 0D xx 05 xx` (multi-frame ISO-TP).
 - **Bus load:** the owner measured ~50 % CAN bus load. Our own traffic should be a few

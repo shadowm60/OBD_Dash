@@ -17,9 +17,11 @@
 #define ISO_TP_MAX_WFT_NUMBER       1
 
 /* Private: The default timeout to use when waiting for a response during a
- * multi-frame send or receive.
+ * multi-frame send or receive (N_Bs / N_Cr). ISO 15765-2 specifies 1000 ms;
+ * the library default of 100 ms dropped replies from slow senders (e.g. a PC
+ * simulator spacing consecutive frames ~150 ms apart).
  */
-#define ISO_TP_DEFAULT_RESPONSE_TIMEOUT 100
+#define ISO_TP_DEFAULT_RESPONSE_TIMEOUT 1000
 
 /* Private: Determines if by default, padding is added to ISO-TP message frames.
  */

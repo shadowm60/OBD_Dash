@@ -155,6 +155,16 @@ obd_req_status_t obd_client_process(uint32_t wait_ms)
         }
         isotp_on_can_message_with_id(&s_link, f.id, f.data, f.dlc);
 
+        /* A multi-frame answer is under way: the P2 timeout only covers the
+         * first frame. Wait for the next consecutive frame as long as ISO-TP
+         * does (N_Cr), measured from this frame. */
+        if (s_link.receive_status == ISOTP_RECEIVE_STATUS_INPROGRESS) {
+            uint32_t next = can_if_now_ms() + ISO_TP_DEFAULT_RESPONSE_TIMEOUT;
+            if ((int32_t)(next - s_deadline_ms) > 0) {
+                s_deadline_ms = next;
+            }
+        }
+
         uint16_t out = 0;
         static uint8_t msg[OBD_MAX_RESPONSE];
         if (isotp_receive(&s_link, msg, sizeof(msg), &out) == ISOTP_RET_OK) {

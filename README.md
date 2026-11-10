@@ -64,14 +64,73 @@ Settings, System. On a live screen, swipe left/right to cycle Drive -> Race -> T
 up/down or long press to return to the start screen. A tile shows `--` when its PID is not
 selected in Settings > Select Params, not supported, or stale (> 3 s).
 
-| Screen | Content | PIDs to select |
-|---|---|---|
-| Drive | RPM gauge + digital, speed, coolant, fuel level, battery, intake temp | 0C 0D 05 2F 42 0F |
-| Race  | RPM + AFR gauges, speed, boost, intake, AFR, coolant, oil | 0C 0D 0B (+33) 0F 24/34 05 5C |
-| Tune  | RPM, load, MAP, boost, throttle, timing, MAF, intake, fuel trims, AFR, AFR target, coolant, fuel rate | 0C 04 0B 33 11 0E 10 0F 06-09 24/34 44 05 5E |
+Every field is fed by one Mode 01 PID (or two for derived values). Select the PIDs you
+want in Settings > Select Params; only selected and supported PIDs are polled.
 
-`CHECK ENGINE (n)` appears top right on all three when the MIL is on (PID 01, n = stored DTCs).
-Boost = MAP - BARO (101.3 kPa if PID 33 is not polled).
+### Drive
+
+Everyday driving: big RPM gauge on the left, tiles on the right.
+
+| Field | Unit | PID | Notes |
+|---|---|---|---|
+| RPM gauge (needle) | rpm x1000 | 0C | scale 0..8, red zone from about 6.5 |
+| RPM (digital, under the gauge) | rpm | 0C | |
+| SPEED | km/h | 0D | large tile |
+| COOLANT | °C | 05 | |
+| FUEL | % | 2F | fuel tank level |
+| BATTERY | V | 42 | control module voltage |
+| INTAKE | °C | 0F | intake air temperature |
+| CHECK ENGINE | – | 01 | see MIL below |
+
+### Race
+
+The original two-gauge screen (`liveData` in EEZ) with three tiles on each side.
+
+| Field | Unit | PID | Notes |
+|---|---|---|---|
+| RPM gauge (needle) | rpm x100 | 0C | scale 0..90 |
+| AFR gauge (needle) | AFR | 24 or 34 | lambda x 14.7, scale 10..20 |
+| SPEED | km/h | 0D | left column |
+| BOOST | bar | 0B (+ 33) | left column, MAP - BARO, see below |
+| INTAKE | °C | 0F | left column |
+| AFR | AFR | 24 or 34 | right column, lambda x 14.7 |
+| COOLANT | °C | 05 | right column |
+| OIL | °C | 5C | right column, engine oil temperature |
+| CHECK ENGINE | – | 01 | see MIL below |
+
+### Tune
+
+No gauges, a 4 x 4 grid of text tiles. All of it is also in `par_NNN.csv` when parameter
+logging is on.
+
+| Row | Field | Unit | PID |
+|---|---|---|---|
+| 1 | RPM | rpm | 0C |
+| 1 | LOAD | % | 04 (calculated engine load) |
+| 1 | MAP | kPa | 0B |
+| 1 | BOOST | bar | 0B (+ 33) |
+| 2 | THROTTLE | % | 11 |
+| 2 | TIMING | ° before TDC | 0E |
+| 2 | MAF | g/s | 10 |
+| 2 | INTAKE | °C | 0F |
+| 3 | STFT B1 / LTFT B1 | % | 06 / 07 |
+| 3 | STFT B2 / LTFT B2 | % | 08 / 09 |
+| 4 | AFR | AFR | 24 or 34 (lambda x 14.7) |
+| 4 | AFR TARGET | AFR | 44 (commanded lambda x 14.7) |
+| 4 | COOLANT | °C | 05 |
+| 4 | FUEL | L/h | 5E (engine fuel rate) |
+| – | CHECK ENGINE | – | 01 |
+
+### Shared rules
+
+- **MIL:** `CHECK ENGINE` appears top right on all three screens when PID 01 reports the
+  MIL on; `(n)` is the stored DTC count from the same PID.
+- **Boost** = (MAP - BARO) / 100 bar, from PID 0B minus PID 33. If 33 is not polled,
+  101.3 kPa is used.
+- **AFR** assumes gasoline (stoichiometric 14.7). PID 24 (O2 sensor 1, wide range,
+  voltage) and PID 34 (same, current) both feed it; select whichever your ECU supports.
+- The formatting (decimals, derived values) is in `components/hmi/bridge/live_values.c`;
+  the gauge scaling is in `components/hmi/bridge/live_view.c`.
 
 The layout lives in `components/hmi/OBD_Dash.eez-project` (EEZ Studio 0.29). On screens
 with a meter, the scale, arcs and labels lying fully inside a meter are drawn once into a

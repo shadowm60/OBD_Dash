@@ -248,5 +248,15 @@ menu "BSW Configuration"
         config OBD_RECONNECT_DELAY_MS
             int "Delay between automatic reconnect attempts (ms)"
             default 2000
+
+        config OBD_KEEPALIVE_MS
+            int "Keepalive period when no PID is polled (ms, 0 = off)"
+            range 0 60000
+            default 0
+            help
+                With no PID selected the bus is silent after discovery, so a lost
+                ECU is only noticed by the next request (e.g. a DTC read, which
+                then reports "no response"). A non-zero value sends "01 00" this
+                often while idle so the connection state stays accurate.
     endmenu
 endmenu

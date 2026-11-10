@@ -16,7 +16,6 @@ static const char *TAG = "comsm";
 #define TASK_STACK          4096
 #define TASK_PRIO           6
 #define CONNECT_ATTEMPTS    3
-#define KEEPALIVE_MS        1000    /* "01 00" when no selected PID is due, to detect a lost ECU */
 
 typedef enum { CMD_CONNECT, CMD_DISCONNECT, CMD_TOGGLE, CMD_READ_DTC, CMD_CLEAR_DTC, CMD_FREEZE_FRAME } cmd_t;
 
@@ -235,12 +234,15 @@ static void step_running(uint32_t now)
 
     int idx = obd_pid_next_due(now);
     if (idx < 0) {
-        if (now - s_last_tx_ms >= KEEPALIVE_MS) {
+#if CONFIG_OBD_KEEPALIVE_MS > 0
+        /* Optional: detect a lost ECU while nothing is polled. */
+        if (now - s_last_tx_ms >= CONFIG_OBD_KEEPALIVE_MS) {
             s_pending_idx = -1;
             send_request(REQ_POLL, 0x01, 0x00);
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(5));
+            return;
         }
+#endif
+        vTaskDelay(pdMS_TO_TICKS(5));
         return;
     }
     const obd_pid_desc_t *d = obd_pid_desc(idx);

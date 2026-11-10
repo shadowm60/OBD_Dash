@@ -139,10 +139,19 @@ void obd_pid_set_enabled(size_t idx, bool enabled)
     }
 }
 
+/*
+ * Pick the next PID to request.
+ *
+ * Fast PIDs (period 0) rotate round-robin by last poll time. Medium / slow PIDs
+ * that are due go first, so they keep their period however many fast PIDs are
+ * selected - but at most every other request, so a long list of due medium
+ * PIDs can't starve the fast ones (rpm, speed).
+ */
 int obd_pid_next_due(uint32_t now_ms)
 {
-    int best = -1;
-    int32_t best_overdue = INT32_MIN;
+    static bool s_last_was_timed;
+    int best_fast = -1, best_timed = -1;
+    int32_t fast_overdue = INT32_MIN, timed_overdue = INT32_MIN;
 
     portENTER_CRITICAL(&s_lock);
     for (size_t i = 0; i < obd_pid_count(); i++) {
@@ -150,16 +159,25 @@ int obd_pid_next_due(uint32_t now_ms)
         if (!s_enabled[i] || !bit_get(d->pid)) {
             continue;
         }
-        /* overdue = time since it should have been polled; most overdue wins.
-         * Fast PIDs (period 0) therefore rotate round-robin by last poll time. */
         int32_t overdue = (int32_t)(now_ms - s_last_poll[i]) - (int32_t)s_rate_period_ms[d->rate];
-        if (overdue >= 0 && overdue > best_overdue) {
-            best_overdue = overdue;
-            best = (int)i;
+        if (overdue < 0) {
+            continue;
+        }
+        if (d->rate == OBD_RATE_FAST) {
+            if (overdue > fast_overdue) {
+                fast_overdue = overdue;
+                best_fast = (int)i;
+            }
+        } else if (overdue > timed_overdue) {
+            timed_overdue = overdue;
+            best_timed = (int)i;
         }
     }
     portEXIT_CRITICAL(&s_lock);
-    return best;
+
+    int pick = (best_timed >= 0 && (!s_last_was_timed || best_fast < 0)) ? best_timed : best_fast;
+    s_last_was_timed = (pick >= 0 && pick == best_timed);
+    return pick;
 }
 
 void obd_pid_mark_polled(size_t idx, uint32_t now_ms)

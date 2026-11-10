@@ -62,7 +62,7 @@ ISO-TP frames padded to 8 bytes, flow control sent to the physical request ID.
 Start screen buttons: **Driving View**, **Race View**, **Tuning View**, **Read DTCs**,
 Settings, System. On a live screen, swipe left/right to cycle Drive -> Race -> Tune; swipe
 up/down or long press to return to the start screen. A tile shows `--` when its PID is not
-selected in Settings > Select Params, not supported, or stale (> 3 s).
+selected in Settings > Select Params, not supported, or no reply for 10 s.
 
 Every field is fed by one Mode 01 PID (or two for derived values). Select the PIDs you
 want in Settings > Select Params; only selected and supported PIDs are polled.

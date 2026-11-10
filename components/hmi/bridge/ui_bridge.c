@@ -27,7 +27,7 @@ static const char *TAG = "ui_bridge";
 #define REFRESH_PERIOD_MS   100
 #define SIGNAL_PERIOD_MS    20      /* needle smoothing runs at this rate */
 #define SMOOTH_ALPHA        0.3f    /* per step: ~90 % of a change within ~130 ms */
-#define STALE_AFTER_MS      3000
+#define STALE_AFTER_MS      10000   /* safety net: disconnect / deselect invalidate at once */
 #define AFR_STOICH_GASOLINE 14.7f
 
 typedef enum { BIND_INT, BIND_FLOAT } bind_type_t;

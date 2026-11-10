@@ -15,7 +15,7 @@
 #include "vehicle_data.h"
 #include "views.h"
 
-#define STALE_AFTER_MS      3000
+#define STALE_AFTER_MS      10000   /* safety net: disconnect / deselect invalidate at once */
 #define AFR_STOICH          14.7f
 #define BARO_DEFAULT_KPA    101.3f  /* boost reference when PID 33 is not polled */
 

@@ -41,6 +41,7 @@ void settings_view_init(void)
     set_checked(objects.sys_gauge_anim, cfg.gauge_anim);
     lv_slider_set_value(objects.sys_read_speed, cfg.pids_per_request, LV_ANIM_OFF);
     comsm_set_pids_per_request(cfg.pids_per_request);
+    brightness_init(cfg.brightness);
     eez_var_set_int(FLOW_GLOBAL_VARIABLE_RUSEFI_BASE_ADDR, cfg.rusefi_base_id);
     /* Dropdown selection is applied in refresh, once EEZ has filled the options. */
 }
@@ -98,6 +99,9 @@ void settings_view_refresh(void)
     datalog_enable_params(log_params);
     settings_set_gauge_anim(lv_obj_has_state(objects.sys_gauge_anim, LV_STATE_CHECKED));
     refresh_read_speed();
+    uint8_t bright = (uint8_t)lv_slider_get_value(objects.sys_man_brightness);
+    settings_set_brightness(bright);
+    brightness_set(bright);
 
     /* Tell the user once per failure (e.g. no SD card); the logger retries itself. */
     datalog_status_t ls;

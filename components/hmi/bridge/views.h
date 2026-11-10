@@ -17,6 +17,10 @@ void pid_select_view_refresh(void);
 void live_values_refresh(void);
 
 /* Modal message box with an OK button (LVGL task only). */
+/* System > brightness (brightness.c) */
+void brightness_init(uint8_t percent);
+void brightness_set(uint8_t percent);
+
 void view_show_message(const char *title, const char *text);
 
 /* Settings > Select Params list, (re)built on screen load. */

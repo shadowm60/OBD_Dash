@@ -158,6 +158,9 @@ Done:
 - `385fdc5`: slow PIDs keep their 2 s period. This should stop the `--` flicker on the
   coolant tile.
 - `596b450`: needle animation and its checkbox.
+- Brightness (`brightness.c`): software dimming layer by default; optional backlight
+  PWM via `CONFIG_BACKLIGHT_PWM_GPIO` after a hardware mod (dimming pad by R11/C11,
+  inverted duty). The PWM path is derived from the schematic and was never run.
 - `4d0ff78`: multi-PID requests (Read speed slider), with Gauge animation and Read speed
   on the System screen.
   - Unknown whether the owner's Python simulator answers multi-PID requests. If the
@@ -171,8 +174,8 @@ Done:
 Open ideas (only on request):
 - Freeze Frame button on the Read DTCs screen (the screen exists but is unreachable).
 - Delete the unused clearDTC page.
-- Wire up System > brightness: `sys_auto_brightness` / `sys_man_brightness` exist in the
-  UI but have no code yet.
+- Auto brightness: needs a light sensor (e.g. LDR on an ADC pin); the checkbox is
+  disabled for now.
 - Remember the last live view.
 - DTC text descriptions.
 - PSRAM at 120 MHz for more FPS.

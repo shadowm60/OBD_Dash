@@ -2626,7 +2626,8 @@ void create_screen_system() {
             objects.sys_man_brightness = obj;
             lv_obj_set_pos(obj, 325, 41);
             lv_obj_set_size(obj, 443, 10);
-            lv_slider_set_value(obj, 25, LV_ANIM_OFF);
+            lv_slider_set_range(obj, 10, 100);
+            lv_slider_set_value(obj, 100, LV_ANIM_OFF);
         }
         {
             lv_obj_t *obj = lv_btn_create(parent_obj);

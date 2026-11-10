@@ -141,6 +141,15 @@ logging is on.
   moving the slider tries again. The status line shows the result as `values/s`.
   Due slow/medium PIDs (temperatures, trims) get at most half of each request; the
   rest goes to the fast ones (rpm, speed, load, ...).
+- **Brightness** (System > slider, 10..100 %). The board's backlight driver (AP3032) is
+  only switched on/off by the CH422G (EXIO2), so by default dimming is done in software:
+  a black semi-transparent layer over the UI (the backlight keeps full power).
+  Real dimming needs a wire: connect a GPIO whose function you don't use to the dimming
+  pad next to R11 (10K) / C11 (1uF) in the backlight section of the schematic, and set
+  `CONFIG_BACKLIGHT_PWM_GPIO` (menuconfig > Display brightness). The firmware then drives
+  an inverted 20 kHz PWM there. Every ESP32 pin is already assigned on this board
+  (GPIO6 = RTC interrupt, GPIO43/44 = RS485, ...). Auto brightness is disabled: the board
+  has no light sensor.
 - The formatting (decimals, derived values) is in `components/hmi/bridge/live_values.c`;
   the gauge scaling is in `components/hmi/bridge/live_view.c`.
 

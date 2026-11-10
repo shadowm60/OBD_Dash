@@ -33,6 +33,7 @@ static void set_defaults(app_settings_t *c)
     c->rusefi_base_id = 512;
     c->gauge_anim = true;
     c->pids_per_request = 6;        /* falls back to 1 if the ECU can't */
+    c->brightness = 100;
     /* Default selection: what the current dashboard shows. */
     static const uint8_t default_pids[] = { 0x05 /* coolant */, 0x0C /* rpm */,
                                             0x0D /* speed */, 0x24 /* lambda */ };
@@ -111,6 +112,9 @@ static esp_err_t load(void)
         return ESP_ERR_INVALID_VERSION;
     }
     memcpy(&s_cfg, &blob.data, blob.size);      /* s_cfg holds defaults for the rest */
+    if (s_cfg.brightness < 10 || s_cfg.brightness > 100) {
+        s_cfg.brightness = 100;                 /* stored before the field existed */
+    }
     return ESP_OK;
 }
 
@@ -167,6 +171,7 @@ void settings_set_log_raw(bool on)              { SETTINGS_SETTER(log_raw, on); 
 void settings_set_log_params(bool on)           { SETTINGS_SETTER(log_params, on); }
 void settings_set_gauge_anim(bool on)           { SETTINGS_SETTER(gauge_anim, on); }
 void settings_set_pids_per_request(uint8_t n)   { SETTINGS_SETTER(pids_per_request, n); }
+void settings_set_brightness(uint8_t percent)   { SETTINGS_SETTER(brightness, percent); }
 
 void settings_set_pid_selected(uint8_t pid, bool selected)
 {

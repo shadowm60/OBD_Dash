@@ -233,6 +233,27 @@ menu "BSW Configuration"
                 lost when power is cut without stopping the log.
     endmenu
 
+    menu "Display brightness"
+        config BACKLIGHT_PWM_GPIO
+            int "Backlight dimming PWM GPIO (-1 = software dimming)"
+            range -1 48
+            default -1
+            help
+                The board's backlight driver (AP3032) is only switched on/off by
+                the CH422G (EXIO2), so by default brightness is done in software:
+                a black, semi-transparent layer over the UI. The panel's power
+                use stays the same.
+
+                For real dimming, wire a free GPIO to the two dimming pads next
+                to R11 / C11 (backlight section of the schematic; GND to the
+                other pad) and set it here. The pin drives the FB node of the
+                AP3032 through R11 (10K) + C11 (1uF): a higher average voltage
+                means a dimmer backlight, so the PWM is inverted in software.
+                Note: every ESP32 pin is used on this board (e.g. GPIO6 = RTC
+                interrupt, GPIO43/44 = RS485), so pick one whose function you
+                don't use.
+    endmenu
+
     menu "OBD"
         config OBD_RESPONSE_TIMEOUT_MS
             int "ECU response timeout (ms)"

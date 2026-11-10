@@ -13,7 +13,8 @@ idf_component_register(SRCS "./src/ui/images.c"
                             "./bridge/pid_select_view.c"
                             "./bridge/live_view.c"
                             "./bridge/live_values.c"
+                            "./bridge/brightness.c"
                     INCLUDE_DIRS "./bridge"
                     PRIV_INCLUDE_DIRS "./src/ui"
                     REQUIRES lvgl
-                    PRIV_REQUIRES comsm obd vehicle_data settings datalog esp_timer)
+                    PRIV_REQUIRES comsm obd vehicle_data settings datalog esp_timer esp_driver_ledc)

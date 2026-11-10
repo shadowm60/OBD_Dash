@@ -17,6 +17,8 @@ hmi             EEZ Studio UI (src/ui, generated) + bridge/ (hand written)
                   actions.c    EEZ actions -> comsm / obd calls
                   eez_vars.cpp typed EEZ variable setters (strings are copied)
                   settings_view.c / diag_view.c / pid_select_view.c  per-screen controllers
+                  live_view.c   live screens: gauge scaling, cached gauge backgrounds, swipe navigation
+                  live_values.c signals -> v_* text variables of the live screens ("--" when stale)
 comsm           connection state machine task, owns the OBD client
                 comsm_diag: DTC read/clear + freeze frame jobs (pause polling while running)
 obd             obd_client (one request in flight, timeout, NRC, addressing)
@@ -34,7 +36,9 @@ board           LCD, touch, IO expander, SD card, LVGL port (no app knowledge)
 | Want to...                         | Touch                                                        |
 |------------------------------------|--------------------------------------------------------------|
 | add a Service 01 PID               | `obd/obd_pid_table.c` (+ `vehicle_data/vehicle_signals.def`) |
-| show a signal in an EEZ variable   | regenerate EEZ code, add a row to `s_bindings[]` in `hmi/bridge/ui_bridge.c` |
+| show a value on a live screen      | EEZ Studio: string variable + tile (copy one), `tools/eez-build.sh`, row in `s_values[]` (`hmi/bridge/live_values.c`) |
+| drive a gauge needle               | EEZ variable on the meter, row in `s_bindings[]` (`hmi/bridge/ui_bridge.c`), scale fix in `live_view.c` |
+| regenerate the UI code             | `tools/eez-build.sh` (headless EEZ Studio build, same as Build in the GUI) |
 | handle a new EEZ action            | `hmi/bridge/actions.c`                                       |
 | change bitrate / timeouts          | `idf.py menuconfig` -> BSW Configuration -> CAN / OBD        |
 | persist a new setting              | field in `settings.h` + setter, bump `SETTINGS_VER`, sync in `settings_view.c` |
@@ -53,6 +57,25 @@ board           LCD, touch, IO expander, SD card, LVGL port (no app knowledge)
 CAN: 11-bit IDs, `CONFIG_CAN_BITRATE` (default 500 kbit/s), hardware filter `0x7E8/0x7F8`,
 ISO-TP frames padded to 8 bytes, flow control sent to the physical request ID.
 
+## Live data screens
+
+Start screen -> Live Data opens **Drive**. Swipe left/right: Drive -> Race -> Tune; swipe
+up/down or long press: back to the start screen. A tile shows `--` when its PID is not
+selected in Settings > Select Params, not supported, or stale (> 3 s).
+
+| Screen | Content | PIDs to select |
+|---|---|---|
+| Drive | RPM gauge + digital, speed, coolant, fuel level, battery, intake temp | 0C 0D 05 2F 42 0F |
+| Race  | RPM + AFR gauges, speed, boost, intake, AFR, coolant, oil | 0C 0D 0B (+33) 0F 24/34 05 5C |
+| Tune  | RPM, load, MAP, boost, throttle, timing, MAF, intake, fuel trims, AFR, AFR target, coolant, fuel rate | 0C 04 0B 33 11 0E 10 0F 06-09 24/34 44 05 5E |
+
+`CHECK ENGINE (n)` appears top right on all three when the MIL is on (PID 01, n = stored DTCs).
+Boost = MAP - BARO (101.3 kPa if PID 33 is not polled).
+
+The layout lives in `components/hmi/OBD_Dash.eez-project` (EEZ Studio 0.29). On screens
+with a meter, the scale, arcs and labels lying fully inside a meter are drawn once into a
+cached image; values placed on a meter must sit inside a panel, like the tiles do.
+
 ## Logging
 
 Switched with the two checkboxes on the Settings screen (state is saved). Files go to the
@@ -70,5 +93,5 @@ pulling the card. Status line shows `REC` while a log is open.
 
 1. Communication layer (done: can_if, obd, comsm, vehicle_data, ui_bridge)
 2. Settings in NVS, DTC read/clear (Service 03/07/0A/04), freeze frame (Service 02) (done)
-3. Live data screens (EEZ Studio)
+3. Live data screens: Drive / Race / Tune (done)
 4. SD card logging (done)

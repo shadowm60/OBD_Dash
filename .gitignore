@@ -2,3 +2,5 @@
 build/*
 #managed components by idf_components.yml - do not store
 managed_components/*
+#EEZ Studio build marker
+components/hmi/src/ui/.eez-project-build

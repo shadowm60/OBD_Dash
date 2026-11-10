@@ -14,6 +14,7 @@ void diag_view_init(void);
 void settings_view_refresh(void);
 void diag_view_refresh(void);
 void pid_select_view_refresh(void);
+void live_values_refresh(void);
 
 /* Modal message box with an OK button (LVGL task only). */
 void view_show_message(const char *title, const char *text);

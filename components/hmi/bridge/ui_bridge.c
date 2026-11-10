@@ -158,6 +158,7 @@ static void bridge_timer_cb(lv_timer_t *t)
     settings_view_refresh();
     diag_view_refresh();
     pid_select_view_refresh();
+    live_values_refresh();
 }
 
 static void signal_timer_cb(lv_timer_t *t)

@@ -29,6 +29,9 @@ typedef struct {
     uint8_t  pid_selected[256 / 8]; /* bitmap by PID number, 1 = poll this PID */
     bool     ecu_support_valid;     /* ecu_supported holds the last ECU's answer */
     uint8_t  ecu_supported[256 / 8];/* Service 01 support bitmap of the last ECU */
+    /* Fields added later go at the end: a shorter stored blob of the same
+     * version is loaded and the new fields keep their defaults. */
+    bool     gauge_anim;            /* animate gauge needles between samples */
 } app_settings_t;
 
 /* Initialises NVS (erasing it if the partition is corrupt/outdated) and loads
@@ -41,6 +44,7 @@ void settings_set_conn_method(uint8_t method);
 void settings_set_rusefi_base_id(uint16_t id);
 void settings_set_log_raw(bool on);
 void settings_set_log_params(bool on);
+void settings_set_gauge_anim(bool on);
 /* PID selection (Settings > Select Params). Opt-in: only selected PIDs are polled. */
 void settings_set_pid_selected(uint8_t pid, bool selected);
 bool settings_pid_selected(uint8_t pid);

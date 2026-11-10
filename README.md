@@ -129,6 +129,10 @@ logging is on.
   101.3 kPa is used.
 - **AFR** assumes gasoline (stoichiometric 14.7). PID 24 (O2 sensor 1, wide range,
   voltage) and PID 34 (same, current) both feed it; select whichever your ECU supports.
+- **Needle animation** (Settings > Gauge animation, on by default): each new sample moves
+  the needle linearly to the new value over about the time between samples, so it keeps
+  moving instead of jumping. The needle lags by up to one sample interval; untick it to
+  show each sample as it arrives. Text tiles are never animated.
 - The formatting (decimals, derived values) is in `components/hmi/bridge/live_values.c`;
   the gauge scaling is in `components/hmi/bridge/live_view.c`.
 

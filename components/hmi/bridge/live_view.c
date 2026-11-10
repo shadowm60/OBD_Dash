@@ -9,7 +9,7 @@
  *
  *   drive_rpm_gauge  needle = rpm_value (rpm)      EEZ scale 0..8   x1000  labels 0..8
  *   rpm_gauge        needle = rpm_value (rpm)      EEZ scale 0..90  x100   labels 0..90
- *   afr_gauge        needle = afr_value (AFR x10)  EEZ scale 10..20 x10    labels 10..20
+ *   afr_gauge        needle = afr_value (AFR x100) EEZ scale 10..20 x100   labels 10..20
  *
  * Performance: drawing a meter (anti-aliased ticks, tick labels, arcs) is the
  * expensive part. On screens with a meter, the static content is rendered once

@@ -159,6 +159,8 @@ typedef struct _objects_t {
     lv_obj_t *log_params_enabled;
     lv_obj_t *select_params_label;
     lv_obj_t *obj100;
+    lv_obj_t *gauge_anim_label;
+    lv_obj_t *gauge_anim_enabled;
     lv_obj_t *sys_auto_brightness;
     lv_obj_t *sys_man_brightness;
     lv_obj_t *obj101;

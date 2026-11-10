@@ -36,6 +36,7 @@ void settings_view_init(void)
 
     set_checked(objects.log_raw_enabled, cfg.log_raw);
     set_checked(objects.log_params_enabled, cfg.log_params);
+    set_checked(objects.gauge_anim_enabled, cfg.gauge_anim);
     eez_var_set_int(FLOW_GLOBAL_VARIABLE_RUSEFI_BASE_ADDR, cfg.rusefi_base_id);
     /* Dropdown selection is applied in refresh, once EEZ has filled the options. */
 }
@@ -69,6 +70,7 @@ void settings_view_refresh(void)
     settings_set_log_params(log_params);
     datalog_enable_raw(log_raw);
     datalog_enable_params(log_params);
+    settings_set_gauge_anim(lv_obj_has_state(objects.gauge_anim_enabled, LV_STATE_CHECKED));
 
     /* Tell the user once per failure (e.g. no SD card); the logger retries itself. */
     datalog_status_t ls;

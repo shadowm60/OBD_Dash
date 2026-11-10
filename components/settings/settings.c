@@ -1,5 +1,6 @@
 #include "settings.h"
 
+#include <stddef.h>
 #include <string.h>
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -30,6 +31,7 @@ static void set_defaults(app_settings_t *c)
     memset(c, 0, sizeof(*c));
     c->conn_method = SETTINGS_CONN_OBD;
     c->rusefi_base_id = 512;
+    c->gauge_anim = true;
     /* Default selection: what the current dashboard shows. */
     static const uint8_t default_pids[] = { 0x05 /* coolant */, 0x0C /* rpm */,
                                             0x0D /* speed */, 0x24 /* lambda */ };
@@ -100,11 +102,14 @@ static esp_err_t load(void)
     if (err != ESP_OK) {
         return err;
     }
-    if (len != sizeof(blob) || blob.version != SETTINGS_VER || blob.size != sizeof(app_settings_t)) {
+    /* Accept blobs written before fields were appended (same version, shorter). */
+    size_t hdr = offsetof(stored_t, data);
+    if (len < hdr || blob.version != SETTINGS_VER || blob.size > sizeof(app_settings_t) ||
+        len != hdr + blob.size) {
         ESP_LOGW(TAG, "stored settings incompatible (ver %u), using defaults", blob.version);
         return ESP_ERR_INVALID_VERSION;
     }
-    s_cfg = blob.data;
+    memcpy(&s_cfg, &blob.data, blob.size);      /* s_cfg holds defaults for the rest */
     return ESP_OK;
 }
 
@@ -159,6 +164,7 @@ void settings_set_conn_method(uint8_t method)   { SETTINGS_SETTER(conn_method, m
 void settings_set_rusefi_base_id(uint16_t id)   { SETTINGS_SETTER(rusefi_base_id, id); }
 void settings_set_log_raw(bool on)              { SETTINGS_SETTER(log_raw, on); }
 void settings_set_log_params(bool on)           { SETTINGS_SETTER(log_params, on); }
+void settings_set_gauge_anim(bool on)           { SETTINGS_SETTER(gauge_anim, on); }
 
 void settings_set_pid_selected(uint8_t pid, bool selected)
 {

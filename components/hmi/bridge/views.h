@@ -3,7 +3,7 @@
 #define HMI_VIEWS_H
 
 /* afr_value is published as AFR x this, see live_view.c */
-#define AFR_GAUGE_SCALE 10
+#define AFR_GAUGE_SCALE 100
 
 /* Called once after ui_init() (LVGL lock held). */
 void settings_view_init(void);

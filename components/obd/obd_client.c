@@ -112,9 +112,15 @@ static void evaluate_response(const uint8_t *r, uint16_t len)
         ESP_LOGD(TAG, "ignoring unrelated response 0x%02X", len ? r[0] : 0);
         return;
     }
-    /* Services with a PID / info type echo it back. */
+    /* Services with a PID / info type echo it back. A multi-PID Service 01
+     * answer may start with any of the requested PIDs. */
     if ((sid == 0x01 || sid == 0x02 || sid == 0x09) && s_req_len >= 2) {
-        if (len < 2 || r[1] != s_req[1]) {
+        bool match = false;
+        uint16_t last = (sid == 0x01) ? s_req_len : 2;
+        for (uint16_t i = 1; len >= 2 && i < last; i++) {
+            match |= (r[1] == s_req[i]);
+        }
+        if (!match) {
             ESP_LOGD(TAG, "ignoring response for PID 0x%02X", len >= 2 ? r[1] : 0);
             return;
         }

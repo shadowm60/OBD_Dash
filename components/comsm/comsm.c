@@ -28,7 +28,11 @@ static portMUX_TYPE   s_lock = portMUX_INITIALIZER_UNLOCKED;
 /* task-private state */
 static comsm_state_t  s_state;
 static req_kind_t     s_pending;
-static int            s_pending_idx;        /* catalogue index for REQ_POLL */
+static int            s_pending_idx[OBD_MAX_PIDS_PER_REQUEST]; /* catalogue indexes for REQ_POLL */
+static size_t         s_pending_n;          /* 0 = keepalive */
+static volatile uint8_t s_batch_cfg = 1;    /* PIDs per request wanted (UI) */
+static uint8_t        s_batch_limit;        /* what this ECU accepts, <= s_batch_cfg */
+static uint8_t        s_batch_applied;      /* s_batch_cfg value s_batch_limit was set from */
 static uint8_t        s_discovery_pid;
 static uint8_t        s_connect_attempts;
 static uint8_t        s_consecutive_timeouts;
@@ -77,6 +81,7 @@ static void st_supported(comsm_status_t *s, uint32_t arg)   { s->supported_pids 
 static void st_response(comsm_status_t *s, uint32_t arg)    { s->responses++; }
 static void st_timeout(comsm_status_t *s, uint32_t arg)     { s->timeouts++; }
 static void st_rate(comsm_status_t *s, uint32_t arg)        { s->request_rate = (float)arg / 10.0f; }
+static void st_batch(comsm_status_t *s, uint32_t arg)       { s->pids_per_request = (uint8_t)arg; }
 
 /* ---------------------------------------------------------------- transitions */
 
@@ -132,6 +137,7 @@ static void start_running(void)
     status_update(st_supported, n);
     ESP_LOGI(TAG, "discovery complete: %u known PIDs supported", n);
     s_consecutive_timeouts = 0;
+    s_batch_applied = 0;                    /* (re)apply the setting in step_running */
     s_rate_window_start = can_if_now_ms();
     s_rate_window_count = 0;
     set_state(COMSM_RUNNING);
@@ -157,6 +163,17 @@ static void handle_support_response(const uint8_t *r, uint16_t len)
 }
 
 /* ---------------------------------------------------------------- per-state steps */
+
+/* The ECU doesn't handle multi-PID requests: one PID per request until the
+ * next connect or setting change. */
+static void multi_pid_rejected(const char *why)
+{
+    if (s_batch_limit > 1) {
+        ESP_LOGW(TAG, "multi-PID request %s, using one PID per request", why);
+        s_batch_limit = 1;
+        status_update(st_batch, 1);
+    }
+}
 
 static void on_request_finished(obd_req_status_t st)
 {
@@ -189,27 +206,36 @@ static void on_request_finished(obd_req_status_t st)
         }
         break;
 
-    case REQ_POLL:
+    case REQ_POLL: {
+        size_t asked = s_pending_n;
         if (st == OBD_REQ_DONE) {
             s_consecutive_timeouts = 0;
-            s_rate_window_count++;
+            size_t got = obd_pid_handle_response(r, len);
+            s_rate_window_count += got;
             status_update(st_response, 0);
-            obd_pid_handle_response(r, len);
+            if (asked > 1 && got < asked) {
+                multi_pid_rejected("answered only part of it");
+            }
         } else if (st == OBD_REQ_NEGATIVE) {
             s_consecutive_timeouts = 0;
             uint8_t nrc = obd_client_nrc();
-            const obd_pid_desc_t *d = (s_pending_idx >= 0) ? obd_pid_desc((size_t)s_pending_idx) : NULL;
-            if (d && (nrc == 0x12 || nrc == 0x31)) {      /* sub-function / out of range */
-                obd_pid_mark_unsupported(d->pid);
+            if (asked > 1) {
+                multi_pid_rejected("negative response");
+            } else if (asked == 1 && (nrc == 0x12 || nrc == 0x31)) {   /* sub-function / out of range */
+                obd_pid_mark_unsupported(obd_pid_desc((size_t)s_pending_idx[0])->pid);
             }
         } else {
             status_update(st_timeout, 0);
+            if (asked > 1) {
+                multi_pid_rejected("no response");
+            }
             if (++s_consecutive_timeouts >= CONFIG_OBD_MAX_CONSECUTIVE_TIMEOUTS) {
                 ESP_LOGW(TAG, "connection lost (%d timeouts in a row)", s_consecutive_timeouts);
                 go_retry_wait();
             }
         }
         break;
+    }
 
     case REQ_DIAG:
         diag_on_result(st, r, len, obd_client_nrc());
@@ -232,12 +258,18 @@ static void step_running(uint32_t now)
         }
     }
 
-    int idx = obd_pid_next_due(now);
-    if (idx < 0) {
+    /* Setting changed (or new connection): try it, falling back again if rejected. */
+    if (s_batch_applied != s_batch_cfg) {
+        s_batch_applied = s_batch_cfg;
+        s_batch_limit = s_batch_applied;
+        status_update(st_batch, s_batch_limit);
+    }
+    size_t n = obd_pid_next_batch(now, s_batch_limit, s_pending_idx);
+    if (n == 0) {
 #if CONFIG_OBD_KEEPALIVE_MS > 0
         /* Optional: detect a lost ECU while nothing is polled. */
         if (now - s_last_tx_ms >= CONFIG_OBD_KEEPALIVE_MS) {
-            s_pending_idx = -1;
+            s_pending_n = 0;
             send_request(REQ_POLL, 0x01, 0x00);
             return;
         }
@@ -245,10 +277,13 @@ static void step_running(uint32_t now)
         vTaskDelay(pdMS_TO_TICKS(5));
         return;
     }
-    const obd_pid_desc_t *d = obd_pid_desc(idx);
-    obd_pid_mark_polled(idx, now);
-    s_pending_idx = idx;
-    send_request(REQ_POLL, 0x01, d->pid);
+    uint8_t req[1 + OBD_MAX_PIDS_PER_REQUEST] = { 0x01 };
+    for (size_t i = 0; i < n; i++) {
+        obd_pid_mark_polled((size_t)s_pending_idx[i], now);
+        req[1 + i] = obd_pid_desc((size_t)s_pending_idx[i])->pid;
+    }
+    s_pending_n = n;
+    send_raw(REQ_POLL, req, (uint16_t)(1 + n));
 }
 
 static void update_rate(uint32_t now)
@@ -358,6 +393,17 @@ void comsm_toggle(void)     { post(CMD_TOGGLE); }
 void comsm_read_dtcs(void)  { post(CMD_READ_DTC); }
 void comsm_clear_dtcs(void) { post(CMD_CLEAR_DTC); }
 void comsm_read_freeze_frame(void) { post(CMD_FREEZE_FRAME); }
+
+void comsm_set_pids_per_request(uint8_t n)
+{
+    if (n < 1) {
+        n = 1;
+    } else if (n > OBD_MAX_PIDS_PER_REQUEST) {
+        n = OBD_MAX_PIDS_PER_REQUEST;
+    }
+    /* Applied before the next request; also retries after an ECU rejected it. */
+    s_batch_cfg = n;
+}
 
 void comsm_get_status(comsm_status_t *out)
 {

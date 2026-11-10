@@ -1,11 +1,12 @@
 /*
- * settings_view - keeps the Settings screen widgets and the settings component
- * in sync. Saved values are pushed into the widgets/EEZ variables at start;
+ * settings_view - keeps the Settings and System screen widgets and the
+ * settings component in sync. Saved values are pushed into the widgets/EEZ variables at start;
  * afterwards widget changes are polled and stored (settings saves lazily).
  *
  * Polling (instead of EEZ actions) is deliberate: the checkbox actions fire on
  * PRESSED, before the checkbox has toggled its state.
  */
+#include <stdio.h>
 #include <string.h>
 #include "lvgl.h"
 #include "screens.h"
@@ -13,6 +14,7 @@
 #include "eez_vars.h"
 #include "settings.h"
 #include "datalog.h"
+#include "comsm.h"
 #include "views.h"
 
 extern objects_t objects;
@@ -36,7 +38,9 @@ void settings_view_init(void)
 
     set_checked(objects.log_raw_enabled, cfg.log_raw);
     set_checked(objects.log_params_enabled, cfg.log_params);
-    set_checked(objects.gauge_anim_enabled, cfg.gauge_anim);
+    set_checked(objects.sys_gauge_anim, cfg.gauge_anim);
+    lv_slider_set_value(objects.sys_read_speed, cfg.pids_per_request, LV_ANIM_OFF);
+    comsm_set_pids_per_request(cfg.pids_per_request);
     eez_var_set_int(FLOW_GLOBAL_VARIABLE_RUSEFI_BASE_ADDR, cfg.rusefi_base_id);
     /* Dropdown selection is applied in refresh, once EEZ has filled the options. */
 }
@@ -58,6 +62,28 @@ static void sync_conn_method(const app_settings_t *cfg)
     settings_set_conn_method((uint8_t)lv_dropdown_get_selected(dd));
 }
 
+/* System > Read speed: PIDs per Service 01 request. */
+static void refresh_read_speed(void)
+{
+    static char s_last[48];
+    uint8_t n = (uint8_t)lv_slider_get_value(objects.sys_read_speed);
+    settings_set_pids_per_request(n);
+    comsm_set_pids_per_request(n);
+
+    comsm_status_t st;
+    comsm_get_status(&st);
+    char text[sizeof(s_last)];
+    if (st.state == COMSM_RUNNING && st.pids_per_request < n) {
+        snprintf(text, sizeof(text), "x%u set - ECU accepts 1 PID per request", n);
+    } else {
+        snprintf(text, sizeof(text), "x%u - %u PID%s per request", n, n, n > 1 ? "s" : "");
+    }
+    if (strcmp(text, s_last) != 0) {
+        strcpy(s_last, text);
+        lv_label_set_text(objects.sys_read_speed_value, text);
+    }
+}
+
 void settings_view_refresh(void)
 {
     app_settings_t cfg;
@@ -70,7 +96,8 @@ void settings_view_refresh(void)
     settings_set_log_params(log_params);
     datalog_enable_raw(log_raw);
     datalog_enable_params(log_params);
-    settings_set_gauge_anim(lv_obj_has_state(objects.gauge_anim_enabled, LV_STATE_CHECKED));
+    settings_set_gauge_anim(lv_obj_has_state(objects.sys_gauge_anim, LV_STATE_CHECKED));
+    refresh_read_speed();
 
     /* Tell the user once per failure (e.g. no SD card); the logger retries itself. */
     datalog_status_t ls;

@@ -140,44 +140,78 @@ void obd_pid_set_enabled(size_t idx, bool enabled)
 }
 
 /*
- * Pick the next PID to request.
+ * Pick the next PIDs to request (up to `max` in one Service 01 request).
  *
  * Fast PIDs (period 0) rotate round-robin by last poll time. Medium / slow PIDs
  * that are due go first, so they keep their period however many fast PIDs are
- * selected - but at most every other request, so a long list of due medium
- * PIDs can't starve the fast ones (rpm, speed).
+ * selected - but they get at most half of the slots (with a single PID per
+ * request: every other request), so a long list of due medium PIDs can't
+ * starve the fast ones (rpm, speed). Unused slots go to whatever is due.
  */
-int obd_pid_next_due(uint32_t now_ms)
+size_t obd_pid_next_batch(uint32_t now_ms, size_t max, int out[])
 {
-    static bool s_last_was_timed;
-    int best_fast = -1, best_timed = -1;
-    int32_t fast_overdue = INT32_MIN, timed_overdue = INT32_MIN;
+    static bool s_last_was_timed;           /* alternation for max == 1 */
+    int32_t overdue[MAX_CATALOGUE];
+    bool    timed[MAX_CATALOGUE];
+    size_t  n_fast = 0, n_timed = 0;
 
     portENTER_CRITICAL(&s_lock);
     for (size_t i = 0; i < obd_pid_count(); i++) {
         const obd_pid_desc_t *d = &g_obd_pids[i];
+        overdue[i] = -1;
         if (!s_enabled[i] || !bit_get(d->pid)) {
             continue;
         }
-        int32_t overdue = (int32_t)(now_ms - s_last_poll[i]) - (int32_t)s_rate_period_ms[d->rate];
-        if (overdue < 0) {
+        int32_t o = (int32_t)(now_ms - s_last_poll[i]) - (int32_t)s_rate_period_ms[d->rate];
+        if (o < 0) {
             continue;
         }
-        if (d->rate == OBD_RATE_FAST) {
-            if (overdue > fast_overdue) {
-                fast_overdue = overdue;
-                best_fast = (int)i;
-            }
-        } else if (overdue > timed_overdue) {
-            timed_overdue = overdue;
-            best_timed = (int)i;
+        overdue[i] = o;
+        timed[i] = d->rate != OBD_RATE_FAST;
+        if (timed[i]) {
+            n_timed++;
+        } else {
+            n_fast++;
         }
     }
     portEXIT_CRITICAL(&s_lock);
 
-    int pick = (best_timed >= 0 && (!s_last_was_timed || best_fast < 0)) ? best_timed : best_fast;
-    s_last_was_timed = (pick >= 0 && pick == best_timed);
-    return pick;
+    size_t quota;                           /* slots reserved for timed PIDs */
+    if (n_fast == 0) {
+        quota = max;
+    } else if (max == 1) {
+        quota = s_last_was_timed ? 0 : 1;
+    } else {
+        quota = (max + 1) / 2;
+    }
+
+    size_t n = 0;
+    /* pass 0: timed within quota, pass 1: fast, pass 2: leftovers of either */
+    for (int pass = 0; pass < 3 && n < max; pass++) {
+        while (n < max) {
+            if (pass == 0 && n >= quota) {
+                break;
+            }
+            int best = -1;
+            for (size_t i = 0; i < obd_pid_count(); i++) {
+                if (overdue[i] < 0 || (pass == 0 && !timed[i]) || (pass == 1 && timed[i])) {
+                    continue;
+                }
+                if (best < 0 || overdue[i] > overdue[best]) {
+                    best = (int)i;
+                }
+            }
+            if (best < 0) {
+                break;
+            }
+            out[n++] = best;
+            overdue[best] = -1;             /* taken */
+        }
+    }
+    if (max == 1) {
+        s_last_was_timed = (n == 1 && timed[out[0]]);
+    }
+    return n;
 }
 
 void obd_pid_mark_polled(size_t idx, uint32_t now_ms)
@@ -189,20 +223,27 @@ void obd_pid_mark_polled(size_t idx, uint32_t now_ms)
     }
 }
 
-bool obd_pid_handle_response(const uint8_t *resp, uint16_t len)
+size_t obd_pid_handle_response(const uint8_t *resp, uint16_t len)
 {
     if (len < 2 || resp[0] != 0x41) {
-        return false;
+        return 0;
     }
-    int idx = obd_pid_find(resp[1]);
-    if (idx < 0) {
-        return false;
+    /* 41 PID data [PID data ...] - a multi-PID answer repeats PID + data. */
+    size_t count = 0;
+    uint16_t i = 1;
+    while (i < len) {
+        int idx = obd_pid_find(resp[i]);
+        if (idx < 0) {
+            break;                          /* unknown length: can't go on */
+        }
+        const obd_pid_desc_t *d = &g_obd_pids[idx];
+        if (i + 1 + d->len > len) {
+            ESP_LOGW(TAG, "PID 0x%02X: short response (%u bytes)", d->pid, len);
+            break;
+        }
+        vd_set(d->signal, d->decode(&resp[i + 1]));
+        count++;
+        i += 1 + d->len;
     }
-    const obd_pid_desc_t *d = &g_obd_pids[idx];
-    if (len < 2 + d->len) {
-        ESP_LOGW(TAG, "PID 0x%02X: short response (%u bytes)", d->pid, len);
-        return false;
-    }
-    vd_set(d->signal, d->decode(&resp[2]));
-    return true;
+    return count;
 }

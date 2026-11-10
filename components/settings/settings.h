@@ -32,6 +32,7 @@ typedef struct {
     /* Fields added later go at the end: a shorter stored blob of the same
      * version is loaded and the new fields keep their defaults. */
     bool     gauge_anim;            /* animate gauge needles between samples */
+    uint8_t  pids_per_request;      /* Service 01 multi-PID request size, 1..6 */
 } app_settings_t;
 
 /* Initialises NVS (erasing it if the partition is corrupt/outdated) and loads
@@ -45,6 +46,7 @@ void settings_set_rusefi_base_id(uint16_t id);
 void settings_set_log_raw(bool on);
 void settings_set_log_params(bool on);
 void settings_set_gauge_anim(bool on);
+void settings_set_pids_per_request(uint8_t n);
 /* PID selection (Settings > Select Params). Opt-in: only selected PIDs are polled. */
 void settings_set_pid_selected(uint8_t pid, bool selected);
 bool settings_pid_selected(uint8_t pid);

@@ -95,7 +95,7 @@ static void format_status(const comsm_status_t *s, char *buf, size_t len)
         snprintf(buf, len, "ECU %03lX - reading supported PIDs", (unsigned long)s->ecu_id);
         break;
     case COMSM_RUNNING:
-        snprintf(buf, len, "ECU %03lX - %u/%u PIDs - %.0f/s%s",
+        snprintf(buf, len, "ECU %03lX - %u/%u PIDs - %.0f values/s%s",
                  (unsigned long)s->ecu_id, obd_pid_active_count(), s->supported_pids, s->request_rate,
                  logging_active() ? " - REC" : "");
         break;

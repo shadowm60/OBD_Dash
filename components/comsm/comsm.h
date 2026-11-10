@@ -37,7 +37,8 @@ typedef struct {
     uint16_t supported_pids;    /* catalogue PIDs the ECU supports */
     uint32_t responses;         /* successful responses since connect */
     uint32_t timeouts;          /* timeouts since connect */
-    float    request_rate;      /* responses per second (last ~1 s) */
+    float    request_rate;      /* PID values received per second (last ~1 s) */
+    uint8_t  pids_per_request;  /* in use; 1 if the ECU rejected multi-PID requests */
     uint32_t change_count;      /* increments on every state change */
 } comsm_status_t;
 
@@ -47,6 +48,11 @@ void comsm_connect(void);
 void comsm_disconnect(void);
 /* Connect when idle, otherwise disconnect / cancel. Used by the UI button. */
 void comsm_toggle(void);
+
+/* PIDs asked for in one Service 01 request (1..6). More = more values per
+ * second, as the ECU's answer time dominates. If the ECU doesn't handle it,
+ * comsm falls back to 1 by itself. Applied immediately. */
+void comsm_set_pids_per_request(uint8_t n);
 
 void comsm_get_status(comsm_status_t *out);
 

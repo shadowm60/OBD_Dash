@@ -13,7 +13,7 @@
 objects_t objects;
 
 static const char *screen_names[] = { "startup", "readDTC", "clearDTC", "drive", "liveData", "tune", "freezFrame", "settings", "system", "select_params" };
-static const char *object_names[] = { "startup", "read_dtc", "clear_dtc", "drive", "live_data", "tune", "freez_frame", "settings", "system", "select_params", "obj0", "obj1", "obj2", "obj3", "obj4", "obj5", "status_text", "status_text_1", "conn_button", "conn_button_text", "obj6", "read_dtc_bt", "clear_dtc_bt", "save_dtc_bt", "obj7", "obj8", "drive_mil", "obj9", "drive_rpm_gauge", "obj10", "obj11", "obj12", "obj13", "obj14", "obj15", "obj16", "obj17", "obj18", "obj19", "obj20", "obj21", "obj22", "obj23", "obj24", "obj25", "obj26", "rpm_gauge", "afr_gauge", "afr_sweet", "obj27", "obj28", "obj29", "race_mil", "obj30", "obj31", "obj32", "obj33", "obj34", "obj35", "obj36", "obj37", "obj38", "obj39", "obj40", "obj41", "obj42", "obj43", "obj44", "obj45", "obj46", "obj47", "obj48", "tune_mil", "obj49", "obj50", "obj51", "obj52", "obj53", "obj54", "obj55", "obj56", "obj57", "obj58", "obj59", "obj60", "obj61", "obj62", "obj63", "obj64", "obj65", "obj66", "obj67", "obj68", "obj69", "obj70", "obj71", "obj72", "obj73", "obj74", "obj75", "obj76", "obj77", "obj78", "obj79", "obj80", "obj81", "obj82", "obj83", "obj84", "obj85", "obj86", "obj87", "obj88", "obj89", "obj90", "obj91", "obj92", "obj93", "obj94", "obj95", "obj96", "con_method_label", "con_method_select", "rusefi_base_addr_label", "rusefi_base_addr_input", "obj97", "obj98", "obj99", "log_raw_label", "log_raw_enabled", "log_data_label", "log_params_enabled", "select_params_label", "obj100", "gauge_anim_label", "gauge_anim_enabled", "sys_auto_brightness", "sys_man_brightness", "obj101", "obj102", "obd_srv_table", "obj103" };
+static const char *object_names[] = { "startup", "read_dtc", "clear_dtc", "drive", "live_data", "tune", "freez_frame", "settings", "system", "select_params", "obj0", "obj1", "obj2", "obj3", "obj4", "obj5", "status_text", "status_text_1", "conn_button", "conn_button_text", "obj6", "read_dtc_bt", "clear_dtc_bt", "save_dtc_bt", "obj7", "obj8", "drive_mil", "obj9", "drive_rpm_gauge", "obj10", "obj11", "obj12", "obj13", "obj14", "obj15", "obj16", "obj17", "obj18", "obj19", "obj20", "obj21", "obj22", "obj23", "obj24", "obj25", "obj26", "rpm_gauge", "afr_gauge", "afr_sweet", "obj27", "obj28", "obj29", "race_mil", "obj30", "obj31", "obj32", "obj33", "obj34", "obj35", "obj36", "obj37", "obj38", "obj39", "obj40", "obj41", "obj42", "obj43", "obj44", "obj45", "obj46", "obj47", "obj48", "tune_mil", "obj49", "obj50", "obj51", "obj52", "obj53", "obj54", "obj55", "obj56", "obj57", "obj58", "obj59", "obj60", "obj61", "obj62", "obj63", "obj64", "obj65", "obj66", "obj67", "obj68", "obj69", "obj70", "obj71", "obj72", "obj73", "obj74", "obj75", "obj76", "obj77", "obj78", "obj79", "obj80", "obj81", "obj82", "obj83", "obj84", "obj85", "obj86", "obj87", "obj88", "obj89", "obj90", "obj91", "obj92", "obj93", "obj94", "obj95", "obj96", "con_method_label", "con_method_select", "rusefi_base_addr_label", "rusefi_base_addr_input", "obj97", "obj98", "obj99", "log_raw_label", "log_raw_enabled", "log_data_label", "log_params_enabled", "select_params_label", "obj100", "sys_auto_brightness", "sys_man_brightness", "obj101", "sys_gauge_anim", "sys_read_speed_label", "sys_read_speed", "sys_read_speed_value", "obj102", "obd_srv_table", "obj103" };
 
 screen_drive_state_t screen_drive_state;
 screen_live_data_state_t screen_live_data_state;
@@ -2571,26 +2571,6 @@ void create_screen_settings() {
                 }
             }
         }
-        {
-            // gauge_anim_label
-            lv_obj_t *obj = lv_label_create(parent_obj);
-            objects.gauge_anim_label = obj;
-            lv_obj_set_pos(obj, 19, 366);
-            lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-            lv_obj_set_style_text_color(obj, lv_color_hex(0x00ff00), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_text_font(obj, &lv_font_montserrat_26, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_label_set_text_static(obj, "Gauge animation: ");
-        }
-        {
-            // gauge_anim_enabled
-            lv_obj_t *obj = lv_checkbox_create(parent_obj);
-            objects.gauge_anim_enabled = obj;
-            lv_obj_set_pos(obj, 282, 366);
-            lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-            lv_checkbox_set_text_static(obj, "Enabled");
-            lv_obj_set_style_text_color(obj, lv_color_hex(0x00ff00), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_text_font(obj, &lv_font_montserrat_26, LV_PART_MAIN | LV_STATE_DEFAULT);
-        }
     }
     
     tick_screen_settings();
@@ -2665,6 +2645,45 @@ void create_screen_system() {
                     lv_label_set_text_static(obj, "Back");
                 }
             }
+        }
+        {
+            // sys_gauge_anim
+            lv_obj_t *obj = lv_checkbox_create(parent_obj);
+            objects.sys_gauge_anim = obj;
+            lv_obj_set_pos(obj, 26, 108);
+            lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_checkbox_set_text_static(obj, "Gauge animation");
+            lv_obj_set_style_text_color(obj, lv_color_hex(0x00ff00), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+        {
+            // sys_read_speed_label
+            lv_obj_t *obj = lv_label_create(parent_obj);
+            objects.sys_read_speed_label = obj;
+            lv_obj_set_pos(obj, 26, 188);
+            lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_set_style_text_color(obj, lv_color_hex(0x00ff00), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_label_set_text_static(obj, "Read speed");
+        }
+        {
+            // sys_read_speed
+            lv_obj_t *obj = lv_slider_create(parent_obj);
+            objects.sys_read_speed = obj;
+            lv_obj_set_pos(obj, 325, 200);
+            lv_obj_set_size(obj, 443, 10);
+            lv_slider_set_range(obj, 1, 6);
+            lv_slider_set_value(obj, 6, LV_ANIM_OFF);
+        }
+        {
+            // sys_read_speed_value
+            lv_obj_t *obj = lv_label_create(parent_obj);
+            objects.sys_read_speed_value = obj;
+            lv_obj_set_pos(obj, 325, 225);
+            lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_set_style_text_color(obj, lv_color_hex(0x00ff00), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_label_set_text_static(obj, "x6 - 6 PIDs per request");
         }
     }
     

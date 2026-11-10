@@ -58,13 +58,15 @@ void obd_pid_set_enabled(size_t idx, bool enabled);
 uint16_t obd_pid_active_count(void);            /* enabled and supported */
 
 /* --- polling --- */
-/* Catalogue index of the PID to request next, or -1 if nothing is due. */
-int  obd_pid_next_due(uint32_t now_ms);
+/* Up to `max` catalogue indexes to request next (out[] holds max entries).
+ * Returns how many; 0 if nothing is due. */
+#define OBD_MAX_PIDS_PER_REQUEST 6      /* ISO 15765-4 limit for Service 01 */
+size_t obd_pid_next_batch(uint32_t now_ms, size_t max, int out[]);
 void obd_pid_mark_polled(size_t idx, uint32_t now_ms);
 
-/* Decode a positive Service 01 response (0x41 PID data...) into vehicle_data.
- * Returns false if the PID is unknown or the response too short. */
-bool obd_pid_handle_response(const uint8_t *resp, uint16_t len);
+/* Decode a positive Service 01 response (41 PID data [PID data ...]) into
+ * vehicle_data. Returns the number of PIDs decoded. */
+size_t obd_pid_handle_response(const uint8_t *resp, uint16_t len);
 
 #ifdef __cplusplus
 }

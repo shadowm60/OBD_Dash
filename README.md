@@ -129,10 +129,18 @@ logging is on.
   101.3 kPa is used.
 - **AFR** assumes gasoline (stoichiometric 14.7). PID 24 (O2 sensor 1, wide range,
   voltage) and PID 34 (same, current) both feed it; select whichever your ECU supports.
-- **Needle animation** (Settings > Gauge animation, on by default): each new sample moves
+- **Needle animation** (System > Gauge animation, on by default): each new sample moves
   the needle linearly to the new value over about the time between samples, so it keeps
   moving instead of jumping. The needle lags by up to one sample interval; untick it to
   show each sample as it arrives. Text tiles are never animated.
+- **Read speed** (System > Read speed, x1..x6, default x6): how many PIDs are asked for in
+  one Service 01 request (ISO 15765-4 allows 6). The ECU's answer time, not the bus or
+  the CPU, limits the rate, so asking for 6 at once gives up to 6x the values per second.
+  If the ECU rejects or half-answers a multi-PID request, the dash drops to 1 PID per
+  request by itself (the System screen then says "ECU accepts 1 PID per request");
+  moving the slider tries again. The status line shows the result as `values/s`.
+  Due slow/medium PIDs (temperatures, trims) get at most half of each request; the
+  rest goes to the fast ones (rpm, speed, load, ...).
 - The formatting (decimals, derived values) is in `components/hmi/bridge/live_values.c`;
   the gauge scaling is in `components/hmi/bridge/live_view.c`.
 

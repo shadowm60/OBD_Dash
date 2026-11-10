@@ -32,6 +32,7 @@ static void set_defaults(app_settings_t *c)
     c->conn_method = SETTINGS_CONN_OBD;
     c->rusefi_base_id = 512;
     c->gauge_anim = true;
+    c->pids_per_request = 6;        /* falls back to 1 if the ECU can't */
     /* Default selection: what the current dashboard shows. */
     static const uint8_t default_pids[] = { 0x05 /* coolant */, 0x0C /* rpm */,
                                             0x0D /* speed */, 0x24 /* lambda */ };
@@ -165,6 +166,7 @@ void settings_set_rusefi_base_id(uint16_t id)   { SETTINGS_SETTER(rusefi_base_id
 void settings_set_log_raw(bool on)              { SETTINGS_SETTER(log_raw, on); }
 void settings_set_log_params(bool on)           { SETTINGS_SETTER(log_params, on); }
 void settings_set_gauge_anim(bool on)           { SETTINGS_SETTER(gauge_anim, on); }
+void settings_set_pids_per_request(uint8_t n)   { SETTINGS_SETTER(pids_per_request, n); }
 
 void settings_set_pid_selected(uint8_t pid, bool selected)
 {

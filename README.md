@@ -59,8 +59,9 @@ ISO-TP frames padded to 8 bytes, flow control sent to the physical request ID.
 
 ## Live data screens
 
-Start screen -> Live Data opens **Drive**. Swipe left/right: Drive -> Race -> Tune; swipe
-up/down or long press: back to the start screen. A tile shows `--` when its PID is not
+Start screen buttons: **Driving View**, **Race View**, **Tuning View**, **Read DTCs**,
+Settings, System. On a live screen, swipe left/right to cycle Drive -> Race -> Tune; swipe
+up/down or long press to return to the start screen. A tile shows `--` when its PID is not
 selected in Settings > Select Params, not supported, or stale (> 3 s).
 
 | Screen | Content | PIDs to select |

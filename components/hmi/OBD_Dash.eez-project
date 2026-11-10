@@ -566,7 +566,7 @@
                   },
                   "group": "",
                   "groupIndex": 0,
-                  "text": "Read DTCs",
+                  "text": "Driving View",
                   "textType": "literal",
                   "longMode": "WRAP",
                   "recolor": false
@@ -671,7 +671,7 @@
                   },
                   "group": "",
                   "groupIndex": 0,
-                  "text": "Clear DTCs",
+                  "text": "Race View",
                   "textType": "literal",
                   "longMode": "WRAP",
                   "recolor": false
@@ -776,7 +776,7 @@
                   },
                   "group": "",
                   "groupIndex": 0,
-                  "text": "Live Data",
+                  "text": "Tuning View",
                   "textType": "literal",
                   "longMode": "WRAP",
                   "recolor": false
@@ -881,7 +881,7 @@
                   },
                   "group": "",
                   "groupIndex": 0,
-                  "text": "Freez Frame",
+                  "text": "Read DTCs",
                   "textType": "literal",
                   "longMode": "WRAP",
                   "recolor": false
@@ -1361,12 +1361,12 @@
           "height": 54,
           "customInputs": [],
           "customOutputs": [],
-          "description": "goto ReadDTC",
+          "description": "goto drive",
           "actions": [
             {
               "objID": "50548438-d99e-4bcd-db24-34ef2d9bfbe8",
               "action": "changeScreen",
-              "screen": "readDTC",
+              "screen": "drive",
               "screenType": "literal",
               "fadeMode": "FADE_IN",
               "fadeModeType": "literal",
@@ -1392,7 +1392,7 @@
             {
               "objID": "51ed409d-c1d3-45b3-9ab8-057d56e9d181",
               "action": "changeScreen",
-              "screen": "clearDTC",
+              "screen": "liveData",
               "screenType": "literal",
               "fadeMode": "FADE_IN",
               "fadeModeType": "literal",
@@ -1403,7 +1403,8 @@
               "useStack": true,
               "useStackType": "literal"
             }
-          ]
+          ],
+          "description": "goto liveData"
         },
         {
           "objID": "8ed3979d-93aa-448c-f231-fc0128bdecce",
@@ -1418,7 +1419,7 @@
             {
               "objID": "92fb5df9-de7b-4547-c20e-4ad52c29f84f",
               "action": "changeScreen",
-              "screen": "freezFrame",
+              "screen": "readDTC",
               "screenType": "literal",
               "fadeMode": "FADE_IN",
               "fadeModeType": "literal",
@@ -1429,7 +1430,8 @@
               "useStack": true,
               "useStackType": "literal"
             }
-          ]
+          ],
+          "description": "goto readDTC"
         },
         {
           "objID": "0c4b0099-95e0-4a96-ba44-bc2a54e3693c",
@@ -1470,7 +1472,7 @@
             {
               "objID": "708ab90e-1cdf-42a6-d31d-ec21cf305fac",
               "action": "changeScreen",
-              "screen": "drive",
+              "screen": "tune",
               "screenType": "literal",
               "fadeMode": "FADE_IN",
               "fadeModeType": "literal",
@@ -1481,7 +1483,8 @@
               "useStack": true,
               "useStackType": "literal"
             }
-          ]
+          ],
+          "description": "goto tune"
         },
         {
           "objID": "8d6ba311-3857-40f1-e74d-064c94e160e9",

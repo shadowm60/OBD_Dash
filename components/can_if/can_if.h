@@ -54,6 +54,7 @@ typedef struct {
     uint32_t rx_dropped;        /* subscriber queue full */
     uint32_t tx_frames;
     uint32_t tx_failed;         /* not acknowledged / arbitration lost after retries */
+    uint32_t tx_retries;        /* extra attempts (lost arbitration, bus error) */
     uint32_t tx_dropped;        /* TX queue full */
     uint32_t bus_errors;
     uint32_t mon_dropped;       /* monitor queue full */

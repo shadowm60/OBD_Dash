@@ -155,6 +155,14 @@ Done:
   System.
 
 **Built but NOT yet verified on hardware** (ask the owner how they went):
+- **First car logs** (2026-11-11, `ObdDash_Logs/`, not committed): the real ECU answers
+  in ~10 ms, but the dash had hundreds of 150 ms timeouts and 3.29 s gaps
+  (8 timeouts + 2 s reconnect delay), each reconnect starting a new `par_` file.
+  Cause: on ESP32-S3 (TWAI v1) `fail_retry_cnt != -1` means single shot, so our
+  0x7E0/0x7DF frames were dropped whenever they lost arbitration to car traffic.
+  Fix: software retries in `can_tx_task` (16 attempts / 20 ms), plus `evt_NNN.txt`
+  event log (with raw logging) showing timeouts, tx_failed/retries, bus state.
+  Next drive: check `evt_NNN.txt` for `+tx_failed` and that the gaps are gone.
 - `385fdc5`: slow PIDs keep their 2 s period. This should stop the `--` flicker on the
   coolant tile.
 - `596b450`: needle animation and its checkbox.

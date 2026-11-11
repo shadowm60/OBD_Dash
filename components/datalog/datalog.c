@@ -1,5 +1,6 @@
 #include "datalog.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
@@ -10,6 +11,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "can_if.h"
+#include "comsm.h"
 #include "obd_pids.h"
 #include "vehicle_data.h"
 
@@ -38,6 +40,7 @@ static volatile bool s_want_params;
 
 static log_file_t    s_raw;
 static log_file_t    s_par;
+static log_file_t    s_evt;                     /* opened / closed with the raw log */
 static vd_signal_t   s_cols[MAX_COLUMNS];
 static int           s_ncols;
 
@@ -127,6 +130,106 @@ static void close_file(log_file_t *lf)
         }
     }
     lf->failed = false;     /* re-enabling tries again right away */
+}
+
+/* ---------------------------------------------------------------- event log
+ *
+ * evt_NNN.txt, written while raw logging is on: connection state changes,
+ * request timeouts and (once a second, only when something changed) the CAN
+ * error counters. Same time base as can_NNN.log, so a gap in the raw log can
+ * be matched to what the dash was doing. Frames that failed to send never show
+ * up in the raw log; they show up here as tx_failed / tx_retries.
+ */
+#define EVT_STATS_PERIOD_MS 1000
+
+static uint32_t       s_evt_change = UINT32_MAX;
+static uint32_t       s_evt_timeouts;
+static can_if_stats_t s_evt_cs;
+static uint32_t       s_evt_next_stats;
+
+static const char *bus_state_name(can_if_bus_state_t st)
+{
+    switch (st) {
+        case CAN_IF_BUS_ACTIVE:  return "active";
+        case CAN_IF_BUS_WARNING: return "warning";
+        case CAN_IF_BUS_PASSIVE: return "passive";
+        case CAN_IF_BUS_OFF:     return "bus-off";
+        default:                 return "stopped";
+    }
+}
+
+static void evt_printf(uint32_t now, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+static void evt_printf(uint32_t now, const char *fmt, ...)
+{
+    if (s_evt.f == NULL) {
+        return;
+    }
+    fprintf(s_evt.f, "(%" PRIu32 ".%03" PRIu32 ") ", now / 1000, now % 1000);
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(s_evt.f, fmt, ap);
+    va_end(ap);
+    fputc('\n', s_evt.f);
+}
+
+static void evt_service(uint32_t now)
+{
+    if (s_raw.f != NULL && s_evt.f == NULL && !s_evt.failed) {
+        char name[24];
+        if (open_next(&s_evt, "evt", "txt", name, sizeof(name))) {
+            fprintf(s_evt.f, "# OBD_Dash event log, time = s since boot (as in can_NNN.log)\n");
+            s_evt_change = UINT32_MAX;              /* write the current state first */
+            can_if_get_stats(&s_evt_cs);
+            evt_printf(now, "can: tx %" PRIu32 " failed %" PRIu32 " retries %" PRIu32
+                       " rx %" PRIu32 " rx_dropped %" PRIu32 " bus_errors %" PRIu32 " state %s",
+                       s_evt_cs.tx_frames, s_evt_cs.tx_failed, s_evt_cs.tx_retries, s_evt_cs.rx_frames,
+                       s_evt_cs.rx_dropped, s_evt_cs.bus_errors, bus_state_name(s_evt_cs.state));
+            s_evt_next_stats = now + EVT_STATS_PERIOD_MS;
+        }
+    } else if (s_raw.f == NULL && s_evt.f != NULL) {
+        close_file(&s_evt);
+    }
+    if (s_raw.f == NULL) {
+        s_evt.failed = false;
+    }
+    if (s_evt.f == NULL) {
+        return;
+    }
+
+    comsm_status_t st;
+    comsm_get_status(&st);
+    if (st.change_count != s_evt_change) {
+        s_evt_change = st.change_count;
+        s_evt_timeouts = st.timeouts;
+        evt_printf(now, "comsm: %s  ecu %03" PRIX32 "  responses %" PRIu32 " timeouts %" PRIu32,
+                   comsm_state_name(st.state), st.ecu_id, st.responses, st.timeouts);
+    } else if (st.timeouts != s_evt_timeouts) {
+        if (st.timeouts > s_evt_timeouts) {
+            evt_printf(now, "timeout +%" PRIu32 " (total %" PRIu32 ", responses %" PRIu32 ")",
+                       st.timeouts - s_evt_timeouts, st.timeouts, st.responses);
+        }
+        s_evt_timeouts = st.timeouts;
+    }
+
+    if ((int32_t)(now - s_evt_next_stats) < 0) {
+        return;
+    }
+    s_evt_next_stats = now + EVT_STATS_PERIOD_MS;
+    can_if_stats_t cs;
+    can_if_get_stats(&cs);
+    can_if_stats_t *o = &s_evt_cs;
+    if (cs.tx_failed != o->tx_failed || cs.tx_retries != o->tx_retries || cs.tx_dropped != o->tx_dropped ||
+        cs.rx_dropped != o->rx_dropped || cs.mon_dropped != o->mon_dropped ||
+        cs.bus_errors != o->bus_errors || cs.state != o->state) {
+        evt_printf(now, "can: +tx_failed %" PRIu32 " +retries %" PRIu32 " +tx_dropped %" PRIu32
+                   " +rx_dropped %" PRIu32 " +log_dropped %" PRIu32 " +bus_errors %" PRIu32
+                   " state %s  (tx %" PRIu32 " rx %" PRIu32 " in the last second)",
+                   cs.tx_failed - o->tx_failed, cs.tx_retries - o->tx_retries, cs.tx_dropped - o->tx_dropped,
+                   cs.rx_dropped - o->rx_dropped, cs.mon_dropped - o->mon_dropped,
+                   cs.bus_errors - o->bus_errors, bus_state_name(cs.state),
+                   cs.tx_frames - o->tx_frames, cs.rx_frames - o->rx_frames);
+    }
+    *o = cs;
 }
 
 /* ---------------------------------------------------------------- raw CAN */
@@ -271,6 +374,7 @@ static void datalog_task(void *arg)
 
     while (1) {
         raw_service();
+        evt_service(can_if_now_ms());
 
         /* Drain CAN frames until the next parameter row is due. */
         uint32_t now = can_if_now_ms();
@@ -299,6 +403,7 @@ static void datalog_task(void *arg)
         if ((int32_t)(now - next_sync) >= 0) {
             sync_file(&s_raw);
             sync_file(&s_par);
+            sync_file(&s_evt);
             next_sync = now + CONFIG_DATALOG_SYNC_PERIOD_MS;
         }
     }

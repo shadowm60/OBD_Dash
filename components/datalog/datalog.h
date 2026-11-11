@@ -4,6 +4,8 @@
  *   raw     every CAN frame seen / sent, candump log format
  *           /sdcard/can_NNN.log   "(12.345000) can0 7E8#0441<...>"
  *           (only OBD responses unless CONFIG_CAN_ACCEPT_ALL is set)
+ *   events  with the raw log: connection state, timeouts, CAN error counters
+ *           /sdcard/evt_NNN.txt
  *   params  one CSV row per CONFIG_DATALOG_PARAM_PERIOD_MS with the latest value
  *           of every polled PID; empty cell = no fresh value
  *           /sdcard/par_NNN.csv   new file on every (re)connect or PID selection change

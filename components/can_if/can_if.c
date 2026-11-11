@@ -14,6 +14,13 @@ static const char *TAG = "can_if";
 
 #define TX_QUEUE_LEN        16
 #define TX_DONE_TIMEOUT_MS  50
+/* On this chip (TWAI v1) any fail_retry_cnt other than -1 means single shot:
+ * one attempt, dropped on lost arbitration or a bus error. On a busy car bus
+ * our low-priority IDs (0x7DF / 0x7E0) lose arbitration regularly, so failed
+ * attempts are retried here. Unlimited hardware retries (-1) are not used:
+ * the driver can't abort a frame nobody acknowledges (no ECU on the bus). */
+#define TX_ATTEMPTS         16
+#define TX_RETRY_WINDOW_MS  20
 #define TX_TASK_STACK       3072
 #define TX_TASK_PRIO        9
 
@@ -149,21 +156,28 @@ static void can_tx_task(void *arg)
             continue;
         }
 
-        memset(&tx, 0, sizeof(tx));
-        tx.header.id  = cur.id;
-        tx.header.ide = cur.ext;
-        tx.header.dlc = cur.dlc;
-        tx.buffer     = cur.data;
-        tx.buffer_len = cur.dlc;
-
-        xSemaphoreTake(s_tx_done, 0);   /* clear stale completion */
-        esp_err_t err = twai_node_transmit(s_node, &tx, TX_DONE_TIMEOUT_MS);
         bool ok = false;
-        if (err == ESP_OK && xSemaphoreTake(s_tx_done, pdMS_TO_TICKS(TX_DONE_TIMEOUT_MS)) == pdTRUE) {
+        int attempts = 0;
+        uint32_t start = can_if_now_ms();
+        do {
+            memset(&tx, 0, sizeof(tx));
+            tx.header.id  = cur.id;
+            tx.header.ide = cur.ext;
+            tx.header.dlc = cur.dlc;
+            tx.buffer     = cur.data;
+            tx.buffer_len = cur.dlc;
+
+            attempts++;
+            xSemaphoreTake(s_tx_done, 0);   /* clear stale completion */
+            esp_err_t err = twai_node_transmit(s_node, &tx, TX_DONE_TIMEOUT_MS);
+            if (err != ESP_OK || xSemaphoreTake(s_tx_done, pdMS_TO_TICKS(TX_DONE_TIMEOUT_MS)) != pdTRUE) {
+                break;      /* no completion: the driver may still own the frame, don't resend */
+            }
             ok = s_tx_ok;
-        }
+        } while (!ok && attempts < TX_ATTEMPTS && can_if_now_ms() - start < TX_RETRY_WINDOW_MS);
 
         portENTER_CRITICAL(&s_stats_lock);
+        s_stats.tx_retries += attempts - 1;
         if (ok) {
             s_stats.tx_frames++;
         } else {

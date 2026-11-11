@@ -164,7 +164,7 @@ SD card root, numbered so nothing is overwritten. Times are seconds since boot (
 
 | Checkbox | File | Content |
 |---|---|---|
-| Log raw CAN | `can_NNN.log` | every frame received and sent, candump format (`(1.234000) can0 7E8#04410C1AF8`), opens in SavvyCAN / python-can / `canplayer`. Only `0x7E8..0x7EF` + our requests unless `CONFIG_CAN_ACCEPT_ALL` is set |
+| Log raw CAN | `can_NNN.log` | every frame received and sent, candump format (`(1.234000) can0 7E8#04410C1AF8`), opens in SavvyCAN / python-can / `canplayer`. Only `0x7E8..0x7EF` + our requests, or every frame on the bus with the **All traffic** checkbox next to it (the hardware filter is only opened while a raw log is written; a busy car bus can be 1000-2000 frames/s, ~60-80 KB/s on the card) |
 | (with Log raw CAN) | `evt_NNN.txt` | what the dash itself did, same time base as the raw log: connection state changes, request timeouts, and once a second (only when something changed) the CAN error counters: failed sends, send retries, dropped frames, bus errors, bus state. A request that failed to go out never appears in `can_NNN.log`; it shows up here |
 | Log parameters | `par_NNN.csv` | one row per `CONFIG_DATALOG_PARAM_PERIOD_MS` (200 ms), one column per polled PID, empty cell = no fresh value. A new file starts on every connect or PID selection change |
 

@@ -163,6 +163,10 @@ Done:
   Fix: software retries in `can_tx_task` (16 attempts / 20 ms), plus `evt_NNN.txt`
   event log (with raw logging) showing timeouts, tx_failed/retries, bus state.
   Next drive: check `evt_NNN.txt` for `+tx_failed` and that the gaps are gone.
+- Settings > Log CAN RAW > **All traffic** (replaces Kconfig `CAN_ACCEPT_ALL`): opens
+  the hardware filter while a raw log is written (`can_if_set_accept_all`, applied in
+  the TX task via disable / filter / enable). Never run on a busy bus yet: watch
+  `+log_dropped` in `evt_NNN.txt`.
 - `385fdc5`: slow PIDs keep their 2 s period. This should stop the `--` flicker on the
   coolant tile.
 - `596b450`: needle animation and its checkbox.

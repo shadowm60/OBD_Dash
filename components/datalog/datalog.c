@@ -37,6 +37,7 @@ static char          s_dir[16];
 static QueueHandle_t s_raw_queue;
 static volatile bool s_want_raw;
 static volatile bool s_want_params;
+static volatile bool s_want_all_traffic;
 
 static log_file_t    s_raw;
 static log_file_t    s_par;
@@ -272,6 +273,8 @@ static void raw_service(void)
         s_status.raw_active = false;
         portEXIT_CRITICAL(&s_lock);
     }
+    /* Full bus capture only while a raw log is written: no extra load otherwise. */
+    can_if_set_accept_all(s_raw.f != NULL && s_want_all_traffic);
 }
 
 /* ---------------------------------------------------------------- parameters */
@@ -431,4 +434,9 @@ void datalog_enable_raw(bool on)
 void datalog_enable_params(bool on)
 {
     s_want_params = on;
+}
+
+void datalog_set_all_traffic(bool on)
+{
+    s_want_all_traffic = on;
 }

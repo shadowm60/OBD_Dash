@@ -61,17 +61,12 @@ typedef struct {
     can_if_bus_state_t state;
 } can_if_stats_t;
 
-/* Default config: bitrate from Kconfig, filter for OBD-II responses 0x7E8..0x7EF,
- * or no filter with CONFIG_CAN_ACCEPT_ALL (full bus capture for raw logging). */
-#ifdef CONFIG_CAN_ACCEPT_ALL
-#define CAN_IF_DEFAULT_FILTER_MASK  0x000
-#else
-#define CAN_IF_DEFAULT_FILTER_MASK  0x7F8
-#endif
+/* Default config: bitrate from Kconfig, hardware filter for OBD-II responses
+ * 0x7E8..0x7EF. can_if_set_accept_all() opens it at runtime. */
 #define CAN_IF_CONFIG_OBD_DEFAULT() {               \
     .bitrate     = CONFIG_CAN_BITRATE,              \
     .filter_id   = 0x7E8,                           \
-    .filter_mask = CAN_IF_DEFAULT_FILTER_MASK,      \
+    .filter_mask = 0x7F8,                           \
 }
 
 esp_err_t can_if_init(const can_if_config_t *cfg);
@@ -87,6 +82,12 @@ esp_err_t can_if_subscribe(uint32_t id_min, uint32_t id_max, QueueHandle_t queue
  * (tx = true) is copied into `queue`, regardless of subscriptions. One monitor
  * at a time; NULL detaches. Frames are dropped (mon_dropped) if the queue is full. */
 void can_if_set_monitor(QueueHandle_t queue);
+
+/* true: receive every frame on the bus (hardware filter open), e.g. for a full
+ * raw log; false: back to the filter given to can_if_init(). Subscribers still
+ * only get their ID range. Applied by the TX task between frames: the
+ * controller is stopped for a moment, which may cost one request. */
+void can_if_set_accept_all(bool on);
 
 void can_if_get_stats(can_if_stats_t *out);
 

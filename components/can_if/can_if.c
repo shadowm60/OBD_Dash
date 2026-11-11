@@ -35,6 +35,9 @@ static QueueHandle_t      s_tx_queue;
 static SemaphoreHandle_t  s_tx_done;
 static volatile bool      s_tx_ok;
 static volatile bool      s_need_recover;
+static volatile bool      s_want_accept_all;
+static bool               s_accept_all;         /* applied state, TX task only */
+static uint32_t           s_filter_id, s_filter_mask;
 
 static subscriber_t       s_subs[CAN_IF_MAX_SUBSCRIBERS];
 static volatile uint8_t   s_sub_count;
@@ -134,6 +137,29 @@ static bool on_error(twai_node_handle_t handle, const twai_error_event_data_t *e
 
 /* ---------------------------------------------------------------- TX task */
 
+/* Mask 0 = accept all. The driver only takes a filter while the node is stopped. */
+static esp_err_t set_mask(uint32_t id, uint32_t mask)
+{
+    twai_mask_filter_config_t flt = { .id = id, .mask = mask, .is_ext = false };
+    return twai_node_config_mask_filter(s_node, 0, &flt);
+}
+
+static void apply_filter(bool accept_all)
+{
+    esp_err_t err = twai_node_disable(s_node);
+    if (err == ESP_OK) {
+        err = accept_all ? set_mask(0, 0) : set_mask(s_filter_id, s_filter_mask);
+        esp_err_t err2 = twai_node_enable(s_node);
+        err = (err != ESP_OK) ? err : err2;
+    }
+    s_accept_all = accept_all;      /* don't retry in a loop on failure */
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "filter change failed: %s", esp_err_to_name(err));
+        return;
+    }
+    ESP_LOGI(TAG, "receive filter: %s", accept_all ? "all IDs" : "OBD responses only");
+}
+
 static void can_tx_task(void *arg)
 {
     /* esp_twai keeps a pointer to the frame until TX completes,
@@ -150,6 +176,10 @@ static void can_tx_task(void *arg)
             if (err != ESP_OK) {
                 ESP_LOGE(TAG, "recover failed: %s", esp_err_to_name(err));
             }
+        }
+
+        if (s_want_accept_all != s_accept_all) {
+            apply_filter(s_want_accept_all);
         }
 
         if (xQueueReceive(s_tx_queue, &cur, pdMS_TO_TICKS(100)) != pdTRUE) {
@@ -235,6 +265,11 @@ void can_if_set_monitor(QueueHandle_t queue)
     s_monitor = queue;
 }
 
+void can_if_set_accept_all(bool on)
+{
+    s_want_accept_all = on;
+}
+
 void can_if_get_stats(can_if_stats_t *out)
 {
     portENTER_CRITICAL(&s_stats_lock);
@@ -265,14 +300,9 @@ esp_err_t can_if_init(const can_if_config_t *cfg)
     };
     ESP_RETURN_ON_ERROR(twai_new_node_onchip(&node_cfg, &s_node), TAG, "node create");
 
-    if (cfg->filter_mask != 0) {
-        twai_mask_filter_config_t flt = {
-            .id = cfg->filter_id,
-            .mask = cfg->filter_mask,
-            .is_ext = false,
-        };
-        ESP_RETURN_ON_ERROR(twai_node_config_mask_filter(s_node, 0, &flt), TAG, "filter");
-    }
+    s_filter_id = cfg->filter_id;
+    s_filter_mask = cfg->filter_mask;
+    ESP_RETURN_ON_ERROR(set_mask(s_filter_id, s_filter_mask), TAG, "filter");
 
     twai_event_callbacks_t cbs = {
         .on_rx_done = on_rx_done,

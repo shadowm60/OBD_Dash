@@ -38,6 +38,7 @@ void settings_view_init(void)
 
     set_checked(objects.log_raw_enabled, cfg.log_raw);
     set_checked(objects.log_params_enabled, cfg.log_params);
+    set_checked(objects.log_all_traffic, cfg.log_all_traffic);
     set_checked(objects.sys_gauge_anim, cfg.gauge_anim);
     lv_slider_set_value(objects.sys_read_speed, cfg.pids_per_request, LV_ANIM_OFF);
     comsm_set_pids_per_request(cfg.pids_per_request);
@@ -97,6 +98,9 @@ void settings_view_refresh(void)
     settings_set_log_params(log_params);
     datalog_enable_raw(log_raw);
     datalog_enable_params(log_params);
+    bool all = lv_obj_has_state(objects.log_all_traffic, LV_STATE_CHECKED);
+    settings_set_log_all_traffic(all);
+    datalog_set_all_traffic(all);
     settings_set_gauge_anim(lv_obj_has_state(objects.sys_gauge_anim, LV_STATE_CHECKED));
     refresh_read_speed();
     uint8_t bright = (uint8_t)lv_slider_get_value(objects.sys_man_brightness);

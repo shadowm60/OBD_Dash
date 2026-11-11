@@ -172,6 +172,7 @@ void settings_set_log_params(bool on)           { SETTINGS_SETTER(log_params, on
 void settings_set_gauge_anim(bool on)           { SETTINGS_SETTER(gauge_anim, on); }
 void settings_set_pids_per_request(uint8_t n)   { SETTINGS_SETTER(pids_per_request, n); }
 void settings_set_brightness(uint8_t percent)   { SETTINGS_SETTER(brightness, percent); }
+void settings_set_log_all_traffic(bool on)      { SETTINGS_SETTER(log_all_traffic, on); }
 
 void settings_set_pid_selected(uint8_t pid, bool selected)
 {

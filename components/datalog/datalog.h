@@ -3,7 +3,8 @@
  *
  *   raw     every CAN frame seen / sent, candump log format
  *           /sdcard/can_NNN.log   "(12.345000) can0 7E8#0441<...>"
- *           (only OBD responses unless CONFIG_CAN_ACCEPT_ALL is set)
+ *           (only OBD responses, or every frame on the bus with
+ *           datalog_set_all_traffic(true))
  *   events  with the raw log: connection state, timeouts, CAN error counters
  *           /sdcard/evt_NNN.txt
  *   params  one CSV row per CONFIG_DATALOG_PARAM_PERIOD_MS with the latest value
@@ -43,6 +44,9 @@ esp_err_t datalog_init(const char *dir);
 /* Idempotent; safe to call from any task. */
 void datalog_enable_raw(bool on);
 void datalog_enable_params(bool on);
+/* Raw log: capture every frame on the bus instead of the OBD conversation only.
+ * Opens the CAN hardware filter while a raw log is being written. */
+void datalog_set_all_traffic(bool on);
 
 void datalog_get_status(datalog_status_t *out);
 

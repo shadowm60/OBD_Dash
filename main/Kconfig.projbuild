@@ -204,15 +204,6 @@ menu "BSW Configuration"
             default 500000
             help
                 Bus bitrate. OBD-II over CAN (ISO 15765-4) uses 500000 or 250000.
-
-        config CAN_ACCEPT_ALL
-            bool "Accept all CAN IDs (full bus capture in the raw log)"
-            default n
-            help
-                By default the hardware filter only passes OBD-II responses
-                (0x7E8..0x7EF), so the raw CAN log contains the OBD conversation
-                only. Enable to receive every frame on the bus, e.g. on a rusEFI
-                or other open bus. Costs CPU on a busy bus; OBD is unaffected.
     endmenu
 
     menu "Data logging"

@@ -50,12 +50,16 @@ board           LCD, touch, IO expander, SD card, LVGL port (no app knowledge)
 1. `Connect` -> `01 00` functional on `0x7DF`; first responder in `0x7E8..0x7EF` is used.
 2. Switch to physical addressing (`0x7E0` -> `0x7E8`), read `01 20`, `01 40`, ... while supported.
 3. Poll the PIDs selected in Settings > Select Params (only ECU-supported ones can be
-   selected): fast group continuously, medium every 500 ms, slow every 2 s. With nothing
+   selected): fast group continuously, medium every 500 ms, slow every 2 s, up to 6 PIDs
+   per request (System > Read speed). With nothing
    selected the bus stays quiet (optional keepalive: `CONFIG_OBD_KEEPALIVE_MS`).
 4. `CONFIG_OBD_MAX_CONSECUTIVE_TIMEOUTS` timeouts in a row -> reconnect after `CONFIG_OBD_RECONNECT_DELAY_MS`.
 
-CAN: 11-bit IDs, `CONFIG_CAN_BITRATE` (default 500 kbit/s), hardware filter `0x7E8/0x7F8`,
-ISO-TP frames padded to 8 bytes, flow control sent to the physical request ID.
+CAN: 11-bit IDs, `CONFIG_CAN_BITRATE` (default 500 kbit/s), hardware filter `0x7E8/0x7F8`
+(opened for a full bus capture with Settings > All traffic), ISO-TP frames padded to 8
+bytes, flow control sent to the physical request ID. A send that loses arbitration to the
+car's traffic is retried (up to 16 attempts within 20 ms): the ESP32-S3's CAN controller
+would otherwise try each frame only once.
 
 ## Live data screens
 
@@ -185,3 +189,4 @@ to measure before printing: see `CAD/README.md`.
 2. Settings in NVS, DTC read/clear (Service 03/07/0A/04), freeze frame (Service 02) (done)
 3. Live data screens: Drive / Race / Tune (done)
 4. SD card logging (done)
+5. Back cover for the car (designed in `CAD/`, waiting for measurements, not printed)

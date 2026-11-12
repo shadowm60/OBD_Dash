@@ -7,3 +7,4 @@ components/hmi/src/ui/.eez-project-build
 
 #FreeCAD backups
 *.FCBak
+__pycache__/

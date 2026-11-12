@@ -1035,8 +1035,6 @@ CONFIG_CAN_TX=15
 CONFIG_CAN_RX=16
 # default:
 CONFIG_CAN_BITRATE=500000
-# default:
-# CONFIG_CAN_ACCEPT_ALL is not set
 # end of CAN
 
 #
@@ -1049,6 +1047,13 @@ CONFIG_DATALOG_SYNC_PERIOD_MS=2000
 # end of Data logging
 
 #
+# Display brightness
+#
+# default:
+CONFIG_BACKLIGHT_PWM_GPIO=-1
+# end of Display brightness
+
+#
 # OBD
 #
 # default:
@@ -1057,6 +1062,8 @@ CONFIG_OBD_RESPONSE_TIMEOUT_MS=150
 CONFIG_OBD_MAX_CONSECUTIVE_TIMEOUTS=8
 # default:
 CONFIG_OBD_RECONNECT_DELAY_MS=2000
+# default:
+CONFIG_OBD_KEEPALIVE_MS=0
 # end of OBD
 # end of BSW Configuration
 
@@ -4174,16 +4181,14 @@ CONFIG_LV_FONT_MONTSERRAT_30=y
 # CONFIG_LV_FONT_MONTSERRAT_36 is not set
 # default:
 # CONFIG_LV_FONT_MONTSERRAT_38 is not set
-# default:
-# CONFIG_LV_FONT_MONTSERRAT_40 is not set
+CONFIG_LV_FONT_MONTSERRAT_40=y
 # default:
 # CONFIG_LV_FONT_MONTSERRAT_42 is not set
 # default:
 # CONFIG_LV_FONT_MONTSERRAT_44 is not set
 # default:
 # CONFIG_LV_FONT_MONTSERRAT_46 is not set
-# default:
-# CONFIG_LV_FONT_MONTSERRAT_48 is not set
+CONFIG_LV_FONT_MONTSERRAT_48=y
 # default:
 # CONFIG_LV_FONT_MONTSERRAT_12_SUBPX is not set
 # default:

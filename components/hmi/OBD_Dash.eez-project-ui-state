@@ -1,6 +1,6 @@
 {
   "navigation": {
-    "selectedUserPageObject": "[OBD_Dash.eez-project]:/userPages/0",
+    "selectedUserPageObject": "[OBD_Dash.eez-project]:/userPages/3",
     "selectedGlobalVariableObject": "[OBD_Dash.eez-project]:/variables/globalVariables/9",
     "subnavigationSelectedItems": {
       "variables-tab/sub-navigation/selected-item": "Widgets"
@@ -196,12 +196,23 @@
               "children": [
                 {
                   "type": "tab",
-                  "id": "#05fd0d89-9ba0-4efe-93cb-2dbbd023ad65",
-                  "name": "startup",
+                  "id": "#43acceb8-ef67-4ee7-8e34-a9bbf39d8338",
+                  "name": "drive",
                   "component": "editor",
                   "config": {
-                    "objectPath": "[OBD_Dash.eez-project]:/userPages/0",
+                    "objectPath": "[OBD_Dash.eez-project]:/userPages/3",
                     "permanent": false
+                  },
+                  "icon": "svg:page"
+                },
+                {
+                  "type": "tab",
+                  "id": "#05fd0d89-9ba0-4efe-93cb-2dbbd023ad65",
+                  "name": "clearDTC",
+                  "component": "editor",
+                  "config": {
+                    "objectPath": "[OBD_Dash.eez-project]:/userPages/2",
+                    "permanent": true
                   },
                   "icon": "svg:page"
                 }
@@ -1164,7 +1175,9 @@
         "position": 0,
         "secondToPx": 200,
         "scrollLeft": 0
-      }
+      },
+      "selectionFront": {},
+      "selectionBack": {}
     },
     "[OBD_Dash.eez-project]:/userPages/4[flow-state]": {
       "selection": {},
@@ -1180,7 +1193,9 @@
         "position": 0,
         "secondToPx": 200,
         "scrollLeft": 0
-      }
+      },
+      "selectionFront": {},
+      "selectionBack": {}
     },
     "[OBD_Dash.eez-project]:/userPages/3[flow-state]": {
       "selection": {},
@@ -1189,14 +1204,16 @@
           "x": -400,
           "y": -240
         },
-        "scale": 1
+        "scale": 0.8
       },
       "timeline": {
         "isEditorActive": false,
         "position": 0,
         "secondToPx": 200,
         "scrollLeft": 0
-      }
+      },
+      "selectionFront": {},
+      "selectionBack": {}
     },
     "[OBD_Dash.eez-project]:/userPages/6[flow-state]": {
       "selection": {
@@ -1242,6 +1259,40 @@
       },
       "selectionFront": {},
       "selectionBack": {}
+    },
+    "[OBD_Dash.eez-project]:/userPages/1[flow-state]": {
+      "selectionFront": {},
+      "selectionBack": {},
+      "transform": {
+        "translate": {
+          "x": -400,
+          "y": -240
+        },
+        "scale": 0.8
+      },
+      "timeline": {
+        "isEditorActive": false,
+        "position": 0,
+        "secondToPx": 200,
+        "scrollLeft": 0
+      }
+    },
+    "[OBD_Dash.eez-project]:/userPages/2[flow-state]": {
+      "selectionFront": {},
+      "selectionBack": {},
+      "transform": {
+        "translate": {
+          "x": -400,
+          "y": -240
+        },
+        "scale": 0.8
+      },
+      "timeline": {
+        "isEditorActive": false,
+        "position": 0,
+        "secondToPx": 200,
+        "scrollLeft": 0
+      }
     }
   },
   "activeOutputSection": 0,

@@ -4,3 +4,6 @@ build/*
 managed_components/*
 #EEZ Studio build marker
 components/hmi/src/ui/.eez-project-build
+
+#FreeCAD backups
+*.FCBak

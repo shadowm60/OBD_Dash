@@ -187,6 +187,12 @@ Done:
 - **FPS:** with logging on, the owner saw ~40 % CPU and 15 FPS before the optimisations.
   It has not been re-measured since.
 
+- **Back cover** (`CAD/`, 2026-11-12): FreeCAD macro `obd_dash_cover.py` modelled on
+  `~/git/FP_Dash/CAD` (7"). Sizes from Waveshare's 5" dimension drawing; values
+  marked MEASURE / estimated in the spreadsheet are guesses. `freecad.cmd
+  CAD/obd_dash_cover.py` must print `CHECK OK`; `CAD/render_preview.py` redraws
+  `preview/`. Not printed yet.
+
 Open ideas (only on request):
 - Freeze Frame button on the Read DTCs screen (the screen exists but is unreachable).
 - Delete the unused clearDTC page.

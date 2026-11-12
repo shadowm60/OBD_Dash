@@ -171,6 +171,14 @@ SD card root, numbered so nothing is overwritten. Times are seconds since boot (
 Files are synced every `CONFIG_DATALOG_SYNC_PERIOD_MS` (2 s); untick the box before
 pulling the card. Status line shows `REC` while a log is open.
 
+## Enclosure
+
+`CAD/` holds a 3D-printable back cover for the display: a parametric FreeCAD
+macro, the STL/STEP exports and preview pictures. It has a chin below the glass
+for the car cable, side openings for USB-C / microSD / BOOT / RESET, and an
+AMPS mount pattern. Car wiring (KL15 → VIN, KL31 → GND, CAN-H, CAN-L) and what
+to measure before printing: see `CAD/README.md`.
+
 ## Roadmap
 
 1. Communication layer (done: can_if, obd, comsm, vehicle_data, ui_bridge)

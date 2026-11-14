@@ -99,6 +99,88 @@ static live_value_t s_values[] = {
     SIG(V_FUEL_RATE,  FUEL_RATE,   1),
 };
 
+/* ---------------------------------------------------------------- peak hold (Race)
+ * Max RPM, max boost, min / max AFR since the last reset (tap one of them on
+ * the Race view). Each new sample counts once (by timestamp). AFR only while
+ * the throttle is >= AFR_PEAK_MIN_THROTTLE % (if throttle is polled), so
+ * idle and fuel cut on overrun (lambda reads very lean) don't spoil it. */
+#define AFR_PEAK_MIN_THROTTLE   50.0f
+
+typedef struct {
+    float    lo, hi;
+    bool     have;
+    uint32_t last_ts;
+} peak_t;
+
+static peak_t s_pk_rpm, s_pk_boost, s_pk_afr;
+static char   s_pk_text[3][24];
+
+static void peak_add(peak_t *p, float x, uint32_t ts)
+{
+    if (p->have && ts == p->last_ts) {
+        return;
+    }
+    p->last_ts = ts;
+    if (!p->have) {
+        p->lo = p->hi = x;
+        p->have = true;
+    } else {
+        p->lo = x < p->lo ? x : p->lo;
+        p->hi = x > p->hi ? x : p->hi;
+    }
+}
+
+static void peak_text(int i, uint32_t var, const char *text)
+{
+    if (strcmp(text, s_pk_text[i]) != 0) {
+        strlcpy(s_pk_text[i], text, sizeof(s_pk_text[i]));
+        eez_var_set_string(var, text);
+    }
+}
+
+void live_values_reset_peaks(void)
+{
+    memset(&s_pk_rpm, 0, sizeof(s_pk_rpm));
+    memset(&s_pk_boost, 0, sizeof(s_pk_boost));
+    memset(&s_pk_afr, 0, sizeof(s_pk_afr));
+}
+
+static void refresh_peaks(void)
+{
+    vd_sample_t rpm, map, lam, thr;
+    if (vd_get(VD_RPM, STALE_AFTER_MS, &rpm)) {
+        peak_add(&s_pk_rpm, rpm.value, rpm.ts_ms);
+    }
+    float b;
+    if (vd_get(VD_MAP, STALE_AFTER_MS, &map) && boost(&b)) {
+        peak_add(&s_pk_boost, b, map.ts_ms);
+    }
+    bool thr_known = vd_get(VD_THROTTLE, STALE_AFTER_MS, &thr);
+    if (vd_get(VD_LAMBDA, STALE_AFTER_MS, &lam) && (!thr_known || thr.value >= AFR_PEAK_MIN_THROTTLE)) {
+        peak_add(&s_pk_afr, lam.value * AFR_STOICH, lam.ts_ms);
+    }
+
+    char t[24];
+    if (s_pk_rpm.have) {
+        snprintf(t, sizeof(t), "max %.0f", s_pk_rpm.hi);
+    } else {
+        strcpy(t, "max --");
+    }
+    peak_text(0, FLOW_GLOBAL_VARIABLE_V_RPM_PEAK, t);
+    if (s_pk_boost.have) {
+        snprintf(t, sizeof(t), "max %.2f", s_pk_boost.hi);
+    } else {
+        strcpy(t, "max --");
+    }
+    peak_text(1, FLOW_GLOBAL_VARIABLE_V_BOOST_PEAK, t);
+    if (s_pk_afr.have) {
+        snprintf(t, sizeof(t), "%.1f - %.1f", s_pk_afr.lo, s_pk_afr.hi);
+    } else {
+        strcpy(t, thr_known ? "min/max at WOT" : "min/max --");
+    }
+    peak_text(2, FLOW_GLOBAL_VARIABLE_V_AFR_PEAK, t);
+}
+
 static int  s_mil = -1;         /* -1 = never sent */
 static char s_mil_text[24];
 
@@ -145,4 +227,5 @@ void live_values_refresh(void)
         }
     }
     refresh_mil();
+    refresh_peaks();
 }

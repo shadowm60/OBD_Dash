@@ -221,6 +221,27 @@ static void setup_page(lv_obj_t *scr)
     bake_background(scr);
 }
 
+/* Race view peak hold: a tap on RPM peak / BOOST / AFR resets all peaks.
+ * A swipe that started there is not a tap. */
+static void peak_reset_cb(lv_event_t *e)
+{
+    lv_indev_t *indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) != LV_DIR_NONE) {
+        return;
+    }
+    live_values_reset_peaks();
+}
+
+static void make_peak_tap(lv_obj_t *o)
+{
+    if (o == NULL) {
+        return;
+    }
+    /* clickable for the tap; long press and swipe still reach the screen */
+    lv_obj_add_flag(o, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_EVENT_BUBBLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(o, peak_reset_cb, LV_EVENT_SHORT_CLICKED, NULL);
+}
+
 void live_view_init(void)
 {
     rescale(objects.drive_rpm_gauge, &s_rpm1000_fix);
@@ -230,4 +251,8 @@ void live_view_init(void)
     setup_page(objects.drive);
     setup_page(objects.live_data);
     setup_page(objects.tune);
+
+    make_peak_tap(objects.race_rpm_peak);
+    make_peak_tap(objects.race_boost_tile);
+    make_peak_tap(objects.race_afr_tile);
 }

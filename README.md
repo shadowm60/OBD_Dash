@@ -141,6 +141,14 @@ The original two-gauge screen (`liveData` in EEZ) with three tiles on each side.
 | COOLANT | °C | 05 | right column |
 | OIL | °C | 5C | right column, engine oil temperature |
 | CHECK ENGINE | – | 01 | see MIL below |
+| max (under the RPM gauge) | rpm | 0C | peak hold |
+| max (BOOST tile) | bar | 0B (+ 33) | peak hold |
+| min - max (AFR tile) | AFR | 24 or 34 (+ 11) | peak hold, only while throttle >= 50 % (any throttle if PID 11 is not polled), so idle and overrun fuel cut don't count |
+
+**Peak hold:** kept since boot or the last reset, also over a disconnect. Tap the RPM max,
+the BOOST tile or the AFR tile to reset all three (a swipe starting there still changes
+screens; a long press still returns to the OBD page). Every new sample counts, at the
+rate the PID is polled.
 
 ### Tune
 

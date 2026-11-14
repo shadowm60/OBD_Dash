@@ -114,6 +114,7 @@ void diag_view_refresh(void);
 void pid_select_view_refresh(void);
 void pid_select_view_build(void);           /* Select parameters list, built when the page opens */
 void live_values_refresh(void);
+void live_values_reset_peaks(void);         /* Race view peak hold */
 
 /* Modal message box with an OK button. */
 void view_show_message(const char *title, const char *text);

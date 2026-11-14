@@ -3,7 +3,7 @@
  * screens). Runs every 100 ms from ui_bridge. Inputs are two-way bound EEZ
  * variables: read back, stored in settings, applied to comsm / datalog.
  *
- *   obd_conn_sel, obd_rusefi_id, obd_log_params, obd_read_speed (inputs)
+ *   obd_log_params, obd_read_speed (inputs)
  *   obd_speed_text, obd_detail                                  (texts)
  *   obd_mil_text + objects.obd_mil_bt: MIL telltale (PID 01), only while connected
  *   can_log_raw, can_log_all (inputs), can_log_info             (CAN page)
@@ -23,8 +23,6 @@
 #include "vehicle_data.h"
 #include "screens.h"
 
-static uivar_t v_conn = UIVAR("obd_conn_sel");
-static uivar_t v_rusefi = UIVAR("obd_rusefi_id");
 static uivar_t v_log_params = UIVAR("obd_log_params");
 static uivar_t v_speed = UIVAR("obd_read_speed");
 static uivar_t v_speed_text = UIVAR("obd_speed_text");
@@ -68,8 +66,6 @@ void view_obd_init(void)
 {
     app_settings_t cfg;
     settings_get(&cfg);
-    uv_int(&v_conn, cfg.conn_method);
-    uv_strf(&v_rusefi, "%u", cfg.rusefi_base_id);
     uv_bool(&v_log_params, cfg.log_params);
     uv_int(&v_speed, cfg.pids_per_request);
     uv_bool(&v_log_raw, cfg.log_raw);
@@ -82,19 +78,6 @@ void view_obd_init(void)
 
 static void read_inputs(const app_settings_t *cfg)
 {
-    int conn = uv_get_int(&v_conn, cfg->conn_method);
-    if (conn >= 0 && conn <= SETTINGS_CONN_RUSEFI) {
-        settings_set_conn_method((uint8_t)conn);
-    }
-
-    char id[8];
-    uv_get_str(&v_rusefi, id, sizeof(id));
-    char *end;
-    long v = strtol(id, &end, 10);
-    if (id[0] != '\0' && *end == '\0' && v >= 0 && v <= 0x7FF) {
-        settings_set_rusefi_base_id((uint16_t)v);
-    }
-
     bool params = uv_get_bool(&v_log_params, cfg->log_params);
     bool raw = uv_get_bool(&v_log_raw, cfg->log_raw);
     bool all = uv_get_bool(&v_log_all, cfg->log_all_traffic);

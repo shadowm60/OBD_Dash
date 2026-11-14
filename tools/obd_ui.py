@@ -98,8 +98,6 @@ VARIABLES = {
     'obd_log_params': ('boolean', 'false'),
     'obd_read_speed': ('integer', '6'),
     'obd_speed_text': ('string', '""'),
-    'obd_conn_sel': ('integer', '0'),
-    'obd_rusefi_id': ('string', '"512"'),
     # dtc
     'read_dtc_text': ('string', '""'),
     # can
@@ -326,29 +324,28 @@ def page_home(b):
 def page_obd(b):
     iw = CW - 26
     bw = (iw - 20) // 3
+    top_h = 172                 # status + detail (up to 4 lines, full width under the buttons)
+    mid_y = TOP + top_h + 10
+    bot_y = mid_y + 112 + 10
     return [
-        b.panel(CX, TOP, CW, 112, [
+        b.panel(CX, TOP, CW, top_h, [
             b.label('conn_status', 0, 0, iw - 310, 20, expr=True, wrap=True),
-            b.label('obd_detail', 0, 54, iw - 310, 16, GREY, expr=True, wrap=True),
+            b.label('obd_detail', 0, 68, iw, 16, GREY, expr=True, wrap=True),
             # MIL telltale (PID 01, always polled), only while connected; tap = DTC page
             ident(b.button('obd_mil_text', iw - 290, 0, 70, 60, 'nav_readdtc', BTN, font=24, expr=True), 'obd_mil_bt'),
             b.button('conn_button_text', iw - 210, 0, 210, 60, 'conn_button_pressed', ACCENT, expr=True),
         ]),
-        b.panel(CX, TOP + 122, CW, 112, [
+        b.panel(CX, mid_y, CW, 112, [
             b.label('Live views  (swipe left / right to switch, up / down to come back)', 0, 0, None, 16, GREY),
             b.button('Drive', 0, 28, bw, 58, 'obd_drive', ACCENT, font=24),
             b.button('Race', bw + 10, 28, bw, 58, 'obd_race', ACCENT, font=24),
             b.button('Tune', 2 * (bw + 10), 28, bw, 58, 'obd_tune', ACCENT, font=24),
         ]),
-        b.panel(CX, TOP + 244, CW, CH - 244, [
+        b.panel(CX, bot_y, CW, TOP + CH - bot_y, [
             b.button('Select parameters', 0, 0, 250, 48, 'nav_params', font=20),
-            b.checkbox('Log parameters to SD (CSV)', 'obd_log_params', 270, 10, 16),
-            b.label('obd_speed_text', 0, 66, 300, 16, expr=True),
-            b.slider('obd_read_speed', 1, 6, 8, 98, 280),
-            b.label('Connection', 330, 66, None, 16, GREY),
-            b.dropdown(None, 'obd_conn_sel', 330, 90, 190, literal_options=['OBD-II', 'rusEFI'], font=16),
-            b.label('rusEFI ID', 535, 66, None, 16, GREY),
-            b.textarea('obd_rusefi_id', 535, 90, iw - 535, '512', maxlen=4, accepted='0123456789'),
+            b.label('obd_speed_text', 270, 0, iw - 270, 16, expr=True),
+            b.slider('obd_read_speed', 1, 6, 278, 30, 300),
+            b.checkbox('Log parameters to SD (CSV)', 'obd_log_params', 0, 62, 16),
         ]),
     ]
 

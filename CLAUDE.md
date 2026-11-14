@@ -247,7 +247,7 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   0100 / custom command, last 19 lines.
 - **A1 tested OK** (2026-11-14): ATZ -> ELM327 v2.3, ATRV 11.7V, 0100 -> 41 00 9E 3F 80 03
   from the simulator (bench: ECUs need KL15; the adapter itself only needs pin 16).
-- **A2 done, built, not run yet:** obd_client has two links (`obd_client_set_link`,
+- **A2 tested OK on the bench (2026-11-14):** connect, discovery, running over the 2S. obd_client has two links (`obd_client_set_link`,
   OBD_LINK_CAN / OBD_LINK_ELM); `obd_elm.c` = ELM327 backend (set-up ATZ ATE0 ATL0 ATS0
   ATH1 ATSP6 ATAT1 on first use, ATSH / ATCRA only on change, frames reassembled from the
   header lines, result reported only at the '>' prompt, NO DATA = timeout, abort sends CR

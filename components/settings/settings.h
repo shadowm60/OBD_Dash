@@ -41,6 +41,7 @@ typedef struct {
     char     page[SETTINGS_PAGE_LEN];   /* EEZ screen name of the last page, restored at boot */
     uint8_t  screen_timeout_idx;    /* Display page list index, 0 = never */
     uint8_t  can_bitrate_idx;       /* CAN page: 0 125k, 1 250k, 2 500k, 3 1M */
+    uint8_t  obd_link;              /* OBD page: 0 board CAN, 1 BLE ELM327 adapter (obd_link_t) */
 } app_settings_t;
 
 /* Initialises NVS (erasing it if the partition is corrupt/outdated) and loads

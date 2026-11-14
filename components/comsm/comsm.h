@@ -54,6 +54,10 @@ void comsm_toggle(void);
  * comsm falls back to 1 by itself. Applied immediately. */
 void comsm_set_pids_per_request(uint8_t n);
 
+/* Link to the car (obd_link_t: board CAN / ELM327 adapter), used from the
+ * next connect on. */
+void comsm_set_link(uint8_t link);
+
 void comsm_get_status(comsm_status_t *out);
 
 /* ------------------------------------------------------------ diagnostics

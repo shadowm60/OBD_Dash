@@ -7,6 +7,7 @@
 #include "can_if.h"
 #include "isotp.h"
 #include "sdkconfig.h"
+#include "obd_elm.h"
 
 static const char *TAG = "obd_client";
 
@@ -30,6 +31,38 @@ static uint32_t      s_deadline_ms;
 static uint8_t       s_resp[OBD_MAX_RESPONSE];
 static uint16_t      s_resp_len;
 static uint8_t       s_nrc;
+
+static obd_link_t    s_link_kind = OBD_LINK_CAN;
+static bool          s_elm_busy;        /* adapter still working on the request (no prompt yet) */
+
+void obd_client_set_link(obd_link_t link)
+{
+    if (link != s_link_kind) {
+        ESP_LOGI(TAG, "link: %s", link == OBD_LINK_ELM ? "ELM327 adapter (BLE)" : "board CAN");
+    }
+    s_link_kind = link;
+    obd_elm_invalidate();
+}
+
+obd_link_t obd_client_link(void)
+{
+    return s_link_kind;
+}
+
+void obd_client_set_elm_io(const obd_elm_io_t *io)
+{
+    obd_elm_set_io(io);
+}
+
+void obd_client_elm_invalidate(void)
+{
+    obd_elm_invalidate();
+}
+
+const char *obd_client_link_error(void)
+{
+    return s_link_kind == OBD_LINK_ELM ? obd_elm_error() : "";
+}
 
 esp_err_t obd_client_init(void)
 {
@@ -62,11 +95,27 @@ static void finish(obd_req_status_t st)
 
 esp_err_t obd_client_request(const uint8_t *req, uint16_t len)
 {
-    if (s_status == OBD_REQ_PENDING) {
+    if (s_status == OBD_REQ_PENDING || s_elm_busy) {
         return ESP_ERR_INVALID_STATE;
     }
     if (req == NULL || len == 0 || len > sizeof(s_req)) {
         return ESP_ERR_INVALID_ARG;
+    }
+
+    if (s_link_kind == OBD_LINK_ELM) {
+        xQueueReset(s_rx_queue);
+        memcpy(s_req, req, len);
+        s_req_len = len;
+        s_resp_len = 0;
+        s_nrc = 0;
+        s_locked_rx_id = s_phys_rx_id;
+        s_status = OBD_REQ_PENDING;
+        if (obd_elm_request(s_tx_id, s_phys_rx_id, req, len) != ESP_OK) {
+            finish(OBD_REQ_ERROR);
+            return ESP_FAIL;
+        }
+        s_elm_busy = true;
+        return ESP_OK;
     }
 
     /* Throw away anything left over from a previous (timed out) exchange. */
@@ -90,6 +139,10 @@ esp_err_t obd_client_request(const uint8_t *req, uint16_t len)
 
 void obd_client_abort(void)
 {
+    if (s_elm_busy) {
+        obd_elm_abort();
+        s_elm_busy = false;
+    }
     s_status = OBD_REQ_IDLE;
 }
 
@@ -131,8 +184,51 @@ static void evaluate_response(const uint8_t *r, uint16_t len)
     finish(OBD_REQ_DONE);
 }
 
+static void elm_msg(uint32_t id, const uint8_t *msg, uint16_t len, void *arg)
+{
+    if (s_status != OBD_REQ_PENDING) {
+        return;                             /* answered already (another ECU, extra frames) */
+    }
+    if (s_locked_rx_id == 0) {
+        s_locked_rx_id = id;                /* functional: first responder */
+    } else if (id != s_locked_rx_id) {
+        return;
+    }
+    evaluate_response(msg, len);
+    if (s_status == OBD_REQ_PENDING && len >= 3 && msg[0] == 0x7F && msg[2] == NRC_RESPONSE_PENDING) {
+        obd_elm_extend(5000);
+    }
+}
+
+/* ELM link: the result is reported once the adapter shows its prompt, so the
+ * next command never cuts into a running one. */
+static obd_req_status_t process_elm(uint32_t wait_ms)
+{
+    if (s_elm_busy) {
+        obd_elm_result_t r = obd_elm_poll(wait_ms, elm_msg, NULL);
+        if (r == OBD_ELM_PENDING) {
+            return OBD_REQ_PENDING;
+        }
+        s_elm_busy = false;
+        if (s_status == OBD_REQ_PENDING) {
+            finish(r == OBD_ELM_ERROR ? OBD_REQ_ERROR : OBD_REQ_TIMEOUT);   /* NO DATA = no answer */
+        }
+    }
+    obd_req_status_t st = s_status;
+    s_status = OBD_REQ_IDLE;
+    if (st == OBD_REQ_IDLE && wait_ms) {
+        vTaskDelay(pdMS_TO_TICKS(wait_ms));
+    }
+    return st;
+}
+
 obd_req_status_t obd_client_process(uint32_t wait_ms)
 {
+    if (s_link_kind == OBD_LINK_ELM) {
+        xQueueReset(s_rx_queue);            /* board CAN frames are not ours now */
+        return process_elm(wait_ms);
+    }
+
     /* Terminal states are reported exactly once. */
     if (s_status != OBD_REQ_PENDING) {
         obd_req_status_t st = s_status;

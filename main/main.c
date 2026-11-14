@@ -38,6 +38,7 @@
 #include "canmon.h"
 #include "io_svc.h"
 #include "web_svc.h"
+#include "obd_client.h"
 
 static const char *TAG = "app_main";
 
@@ -95,6 +96,16 @@ void app_main(void)
     ESP_ERROR_CHECK(canmon_init());
     ESP_ERROR_CHECK(io_svc_init());
     ESP_ERROR_CHECK(comsm_init());
+    /* OBD can also run through a BLE ELM327 adapter (OBD page: Link) */
+    static const obd_elm_io_t elm_io = {
+        .ready = ble_svc_serial_ready, .write = ble_svc_serial_write, .read = ble_svc_serial_read,
+    };
+    obd_client_set_elm_io(&elm_io);
+    {
+        app_settings_t c;
+        settings_get(&c);
+        comsm_set_link(c.obd_link);
+    }
     ESP_ERROR_CHECK(datalog_init(MOUNT_POINT));
     log_heap("obd");
 

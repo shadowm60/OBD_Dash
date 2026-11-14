@@ -32,6 +32,7 @@ static req_kind_t     s_pending;
 static int            s_pending_idx[OBD_MAX_PIDS_PER_REQUEST]; /* catalogue indexes for REQ_POLL */
 static size_t         s_pending_n;          /* 0 = keepalive */
 static volatile uint8_t s_batch_cfg = 1;    /* PIDs per request wanted (UI) */
+static volatile uint8_t s_link_cfg = OBD_LINK_CAN;  /* link wanted (UI), applied at connect */
 static uint8_t        s_batch_limit;        /* what this ECU accepts, <= s_batch_cfg */
 static uint8_t        s_batch_applied;      /* s_batch_cfg value s_batch_limit was set from */
 static uint8_t        s_discovery_pid;
@@ -135,6 +136,7 @@ static void go_retry_wait(void)
 static void start_connect(void)
 {
     obd_client_abort();
+    obd_client_set_link((obd_link_t)s_link_cfg);
     obd_client_set_functional();
     obd_pid_reset_supported();
     status_update(st_reset, 0);
@@ -425,6 +427,11 @@ void comsm_set_pids_per_request(uint8_t n)
     }
     /* Applied before the next request; also retries after an ECU rejected it. */
     s_batch_cfg = n;
+}
+
+void comsm_set_link(uint8_t link)
+{
+    s_link_cfg = link == OBD_LINK_ELM ? OBD_LINK_ELM : OBD_LINK_CAN;
 }
 
 void comsm_get_status(comsm_status_t *out)

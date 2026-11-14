@@ -80,7 +80,7 @@ the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on eve
 | Page | What it does |
 |---|---|
 | **Home** | Board and firmware, uptime, clock, free RAM; one line per service (OBD, CAN, Wi-Fi, BLE, SD, logging) |
-| **OBD** | Connect / disconnect, ECU status, MIL telltale next to Connect while connected (red = MIL on, amber = stored codes without MIL, green = none; tap = DTC page), the three live views, Select parameters, read speed, log parameters |
+| **OBD** | Connect / disconnect, ECU status, MIL telltale next to Connect while connected (red = MIL on, amber = stored codes without MIL, green = none; tap = DTC page), the three live views, Select parameters, read speed, log parameters, Link: board CAN or a BLE ELM327 adapter (connect it on the BLE page first; used from the next Connect) |
 | **DTC** | Read / clear / save the trouble codes, freeze frame. Read (and Clear, freeze frame) connect to the ECU first when OBD is not connected; it stays connected afterwards |
 | **Dash** | placeholder: custom dash from a DBC (rusEFI first), see CLAUDE.md roadmap |
 | **Diag** | placeholder: UDS diagnostics (VW group, Mercedes), see CLAUDE.md roadmap |

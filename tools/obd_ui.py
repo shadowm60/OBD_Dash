@@ -100,6 +100,7 @@ VARIABLES = {
     'conn_button_text': ('string', '"Connect"'),
     'obd_detail': ('string', '""'),
     'obd_mil_text': ('string', '""'),
+    'obd_link_sel': ('integer', '0'),
     'obd_log_params': ('boolean', 'false'),
     'obd_read_speed': ('integer', '6'),
     'obd_speed_text': ('string', '""'),
@@ -355,6 +356,9 @@ def page_obd(b):
             b.label('obd_speed_text', 270, 0, iw - 270, 16, expr=True),
             b.slider('obd_read_speed', 1, 6, 278, 30, 300),
             b.checkbox('Log parameters to SD (CSV)', 'obd_log_params', 0, 62, 16),
+            b.label('Link', 300, 66, None, 16, GREY),
+            # order = obd_link_t (obd_client.h)
+            b.dropdown(None, 'obd_link_sel', 350, 54, 240, literal_options=['Board CAN', 'BLE adapter'], font=16),
         ]),
     ]
 

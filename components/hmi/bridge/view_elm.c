@@ -15,6 +15,9 @@
 #include "esp_log.h"
 #include "bridge.h"
 #include "ble_svc.h"
+#include "comsm.h"
+#include "settings.h"
+#include "obd_client.h"
 
 static const char *TAG = "view_elm";
 
@@ -75,9 +78,21 @@ static void rx_bytes(const char *p, size_t n)
     }
 }
 
+/* OBD is using the adapter: the console must neither read its replies nor send. */
+static bool obd_owns_adapter(void)
+{
+    comsm_status_t cs;
+    comsm_get_status(&cs);
+    return cs.state != COMSM_IDLE && obd_client_link() == OBD_LINK_ELM;
+}
+
 static void send(const char *cmd)
 {
     char line[LINE_LEN];
+    if (obd_owns_adapter()) {
+        push_line("(OBD is using the adapter: Disconnect on the OBD page first)");
+        return;
+    }
     if (!ble_svc_serial_ready()) {
         push_line("(no serial port: connect the adapter on the BLE page)");
         return;
@@ -92,6 +107,7 @@ static void send(const char *cmd)
     if (ble_svc_serial_write(tx, (size_t)n) != ESP_OK) {
         push_line("(send failed)");
     }
+    obd_client_elm_invalidate();        /* OBD sets the adapter up again before using it */
 }
 
 void view_elm_send(const char *cmd)
@@ -129,7 +145,8 @@ void view_elm_update(bool visible)
 {
     char buf[256];
     size_t n;
-    while ((n = ble_svc_serial_read(buf, sizeof(buf), 0)) > 0) {
+    bool obd = obd_owns_adapter();
+    while (!obd && (n = ble_svc_serial_read(buf, sizeof(buf), 0)) > 0) {
         rx_bytes(buf, n);
     }
     if (!visible) {
@@ -138,7 +155,9 @@ void view_elm_update(bool visible)
 
     static ble_svc_status_t st;     /* LVGL task only, ~1.5 KB */
     ble_svc_get_status(&st);
-    if (st.serial_ready) {
+    if (st.serial_ready && obd) {
+        uv_strf(&v_info, "%s\nin use by OBD", st.peer_name[0] ? st.peer_name : st.peer_addr);
+    } else if (st.serial_ready) {
         uv_strf(&v_info, "%s\nserial: %s", st.peer_name[0] ? st.peer_name : st.peer_addr, st.serial_info);
     } else if (st.state == BLE_SVC_CONNECTED) {
         uv_str(&v_info, st.svc_done ? "connected, no serial port found" : "connected, looking for the serial port...");

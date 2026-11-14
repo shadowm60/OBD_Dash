@@ -245,6 +245,17 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   a 4 KB PSRAM stream buffer, writes split to MTU-3, MTU exchange at connect). Console:
   sub-page `ble_console` (BLE page button "Adapter console"), view_elm.c, ATZ / ATI / ATRV /
   0100 / custom command, last 19 lines.
+- **A1 tested OK** (2026-11-14): ATZ -> ELM327 v2.3, ATRV 11.7V, 0100 -> 41 00 9E 3F 80 03
+  from the simulator (bench: ECUs need KL15; the adapter itself only needs pin 16).
+- **A2 done, built, not run yet:** obd_client has two links (`obd_client_set_link`,
+  OBD_LINK_CAN / OBD_LINK_ELM); `obd_elm.c` = ELM327 backend (set-up ATZ ATE0 ATL0 ATS0
+  ATH1 ATSP6 ATAT1 on first use, ATSH / ATCRA only on change, frames reassembled from the
+  header lines, result reported only at the '>' prompt, NO DATA = timeout, abort sends CR
+  and waits for the prompt). obd stays BLE-free: main passes `obd_elm_io_t` (ble_svc_serial_*).
+  comsm applies `comsm_set_link()` at every connect; setting `obd_link`; OBD page "Link"
+  dropdown. Console stays off the adapter while OBD runs on it and makes OBD re-init after
+  any console command. Not yet: raw CAN log of the ELM conversation (A3), speed tuning
+  (response-count digit / ATST), auto-connect of the adapter (A4).
 - Steps: A1 GATT client in ble_svc (find serial char, notify on, write, RX buffer) + a raw
   ELM test on the BLE page (ATZ, ATI, 0100); A2 `car_link` interface (request/response with
   tx/rx IDs, timeouts) with two backends, board CAN (obd_client / isotp) and ELM327; comsm

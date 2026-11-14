@@ -3,7 +3,7 @@
  * screens). Runs every 100 ms from ui_bridge. Inputs are two-way bound EEZ
  * variables: read back, stored in settings, applied to comsm / datalog.
  *
- *   obd_log_params, obd_read_speed (inputs)
+ *   obd_log_params, obd_read_speed, obd_link_sel (inputs)
  *   obd_speed_text, obd_detail                                  (texts)
  *   obd_mil_text + objects.obd_mil_bt: MIL telltale (PID 01), only while connected
  *   can_log_raw, can_log_all (inputs), can_log_info             (CAN page)
@@ -19,6 +19,7 @@
 #include "settings.h"
 #include "comsm.h"
 #include "obd_pids.h"
+#include "obd_client.h"
 #include "datalog.h"
 #include "vehicle_data.h"
 #include "screens.h"
@@ -32,6 +33,7 @@ static uivar_t v_log_all = UIVAR("can_log_all");
 static uivar_t v_log_info = UIVAR("can_log_info");
 
 static uivar_t v_mil = UIVAR("obd_mil_text");
+static uivar_t v_link = UIVAR("obd_link_sel");
 
 static uint32_t s_log_errors;
 static int      s_mil_level = -1;      /* 0 hidden (unknown), 1 ok, 2 DTCs, 3 MIL on */
@@ -68,6 +70,7 @@ void view_obd_init(void)
     settings_get(&cfg);
     uv_bool(&v_log_params, cfg.log_params);
     uv_int(&v_speed, cfg.pids_per_request);
+    uv_int(&v_link, cfg.obd_link);
     uv_bool(&v_log_raw, cfg.log_raw);
     uv_bool(&v_log_all, cfg.log_all_traffic);
     comsm_set_pids_per_request(cfg.pids_per_request);
@@ -78,6 +81,14 @@ void view_obd_init(void)
 
 static void read_inputs(const app_settings_t *cfg)
 {
+    int link = uv_get_int(&v_link, cfg->obd_link);
+    if ((link == OBD_LINK_CAN || link == OBD_LINK_ELM) && link != cfg->obd_link) {
+        app_settings_t c = *cfg;
+        c.obd_link = (uint8_t)link;
+        settings_put(&c);
+        comsm_set_link((uint8_t)link);      /* from the next Connect on */
+    }
+
     bool params = uv_get_bool(&v_log_params, cfg->log_params);
     bool raw = uv_get_bool(&v_log_raw, cfg->log_raw);
     bool all = uv_get_bool(&v_log_all, cfg->log_all_traffic);

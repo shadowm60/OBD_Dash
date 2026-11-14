@@ -17,6 +17,7 @@
 #include "eez_vars.h"
 #include "comsm.h"
 #include "obd_pids.h"
+#include "obd_client.h"
 #include "datalog.h"
 #include "vehicle_data.h"
 #include "settings.h"
@@ -98,9 +99,15 @@ static void format_status(const comsm_status_t *s, char *buf, size_t len)
                  (unsigned long)s->ecu_id, obd_pid_active_count(), s->supported_pids, s->request_rate,
                  logging_active() ? " - REC" : "");
         break;
-    case COMSM_RETRY_WAIT:
-        snprintf(buf, len, "No response - retrying");
+    case COMSM_RETRY_WAIT: {
+        const char *e = obd_client_link_error();
+        if (e[0]) {
+            snprintf(buf, len, "No response (%s) - retrying", e);
+        } else {
+            snprintf(buf, len, "No response - retrying");
+        }
         break;
+    }
     }
 }
 

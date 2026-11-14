@@ -7,6 +7,10 @@
  *   functional: requests to 0x7DF, first responder in 0x7E8..0x7EF is locked
  *               for the rest of that request (other ECUs are ignored)
  *   physical:   requests to <ecu>-8, only <ecu> is accepted
+ *
+ * Link: the board's CAN (TWAI + ISO-TP, default) or an ELM327 adapter on a
+ * serial link (BLE), same requests and results. The adapter is set to CAN
+ * 11-bit 500 kbit/s and does ISO-TP itself (single frame requests only).
  */
 #ifndef OBD_CLIENT_H
 #define OBD_CLIENT_H
@@ -33,7 +37,29 @@ typedef enum {
     OBD_REQ_ERROR,      /* transport error (TX failed, ISO-TP error) */
 } obd_req_status_t;
 
+typedef enum {
+    OBD_LINK_CAN = 0,       /* board CAN (TWAI) */
+    OBD_LINK_ELM = 1,       /* ELM327 adapter, serial I/O from obd_client_set_elm_io() */
+} obd_link_t;
+
+/* Serial I/O of the ELM327 adapter (e.g. ble_svc_serial_*). read waits up to
+ * wait_ms for the first byte. */
+typedef struct {
+    bool      (*ready)(void);
+    esp_err_t (*write)(const void *data, size_t len);
+    size_t    (*read)(void *buf, size_t max, uint32_t wait_ms);
+} obd_elm_io_t;
+
 esp_err_t obd_client_init(void);
+
+/* Not while a request is pending (comsm switches only while idle). */
+void        obd_client_set_link(obd_link_t link);
+obd_link_t  obd_client_link(void);
+void        obd_client_set_elm_io(const obd_elm_io_t *io);
+/* Something else (console) talked to the adapter: set it up again. */
+void        obd_client_elm_invalidate(void);
+/* Last link problem, e.g. "adapter not connected", "CAN ERROR"; "" if none. */
+const char *obd_client_link_error(void);
 
 void obd_client_set_functional(void);
 void obd_client_set_physical(uint32_t ecu_resp_id);

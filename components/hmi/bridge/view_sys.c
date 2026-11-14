@@ -29,6 +29,7 @@
 #include "can_if.h"
 #include "datalog.h"
 #include "canmon.h"
+#include "io_svc.h"
 #include "sd_card.h"
 
 #define EPOCH_VALID 1700000000
@@ -182,6 +183,12 @@ void view_home_update(bool visible)
         return;
     }
     char up[24], clock[48] = "not set (Wi-Fi sets it, the RTC keeps it)";
+    io_svc_status_t io;
+    io_svc_get_status(&io);
+    char temp[16] = "-";
+    if (io.temp_ok) {
+        snprintf(temp, sizeof(temp), "%.1f C", io.chip_temp_c);
+    }
     time_t t = time(NULL);
     if (t > EPOCH_VALID) {
         struct tm tm;
@@ -194,13 +201,14 @@ void view_home_update(bool visible)
             "Internal RAM free:  %u kB (min %u kB)\n"
             "Largest internal block:  %u kB\n"
             "PSRAM free:  %u kB\n"
+            "Chip temperature:  %s\n"
             "Reset reason:  %d",
             fmt_duration(uptime_s(), up, sizeof(up)), clock,
             (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
             (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024),
             (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024),
             (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
-            (int)esp_reset_reason());
+            temp, (int)esp_reset_reason());
 
     comsm_status_t c;
     comsm_get_status(&c);
@@ -237,8 +245,10 @@ void view_home_update(bool visible)
     } else {
         snprintf(log, sizeof(log), "off");
     }
-    uv_strf(&v_svcs, "OBD:  %s\nCAN:  %s\nWi-Fi:  %s\nBLE:  %s\nSD card:  %s    Logging:  %s",
-            obd, can, wifi, ble, waveshare_sd_card_mounted() ? "mounted" : "not mounted", log);
+    uv_strf(&v_svcs, "OBD:  %s\nCAN:  %s\nWi-Fi:  %s\nBLE:  %s\nSD card:  %s    Logging:  %s\n"
+            "Outputs:  DO0 %s, DO1 %s",
+            obd, can, wifi, ble, waveshare_sd_card_mounted() ? "mounted" : "not mounted", log,
+            io.do_on[0] ? "ON" : "off", io.do_on[1] ? "ON" : "off");
 }
 
 /* ---------------------------------------------------------------- display */

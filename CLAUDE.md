@@ -194,9 +194,16 @@ Steps, each built, committed and tested on the board by the owner before the nex
    logger: datalog stays the only logger). Bitrate (stored) / listen-only (not stored)
    only change while OBD is idle; Connect leaves listen-only first. ID table in
    `unscii_8` (objects.can_id_table).
-5. IO page. Research first: CH422G sets ALL IO0-7 in or out together (system register
-   bit IO_OE), but EXIO1-4 must stay outputs (touch reset, backlight, LCD reset, SD CS).
-   Find how Waveshare reads DI0/DI1 on this board (their DI/DO example).
+5. **Done, built, not run yet:** IO page + `io_svc`. CH422G datasheet (WCH CH422DS1):
+   IO_OE is ONE bit for all IO0-7, and RD-IO returns pin levels only with IO_OE = 0.
+   So `ch422g_read_io()` (board/i2c_io.c) holds the SD card's SPI bus
+   (`waveshare_sd_bus_lock`, a dummy SPI device; sdspi takes the bus per command),
+   sets IO_OE = 0, reads, restores outputs: ~0.3 ms with SD CS / LCD reset / touch
+   reset / backlight enable floating on the weak pull-up. DI read only while the IO
+   page is open (100 ms). DI active = line low (PC814 pulls EXIO0 / EXIO5 down;
+   4.7k pull-up). DO = OC0 / OC1 via `ch422g_write_oc()`, low = on; OC written high at
+   init. Ask the owner to watch for display / SD glitches with the IO page open while
+   logging.
 
 `sdkconfig` (local) got the step 1 options by hand; the previous copy is not kept.
 

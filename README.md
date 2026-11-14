@@ -31,6 +31,7 @@ isotp           ISO 15765-2 transport (isotp-c) + glue to can_if
 can_if          esp_twai driver: start / restart (bitrate, listen-only), TX queue with retries,
                 RX dispatch by ID range, two monitor taps (log, bus monitor), bus stats
 datalog         SD logging task: raw CAN (candump .log) + polled parameters (.csv)
+io_svc          IO page: DI / DO through the CH422G, I2C scan, chip temperature
 canmon          CAN page bus monitor: ID table, rates, bus load (from Esp32_monitor, without its logger)
 wifi_svc        Wi-Fi station: scan, connect, stored network, SNTP clock (from Esp32_monitor)
 ble_svc         Bluetooth LE central (NimBLE): scan, connect, pair (from Esp32_monitor)
@@ -83,10 +84,21 @@ the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on eve
 | **CAN** | Bus monitor: every ID on the bus (DLC, last data, count, period; our own OBD requests too), frames/s, peak, bus load, error counters. Bitrate and listen-only (only while OBD is disconnected; Connect switches listen-only off). Raw log options |
 | **Wi-Fi** | Scan, connect, forget, connect at boot; IP, RSSI, SNTP time (stored in the RTC) |
 | **BLE** | 10 s scan, connect + pair, GATT services, forget bonds |
-| **IO** | Placeholder (DI / DO, I2C scan: later step) |
+| **IO** | Isolated inputs DI0 / DI1 (state, change counters; read only while the page is open), outputs DO0 / DO1 (tap to switch; off at power-up), I2C scan of the terminal's SDA / SCL, chip temperature |
 | **Display** | Brightness, screen timeout, gauge animation, SD card (remount), restart |
 
 Text fields open an on-screen keyboard.
+
+### Inputs and outputs (terminal block)
+
+- **DI0 / DI1:** optocoupler inputs, 5-36 V between DIN0/DIN1 and DI COM, either polarity
+  (NPN / PNP sensors, dry contacts with DI COM to the supply). Active = current flows.
+- **DO0 / DO1:** optocoupler-isolated open-drain outputs to GND, 5-36 V, max 450 mA each.
+  Off at power-up, never stored.
+- The inputs sit on the CH422G IO expander, which has a single direction bit for all eight
+  IO pins: reading them means switching every pin to input for ~0.3 ms, the SD card's CS
+  included. The read holds the SD card's SPI bus meanwhile (between two SD commands), and
+  only runs while the IO page is open.
 
 ## Live data screens
 

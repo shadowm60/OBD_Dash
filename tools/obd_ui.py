@@ -112,6 +112,14 @@ VARIABLES = {
     'can_load': ('integer', '0'),
     'can_load_text': ('string', '""'),
     'can_ids': ('string', '""'),
+    # io
+    'io_di0_text': ('string', '"DI0: -"'),
+    'io_di1_text': ('string', '"DI1: -"'),
+    'io_di_info': ('string', '""'),
+    'io_do0_text': ('string', '"DO0: off"'),
+    'io_do1_text': ('string', '"DO1: off"'),
+    'io_chip_text': ('string', '""'),
+    'i2c_text': ('string', '"not scanned yet"'),
     # wifi
     'wifi_list': ('string', '"(press Scan)"'),
     'wifi_sel': ('integer', '0'),
@@ -139,6 +147,7 @@ ACTIONS = [
     'nav_params', 'nav_freeze',
     'conn_button_pressed', 'obd_drive', 'obd_race', 'obd_tune',
     'can_start_stop', 'can_reset',
+    'io_do0_toggle', 'io_do1_toggle', 'io_reset', 'i2c_scan',
     'wifi_scan', 'wifi_connect', 'wifi_disconnect', 'wifi_forget',
     'ble_scan', 'ble_connect', 'ble_disconnect', 'ble_forget',
     'sd_remount', 'screen_off', 'restart',
@@ -305,9 +314,9 @@ def chrome(b, active, title):
 def page_home(b):
     w2 = (CW - 10) // 2
     return [
-        b.panel(CX, TOP, w2, 250, [b.label('home_info', 0, 0, w2 - 26, 16, expr=True, wrap=True)]),
-        b.panel(CX + w2 + 10, TOP, w2, 250, [b.label('home_live', 0, 0, w2 - 26, 16, expr=True, wrap=True)]),
-        b.panel(CX, TOP + 260, CW, CH - 260, [
+        b.panel(CX, TOP, w2, 230, [b.label('home_info', 0, 0, w2 - 26, 16, expr=True, wrap=True)]),
+        b.panel(CX + w2 + 10, TOP, w2, 230, [b.label('home_live', 0, 0, w2 - 26, 16, expr=True, wrap=True)]),
+        b.panel(CX, TOP + 240, CW, CH - 240, [
             b.label('Services', 0, 0, None, 16, GREY),
             b.label('home_services', 0, 26, CW - 26, 16, expr=True, wrap=True)]),
     ]
@@ -447,10 +456,26 @@ def page_ble(b):
 
 
 def page_io(b):
+    iw = CW - 26
+    w2 = (iw - 20) // 2
     return [
-        b.panel(CX, TOP, CW, CH, [
-            b.label('Isolated inputs DI0 / DI1 (5-36 V), outputs DO0 / DO1 (open drain) and an I2C scan '
-                    'of the terminal\'s SDA / SCL come in a later step.', 0, 0, CW - 26, 16, GREY, wrap=True),
+        b.panel(CX, TOP, CW, 170, [
+            b.label('Digital inputs  (5-36 V between DIN0 / DIN1 and DI COM, either polarity)', 0, 0, None, 16, GREY),
+            b.label('io_di0_text', 0, 30, w2, 24, expr=True),
+            b.label('io_di1_text', w2 + 20, 30, w2, 24, expr=True),
+            b.label('io_di_info', 0, 72, iw - 200, 12, GREY, expr=True, wrap=True),
+            b.button('Reset counters', iw - 180, 100, 180, 36, 'io_reset', font=16),
+        ]),
+        b.panel(CX, TOP + 180, CW, 110, [
+            b.label('Outputs  (open drain to GND, 5-36 V, max 450 mA each, off at power-up)', 0, 0, None, 16, GREY),
+            b.button('io_do0_text', 0, 30, w2, 50, 'io_do0_toggle', ACCENT, expr=True),
+            b.button('io_do1_text', w2 + 20, 30, w2, 50, 'io_do1_toggle', ACCENT, expr=True),
+        ]),
+        b.panel(CX, TOP + 300, CW, CH - 300, [
+            b.label('io_chip_text', 0, 0, iw, 16, expr=True),
+            b.label('I2C on the terminal (SDA / SCL, shared with touch, IO expander, RTC)', 0, 28, None, 12, GREY),
+            b.button('Scan I2C', 0, 54, 140, 44, 'i2c_scan', ACCENT, font=16),
+            b.label('i2c_text', 155, 62, iw - 155, 16, expr=True, wrap=True),
         ]),
     ]
 

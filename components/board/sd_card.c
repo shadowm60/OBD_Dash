@@ -4,6 +4,7 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
+#include "driver/spi_master.h"
 #include "i2c_io.h"
 
 static const char *TAG = "sdcard";
@@ -11,6 +12,7 @@ static const char *TAG = "sdcard";
 static sdmmc_card_t *s_card;
 static sdmmc_host_t  s_host = SDSPI_HOST_DEFAULT();
 static bool          s_bus_ok;
+static spi_device_handle_t s_lock_dev;      /* dummy device: holds the bus for the CH422G, see header */
 
 static esp_err_t bus_init(void)
 {
@@ -31,6 +33,12 @@ static esp_err_t bus_init(void)
         return err;
     }
     s_bus_ok = true;
+    const spi_device_interface_config_t dev = {
+        .clock_speed_hz = 1000000, .mode = 0, .spics_io_num = -1, .queue_size = 1,
+    };
+    if (spi_bus_add_device(s_host.slot, &dev, &s_lock_dev) != ESP_OK) {
+        s_lock_dev = NULL;
+    }
     return ESP_OK;
 }
 
@@ -86,4 +94,16 @@ esp_err_t waveshare_sd_card_remount(void)
 bool waveshare_sd_card_mounted(void)
 {
     return s_card != NULL;
+}
+
+esp_err_t waveshare_sd_bus_lock(void)
+{
+    return s_lock_dev ? spi_device_acquire_bus(s_lock_dev, portMAX_DELAY) : ESP_OK;
+}
+
+void waveshare_sd_bus_unlock(void)
+{
+    if (s_lock_dev) {
+        spi_device_release_bus(s_lock_dev);
+    }
 }

@@ -34,6 +34,10 @@ extern void action_screen_off(lv_event_t * e);
 extern void action_restart(lv_event_t * e);
 extern void action_can_start_stop(lv_event_t * e);
 extern void action_can_reset(lv_event_t * e);
+extern void action_io_do0_toggle(lv_event_t * e);
+extern void action_io_do1_toggle(lv_event_t * e);
+extern void action_io_reset(lv_event_t * e);
+extern void action_i2c_scan(lv_event_t * e);
 
 #ifdef __cplusplus
 }

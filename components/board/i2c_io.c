@@ -1,5 +1,6 @@
 #include "i2c_io.h"
 #include "waveshare_rgb_lcd_port.h"
+#include "sd_card.h"
 #include "driver/i2c_master.h"
 #include "esp_check.h"
 #include "freertos/FreeRTOS.h"
@@ -19,12 +20,14 @@ static const char *TAG = "CH422G";
 #define CH422G_ADDR_SYSTEM  0x24
 #define CH422G_ADDR_OUTPUT  0x38
 #define CH422G_ADDR_INPUT   0x26
-#define CH422G_SYS_IO_OE    0x01
+#define CH422G_ADDR_OC      0x23        /* write OC0..3 (DO0 / DO1 on this board) */
+#define CH422G_SYS_IO_OE    0x01        /* IO0..7 all outputs; 0 = all inputs (one bit for all 8) */
 
 static i2c_master_bus_handle_t s_bus;
 static i2c_master_dev_handle_t s_dev_system;
 static i2c_master_dev_handle_t s_dev_output;
 static i2c_master_dev_handle_t s_dev_input;
+static i2c_master_dev_handle_t s_dev_oc;
 
 static ch422g_config_t g_cfg;
 static uint8_t g_output_state = 0;   // cached output register
@@ -71,6 +74,9 @@ esp_err_t ch422g_init(const ch422g_config_t *cfg)
     ESP_RETURN_ON_ERROR(add_device(CH422G_ADDR_SYSTEM, &s_dev_system), TAG, "add sys dev");
     ESP_RETURN_ON_ERROR(add_device(CH422G_ADDR_OUTPUT, &s_dev_output), TAG, "add out dev");
     ESP_RETURN_ON_ERROR(add_device(CH422G_ADDR_INPUT, &s_dev_input), TAG, "add in dev");
+    ESP_RETURN_ON_ERROR(add_device(CH422G_ADDR_OC, &s_dev_oc), TAG, "add oc dev");
+    uint8_t oc = 0x0F;                  /* OC high = DO0 / DO1 off (also the power-on state) */
+    i2c_master_transmit(s_dev_oc, &oc, 1, I2C_MASTER_TIMEOUT_MS);
 
     // All outputs start low
     g_output_state = 0;
@@ -112,6 +118,43 @@ esp_err_t ch422g_read_pin(uint8_t pin, uint8_t *level)
 i2c_master_bus_handle_t board_i2c_bus(void)
 {
     return s_bus;
+}
+
+/* CH422G datasheet: RD-IO returns the pin levels only while IO_OE = 0 (all IO
+ * pins inputs, weak ~5 uA pull-up); with IO_OE = 1 it returns the output
+ * register. So: hold the SD card's SPI bus (EXIO4 = SD CS floats up), switch
+ * to inputs, read, switch back and restore the outputs. ~0.3 ms; touch reset,
+ * LCD reset and backlight enable stay high meanwhile (pull-up + capacitance).
+ * EXIO0 / EXIO5 (DI0 / DI1) are driven low while in output mode, which never
+ * fights the optocouplers that pull them low. */
+esp_err_t ch422g_read_io(uint8_t *levels)
+{
+    if (s_lock == NULL || s_dev_input == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    waveshare_sd_bus_lock();
+    uint8_t in_mode = 0x00;
+    esp_err_t err = i2c_master_transmit(s_dev_system, &in_mode, 1, I2C_MASTER_TIMEOUT_MS);
+    if (err == ESP_OK) {
+        err = i2c_master_receive(s_dev_input, levels, 1, I2C_MASTER_TIMEOUT_MS);
+    }
+    esp_err_t back = ch422g_write_reg(g_output_state);   /* IO_OE = 1 + output levels */
+    waveshare_sd_bus_unlock();
+    xSemaphoreGive(s_lock);
+    return err != ESP_OK ? err : back;
+}
+
+esp_err_t ch422g_write_oc(uint8_t bits)
+{
+    if (s_lock == NULL || s_dev_oc == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    uint8_t v = bits & 0x0F;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    esp_err_t err = i2c_master_transmit(s_dev_oc, &v, 1, I2C_MASTER_TIMEOUT_MS);
+    xSemaphoreGive(s_lock);
+    return err;
 }
 
 /**

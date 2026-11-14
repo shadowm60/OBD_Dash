@@ -39,6 +39,7 @@ static void fast_cb(lv_timer_t *t)
     view_wifi_update(nav_is("wifi"));
     view_ble_update(nav_is("ble"));
     view_can_update(nav_is("can"));
+    view_io_update(nav_is("io"));
     view_display_update(nav_is("display"));
     screen_poll();
     apply_vars(false);      /* draw in this same lv_timer_handler() pass */

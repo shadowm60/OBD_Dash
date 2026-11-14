@@ -43,6 +43,12 @@ void action_obd_tune(lv_event_t *e)        { nav_go_anim("tune", LV_SCR_LOAD_ANI
 void action_can_start_stop(lv_event_t *e)  { view_can_start_stop(); }
 void action_can_reset(lv_event_t *e)       { view_can_reset(); }
 
+/* IO page */
+void action_io_do0_toggle(lv_event_t *e)   { view_io_toggle_do0(); }
+void action_io_do1_toggle(lv_event_t *e)   { view_io_toggle_do1(); }
+void action_io_reset(lv_event_t *e)        { view_io_reset(); }
+void action_i2c_scan(lv_event_t *e)        { view_io_i2c_scan(); }
+
 /* Wi-Fi / BLE */
 void action_wifi_scan(lv_event_t *e)       { view_wifi_scan(); }
 void action_wifi_connect(lv_event_t *e)    { view_wifi_connect(); }

@@ -92,6 +92,12 @@ void     view_can_start_stop(void);
 void     view_can_reset(void);
 void     view_can_prepare_obd(void);        /* before OBD connects: leave listen-only */
 uint32_t view_can_bitrate(uint8_t idx);     /* can_bitrate_idx -> bit/s */
+/* IO page (view_io.c) */
+void view_io_update(bool visible);
+void view_io_toggle_do0(void);
+void view_io_toggle_do1(void);
+void view_io_reset(void);
+void view_io_i2c_scan(void);
 /* OBD + CAN page options, logging (view_obd.c) */
 void view_obd_init(void);
 void view_obd_update(void);                 /* 100 ms, ui_bridge */

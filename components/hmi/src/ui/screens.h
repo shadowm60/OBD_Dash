@@ -450,6 +450,23 @@ typedef struct _objects_t {
     lv_obj_t *obj393;
     lv_obj_t *obj394;
     lv_obj_t *obj395;
+    lv_obj_t *obj396;
+    lv_obj_t *obj397;
+    lv_obj_t *obj398;
+    lv_obj_t *obj399;
+    lv_obj_t *obj400;
+    lv_obj_t *obj401;
+    lv_obj_t *obj402;
+    lv_obj_t *obj403;
+    lv_obj_t *obj404;
+    lv_obj_t *obj405;
+    lv_obj_t *obj406;
+    lv_obj_t *obj407;
+    lv_obj_t *obj408;
+    lv_obj_t *obj409;
+    lv_obj_t *obj410;
+    lv_obj_t *obj411;
+    lv_obj_t *obj412;
 } objects_t;
 
 extern objects_t objects;

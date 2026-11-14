@@ -30,6 +30,14 @@ esp_err_t ch422g_init(const ch422g_config_t *cfg);
 esp_err_t ch422g_write_pin(uint8_t pin, uint8_t level);
 esp_err_t ch422g_read_pin(uint8_t pin, uint8_t *level);
 
+/* Pin levels of IO0..7 (bit n = EXIOn), see i2c_io.c for how. On this board:
+ * bit 0 = DI0, bit 5 = DI1 (low = input active, the optocoupler conducts). */
+esp_err_t ch422g_read_io(uint8_t *levels);
+
+/* OC0..3 output register (bit n = OCn, 1 = high). On this board OC0 / OC1
+ * drive DO0 / DO1 through optocouplers: low = output on. */
+esp_err_t ch422g_write_oc(uint8_t bits);
+
 
 void i2c_io_init(void);
 

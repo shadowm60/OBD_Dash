@@ -24,4 +24,11 @@ esp_err_t waveshare_sd_card_remount(void);
 
 bool waveshare_sd_card_mounted(void);
 
+/* The card's CS is the CH422G's EXIO4, held low. Reading the CH422G's inputs
+ * (DI0 / DI1) releases all its IO pins for a moment, CS included: the reader
+ * holds the SPI bus meanwhile, between two SD commands (the SD driver takes
+ * the bus per command). No-ops if the SPI bus was never set up. */
+esp_err_t waveshare_sd_bus_lock(void);
+void waveshare_sd_bus_unlock(void);
+
 #endif

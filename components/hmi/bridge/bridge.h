@@ -85,6 +85,9 @@ void view_ble_scan(void);
 void view_ble_connect(void);
 void view_ble_disconnect(void);
 void view_ble_forget(void);
+/* Diag page (view_diag.c) */
+void view_diag_update(bool visible);
+void view_diag_scan(void);
 /* Dash page (view_dash.c) */
 void view_dash_update(bool visible);
 void view_dash_reload(void);

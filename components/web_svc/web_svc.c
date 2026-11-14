@@ -23,9 +23,12 @@ static const char *TAG = "web_svc";
 static const char *const PREFIXES[] = { "can_", "par_", "evt_", "dtc_" };
 #define NPREFIXES (sizeof(PREFIXES) / sizeof(PREFIXES[0]))
 
-/* DBC files for the Dash page (dash_svc reads this folder): "dbc/<name>.dbc" in the API */
+/* Database folders: "dbc/<name>.dbc" (Dash page) and "diag/<name>.txt" (Diag page)
+ * in the API, uploadable. */
 #define DBC_DIR     MOUNT_POINT "/db/dbc"
 #define DBC_KEY     "dbc/"
+#define DIAG_DIR    MOUNT_POINT "/db/diag"
+#define DIAG_KEY    "diag/"
 #define MAX_UPLOAD  (1024 * 1024)
 
 static httpd_handle_t s_srv;
@@ -49,10 +52,11 @@ static const char PAGE[] =
 "</style></head><body><h1>OBD Dash &ndash; log files</h1><div id=card></div>"
 "<div class=bar><button onclick=load()>Refresh</button>"
 "<button class=del id=dsel onclick=delsel() disabled>Delete selected</button><span id=msg></span></div>"
-"<div id=list></div><div class=up>Upload a DBC file (Dash page, then Reload DBC on the dash): "
-"<input type=file id=f accept='.dbc'> <button onclick=up()>Upload</button></div><script>"
+"<div id=list></div><div class=up>Upload a database file: .dbc for the Dash page, .txt for the Diag page "
+"(docs/diag_db.md): <input type=file id=f accept='.dbc,.txt'> <button onclick=up()>Upload</button></div><script>"
 "const G=[['can_','CAN traces (can_)'],['par_','Parameter logs (par_)'],['evt_','Event logs (evt_)'],"
-"['dtc_','DTC reports (dtc_)'],['dbc/','DBC files for the Dash page (db/dbc/)']];"
+"['dtc_','DTC reports (dtc_)'],['dbc/','DBC files for the Dash page (db/dbc/)'],"
+"['diag/','Diagnostic databases for the Diag page (db/diag/)']];"
 "function sz(b){return b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' kB':(b/1048576).toFixed(1)+' MB'}"
 "function esc(s){return s.replace(/[&<>\"']/g,c=>'&#'+c.charCodeAt(0)+';')}"
 "function tm(t){if(t<1700000000)return'';let d=new Date(t*1000);return d.toLocaleString()}"
@@ -81,7 +85,8 @@ static const char PAGE[] =
 "let k=0;for(const n of s){msg('Deleting '+n+' ...');if(!await rm(n))break;k++}"
 "if(k==s.length)msg(k+' file(s) deleted');load()}"
 "async function up(){let f=document.getElementById('f').files[0];if(!f)return;msg('Uploading '+f.name+' ...');"
-"let r=await fetch('/up/dbc/'+encodeURIComponent(f.name),{method:'POST',body:f});"
+"let d=f.name.toLowerCase().endsWith('.dbc')?'dbc/':'diag/';"
+"let r=await fetch('/up/'+d+encodeURIComponent(f.name),{method:'POST',body:f});"
 "msg(r.ok?f.name+' uploaded':'Upload failed: '+await r.text());document.getElementById('f').value='';load()}"
 "load()</script></body></html>";
 
@@ -111,6 +116,12 @@ static bool is_log_name(const char *name)
     return false;
 }
 
+static bool is_diag_name(const char *name)
+{
+    size_t n = strlen(name);
+    return n > 4 && strcasecmp(name + n - 4, ".txt") == 0;
+}
+
 static bool is_dbc_name(const char *name)
 {
     size_t n = strlen(name);
@@ -135,14 +146,15 @@ static bool parse_target(const char *uri, const char *prefix, char *name, size_t
     }
     name[n] = '\0';
     bool dbc = strncmp(name, DBC_KEY, strlen(DBC_KEY)) == 0;
-    const char *file = dbc ? name + strlen(DBC_KEY) : name;
+    bool diag = strncmp(name, DIAG_KEY, strlen(DIAG_KEY)) == 0;
+    const char *file = dbc ? name + strlen(DBC_KEY) : diag ? name + strlen(DIAG_KEY) : name;
     /* plain names only: no path, no control characters */
     if (file[0] == '\0' || strpbrk(file, "/\\:*?\"<>|") != NULL || strstr(file, "..") != NULL) return false;
     for (const char *c = file; *c; c++) {
         if ((unsigned char)*c < 0x20) return false;
     }
-    if (dbc ? !is_dbc_name(file) : !is_log_name(file)) return false;
-    snprintf(path, plen, "%s/%s", dbc ? DBC_DIR : MOUNT_POINT, file);
+    if (dbc ? !is_dbc_name(file) : diag ? !is_diag_name(file) : !is_log_name(file)) return false;
+    snprintf(path, plen, "%s/%s", dbc ? DBC_DIR : diag ? DIAG_DIR : MOUNT_POINT, file);
     return true;
 }
 
@@ -206,6 +218,7 @@ static esp_err_t list_get(httpd_req_t *req)
     if (sd) {
         list_dir(req, MOUNT_POINT, "", is_log_name, &k);
         list_dir(req, DBC_DIR, DBC_KEY, is_dbc_name, &k);
+        list_dir(req, DIAG_DIR, DIAG_KEY, is_diag_name, &k);
     }
     httpd_resp_sendstr_chunk(req, "]}");
     return httpd_resp_send_chunk(req, NULL, 0);
@@ -251,17 +264,21 @@ static esp_err_t del_post(httpd_req_t *req)
     return httpd_resp_sendstr(req, "ok");
 }
 
-/* Upload: only DBC files, into DBC_DIR (written to a temp file, renamed when complete). */
+/* Upload: only database files (dbc/, diag/), written to a temp file and renamed when complete. */
 static esp_err_t up_post(httpd_req_t *req)
 {
     char name[NAME_MAX_], path[sizeof(DBC_DIR) + NAME_MAX_ + 1], tmp[sizeof(DBC_DIR) + 16];
     if (!parse_target(req->uri, "/up/", name, sizeof(name), path, sizeof(path))) return fail(req, "400 Bad Request", "bad file name");
-    if (strncmp(name, DBC_KEY, strlen(DBC_KEY)) != 0) return fail(req, "403 Forbidden", "only .dbc files can be uploaded");
+    bool diag = strncmp(name, DIAG_KEY, strlen(DIAG_KEY)) == 0;
+    if (!diag && strncmp(name, DBC_KEY, strlen(DBC_KEY)) != 0) {
+        return fail(req, "403 Forbidden", "only .dbc (Dash) and .txt (Diag) database files can be uploaded");
+    }
+    const char *dir = diag ? DIAG_DIR : DBC_DIR;
     if (!waveshare_sd_card_mounted()) return fail(req, "503 Service Unavailable", "no SD card");
     if (req->content_len > MAX_UPLOAD) return fail(req, "413 Payload Too Large", "file too big (1 MB max)");
     mkdir(MOUNT_POINT "/db", 0775);
-    mkdir(DBC_DIR, 0775);
-    snprintf(tmp, sizeof(tmp), DBC_DIR "/upload.tmp");
+    mkdir(dir, 0775);
+    snprintf(tmp, sizeof(tmp), "%s/upload.tmp", dir);
     FILE *f = fopen(tmp, "w");
     if (f == NULL) return fail(req, "500 Internal Server Error", "cannot create the file");
     char *buf = heap_caps_malloc(BLOCK, MALLOC_CAP_SPIRAM);

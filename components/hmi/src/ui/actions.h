@@ -53,6 +53,7 @@ extern void action_dash_apply(lv_event_t * e);
 extern void action_nav_dash_signals(lv_event_t * e);
 extern void action_dash_tile_save(lv_event_t * e);
 extern void action_dash_tile_clear(lv_event_t * e);
+extern void action_diag_scan(lv_event_t * e);
 
 #ifdef __cplusplus
 }

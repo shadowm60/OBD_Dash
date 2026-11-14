@@ -99,7 +99,13 @@ void obd_elm_invalidate(void)
 
 bool obd_elm_ready(void)
 {
-    return s_io.ready && s_io.ready();
+    static bool was;
+    bool r = s_io.ready && s_io.ready();
+    if (r && !was) {
+        s_inited = false;               /* (re)connected: the adapter may have restarted */
+    }
+    was = r;
+    return r;
 }
 
 const char *obd_elm_error(void)

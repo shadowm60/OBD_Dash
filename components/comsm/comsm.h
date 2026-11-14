@@ -66,6 +66,34 @@ void comsm_set_link(uint8_t link);
 typedef void (*comsm_frame_cb_t)(uint32_t id, const uint8_t *data, uint8_t dlc, void *arg);
 void comsm_set_link_monitor(bool on, uint32_t filter, uint32_t mask, comsm_frame_cb_t cb, void *arg);
 
+/* ------------------------------------------------------------ UDS (Diag page)
+ * One raw request at a time to any ECU (tx / rx IDs), over the chosen link,
+ * only while OBD is not connected. Request up to 7 bytes (single frame, also
+ * the ELM327 limit); the answer may be multi-frame. Poll for the result. */
+#define COMSM_UDS_MAX   256
+
+typedef enum {
+    COMSM_UDS_IDLE = 0,
+    COMSM_UDS_BUSY,
+    COMSM_UDS_DONE,         /* positive answer in data */
+    COMSM_UDS_NEGATIVE,     /* 7F: nrc */
+    COMSM_UDS_TIMEOUT,      /* no answer */
+    COMSM_UDS_ERROR,        /* link problem, see error */
+} comsm_uds_state_t;
+
+typedef struct {
+    comsm_uds_state_t state;
+    uint32_t seq;           /* increments with every finished request */
+    uint8_t  nrc;
+    uint16_t len;
+    uint8_t  data[COMSM_UDS_MAX];
+    char     error[24];
+} comsm_uds_result_t;
+
+/* ESP_ERR_INVALID_STATE: OBD connected or a request still running. */
+esp_err_t comsm_uds_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, uint8_t len);
+void      comsm_uds_get(comsm_uds_result_t *out);
+
 void comsm_get_status(comsm_status_t *out);
 
 /* ------------------------------------------------------------ diagnostics

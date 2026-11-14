@@ -357,8 +357,18 @@ status) are only for it. `tools/diagdb.py` = Python reference: parse / check / d
 `Simulator.respond()` (the simulator can import it); test `tools/test/test_diagdb.py`.
 Starter file `sd/db/diag/generic.txt` (repo folder `sd/` mirrors the SD card): standard
 addresses 7E0/7E8, 7E1/7E9, identification DIDs F187.., SAE generic DTC texts.
-**C0 done** (format + Python). Next C1: C parser for the format, uds_client on the link
-layer, web upload into /db/diag, Diag page ECU scan.
+**C0 done** (format + Python).
+**C1 done, built, not run yet:** `components/diagdb` = C parser of the same format (sim
+columns skipped; PC test `tools/test/test_diagdb_c.sh`, also parses generic.txt).
+UDS requests: `comsm_uds_request(tx, rx, req<=7)` / `comsm_uds_get()`, run by the comsm
+task only while OBD is idle (REQ_UDS), over the chosen link; pauses the adapter's Dash
+monitor (3 s after the last request). `obd_client_set_ids(tx, rx)`: board CAN moves the
+subscription range (`can_if_set_subscription_range`) and opens the hardware filter
+(owner CAN_IF_ALL_DIAG) for an answer ID outside 7E8..7EF; back to functional after each
+UDS request. obd_client_set_link only re-inits the adapter when the link changes; obd_elm
+re-inits after the BLE serial port comes back. web_svc: `diag/` group, .txt upload into
+/db/diag. Diag page: database dropdown (setting `diag_db`), Scan ECUs (3E 00 to each ECU,
+NRC = present too), list with state. Next C2: tap an ECU -> identification, DTCs, clear.
 
 **D. Database on the SD card + PC tool**
 - `/sdcard/db/`: `manifest.json` (version, files, checksums), `ecus/<make>.json` (name,

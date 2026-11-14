@@ -319,6 +319,20 @@ esp_err_t can_if_subscribe(uint32_t id_min, uint32_t id_max, QueueHandle_t queue
     return ESP_OK;
 }
 
+esp_err_t can_if_set_subscription_range(QueueHandle_t queue, uint32_t id_min, uint32_t id_max)
+{
+    for (uint8_t i = 0; i < s_sub_count; i++) {
+        if (s_subs[i].queue == queue) {
+            /* the ISR may see one frame with a half updated range: harmless,
+             * subscribers check the ID themselves */
+            s_subs[i].id_min = id_min;
+            s_subs[i].id_max = id_max;
+            return ESP_OK;
+        }
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
 void can_if_set_monitor(can_if_monitor_t slot, QueueHandle_t queue)
 {
     if (slot < CAN_IF_MON_COUNT) {

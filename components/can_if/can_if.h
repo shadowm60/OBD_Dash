@@ -98,6 +98,7 @@ typedef enum {
 #define CAN_IF_ALL_LOG      0x01    /* raw log with All traffic */
 #define CAN_IF_ALL_MONITOR  0x02    /* bus monitor running */
 #define CAN_IF_ALL_DASH     0x04    /* Dash page decoding a broadcast (rusEFI) */
+#define CAN_IF_ALL_DIAG     0x08    /* diagnostics with an ECU answering outside 7E8..7EF */
 
 /* Same as can_if_start(). */
 esp_err_t can_if_init(const can_if_config_t *cfg);
@@ -123,6 +124,9 @@ esp_err_t can_if_send(const can_frame_t *frame, int timeout_ms);
 /* Copy every received frame with id_min <= id <= id_max into `queue`
  * (item size must be sizeof(can_frame_t)). Frames are dropped if the queue is full. */
 esp_err_t can_if_subscribe(uint32_t id_min, uint32_t id_max, QueueHandle_t queue);
+
+/* Change the ID range of an existing subscription (by its queue). */
+esp_err_t can_if_set_subscription_range(QueueHandle_t queue, uint32_t id_min, uint32_t id_max);
 
 /* Monitor `slot`: every accepted RX frame and every successfully sent TX frame
  * (tx = true) is copied into `queue`, regardless of subscriptions. NULL

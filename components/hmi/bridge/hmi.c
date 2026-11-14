@@ -40,6 +40,7 @@ static void fast_cb(lv_timer_t *t)
     view_ble_update(nav_is("ble"));
     view_elm_update(nav_is("ble_console"));
     view_dash_update(nav_is("dash"));
+    view_diag_update(nav_is("diag"));
     view_can_update(nav_is("can"));
     view_io_update(nav_is("io"));
     view_link_update(nav_is("io"));

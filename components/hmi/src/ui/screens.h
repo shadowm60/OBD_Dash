@@ -717,12 +717,12 @@ typedef struct _objects_t {
     lv_obj_t *obj635;
     lv_obj_t *obj636;
     lv_obj_t *obj637;
-    lv_obj_t *dash_signal_table;
     lv_obj_t *obj638;
     lv_obj_t *obj639;
     lv_obj_t *obj640;
     lv_obj_t *obj641;
     lv_obj_t *obj642;
+    lv_obj_t *dash_signal_table;
     lv_obj_t *obj643;
     lv_obj_t *obj644;
     lv_obj_t *obj645;
@@ -764,6 +764,11 @@ typedef struct _objects_t {
     lv_obj_t *obj681;
     lv_obj_t *obj682;
     lv_obj_t *obj683;
+    lv_obj_t *obj684;
+    lv_obj_t *obj685;
+    lv_obj_t *obj686;
+    lv_obj_t *obj687;
+    lv_obj_t *obj688;
 } objects_t;
 
 extern objects_t objects;

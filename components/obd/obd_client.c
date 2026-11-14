@@ -69,9 +69,9 @@ void obd_client_set_link(obd_link_t link)
 {
     if (link != s_link_kind) {
         ESP_LOGI(TAG, "link: %s", link == OBD_LINK_ELM ? "ELM327 adapter (BLE)" : "board CAN");
+        obd_elm_invalidate();           /* set the adapter up again when it is used next */
     }
     s_link_kind = link;
-    obd_elm_invalidate();
 }
 
 obd_link_t obd_client_link(void)
@@ -137,18 +137,38 @@ esp_err_t obd_client_init(void)
     return can_if_subscribe(OBD_ECU_RESP_ID_MIN, OBD_ECU_RESP_ID_MAX, s_rx_queue);
 }
 
+/* Board CAN: receive range of our subscription + hardware filter for an
+ * answer ID outside the OBD range (UDS diagnostics). */
+static void rx_range(uint32_t rx)
+{
+    bool obd = rx == 0 || (rx >= OBD_ECU_RESP_ID_MIN && rx <= OBD_ECU_RESP_ID_MAX);
+    if (s_rx_queue) {
+        can_if_set_subscription_range(s_rx_queue, obd ? OBD_ECU_RESP_ID_MIN : rx, obd ? OBD_ECU_RESP_ID_MAX : rx);
+    }
+    can_if_set_accept_all(CAN_IF_ALL_DIAG, !obd);
+}
+
 void obd_client_set_functional(void)
 {
     s_tx_id = OBD_FUNCTIONAL_REQ_ID;
     s_phys_rx_id = 0;
+    rx_range(0);
 }
 
 void obd_client_set_physical(uint32_t ecu_resp_id)
 {
     s_phys_rx_id = ecu_resp_id;
     s_tx_id = ecu_resp_id - 8;
+    rx_range(ecu_resp_id);
     ESP_LOGI(TAG, "physical addressing: tx 0x%03lX rx 0x%03lX",
              (unsigned long)s_tx_id, (unsigned long)s_phys_rx_id);
+}
+
+void obd_client_set_ids(uint32_t tx_id, uint32_t rx_id)
+{
+    s_tx_id = tx_id;
+    s_phys_rx_id = rx_id;
+    rx_range(rx_id);
 }
 
 static void finish(obd_req_status_t st)

@@ -1,5 +1,8 @@
 #include "comsm.h"
 
+#include <string.h>
+#include <stdio.h>
+
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
@@ -20,7 +23,7 @@ static const char *TAG = "comsm";
 
 typedef enum { CMD_CONNECT, CMD_DISCONNECT, CMD_TOGGLE, CMD_READ_DTC, CMD_CLEAR_DTC, CMD_FREEZE_FRAME } cmd_t;
 
-typedef enum { REQ_NONE, REQ_PROBE, REQ_DISCOVERY, REQ_POLL, REQ_DIAG } req_kind_t;
+typedef enum { REQ_NONE, REQ_PROBE, REQ_DISCOVERY, REQ_POLL, REQ_DIAG, REQ_UDS } req_kind_t;
 
 static QueueHandle_t  s_cmd_queue;
 static comsm_status_t s_status;
@@ -40,6 +43,12 @@ static comsm_frame_cb_t  s_mon_cb;
 static void             *s_mon_arg;
 static uint32_t          s_mon_applied_filter, s_mon_applied_mask;
 static uint32_t          s_mon_retry_ms;
+/* UDS request from the Diag page: written by the UI under s_lock, run by the task */
+static volatile bool     s_uds_want;
+static uint32_t          s_uds_tx, s_uds_rx;
+static uint8_t           s_uds_req[7], s_uds_len;
+static comsm_uds_result_t s_uds;
+static uint32_t          s_uds_last_ms;
 static uint8_t        s_batch_limit;        /* what this ECU accepts, <= s_batch_cfg */
 static uint8_t        s_batch_applied;      /* s_batch_cfg value s_batch_limit was set from */
 static uint8_t        s_discovery_pid;
@@ -150,11 +159,58 @@ static void monitor_stop(void)
     }
 }
 
+/* Start a waiting UDS request (idle only). */
+static void uds_service(void)
+{
+    if (!s_uds_want || s_state != COMSM_IDLE || s_pending != REQ_NONE) {
+        return;
+    }
+    portENTER_CRITICAL(&s_lock);
+    uint8_t req[7];
+    uint8_t len = s_uds_len;
+    memcpy(req, s_uds_req, len);
+    uint32_t tx = s_uds_tx, rx = s_uds_rx;
+    s_uds_want = false;
+    portEXIT_CRITICAL(&s_lock);
+    obd_client_set_link((obd_link_t)s_link_cfg);
+    obd_client_set_ids(tx, rx);
+    send_raw(REQ_UDS, req, len);
+}
+
+esp_err_t comsm_uds_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, uint8_t len)
+{
+    if (len == 0 || len > sizeof(s_uds_req)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    portENTER_CRITICAL(&s_lock);
+    bool busy = s_state != COMSM_IDLE || s_uds_want || s_uds.state == COMSM_UDS_BUSY;
+    if (!busy) {
+        s_uds_tx = tx_id;
+        s_uds_rx = rx_id;
+        memcpy(s_uds_req, req, len);
+        s_uds_len = len;
+        s_uds.state = COMSM_UDS_BUSY;
+        s_uds_want = true;
+    }
+    portEXIT_CRITICAL(&s_lock);
+    return busy ? ESP_ERR_INVALID_STATE : ESP_OK;
+}
+
+void comsm_uds_get(comsm_uds_result_t *out)
+{
+    portENTER_CRITICAL(&s_lock);
+    *out = s_uds;
+    portEXIT_CRITICAL(&s_lock);
+}
+
 /* Idle + adapter link + wanted: keep the monitor running, pump it.
  * Returns true while it runs (the task then doesn't sleep on the queue). */
 static bool monitor_service(void)
 {
-    bool want = s_mon_want && s_state == COMSM_IDLE && s_link_cfg == OBD_LINK_ELM && s_mon_cb != NULL;
+    /* not while diagnostics talk to the adapter (pause 3 s after the last request) */
+    bool diag = s_uds_want || s_uds.state == COMSM_UDS_BUSY ||
+                (int32_t)(can_if_now_ms() - (s_uds_last_ms + 3000)) < 0;
+    bool want = s_mon_want && s_state == COMSM_IDLE && s_link_cfg == OBD_LINK_ELM && s_mon_cb != NULL && !diag;
     if (!want) {
         monitor_stop();
         return false;
@@ -324,6 +380,25 @@ static void on_request_finished(obd_req_status_t st)
         diag_on_result(st, r, len, obd_client_nrc());
         break;
 
+    case REQ_UDS: {
+        comsm_uds_state_t us = st == OBD_REQ_DONE ? COMSM_UDS_DONE
+                             : st == OBD_REQ_NEGATIVE ? COMSM_UDS_NEGATIVE
+                             : st == OBD_REQ_TIMEOUT ? COMSM_UDS_TIMEOUT : COMSM_UDS_ERROR;
+        portENTER_CRITICAL(&s_lock);
+        s_uds.state = us;
+        s_uds.nrc = obd_client_nrc();
+        s_uds.len = st == OBD_REQ_DONE ? (len > COMSM_UDS_MAX ? COMSM_UDS_MAX : len) : 0;
+        if (s_uds.len) {
+            memcpy(s_uds.data, r, s_uds.len);
+        }
+        snprintf(s_uds.error, sizeof(s_uds.error), "%s", us == COMSM_UDS_ERROR ? obd_client_link_error() : "");
+        s_uds.seq++;
+        portEXIT_CRITICAL(&s_lock);
+        s_uds_last_ms = can_if_now_ms();
+        obd_client_set_functional();        /* hardware filter back to OBD */
+        break;
+    }
+
     case REQ_NONE:
         break;
     }
@@ -469,6 +544,7 @@ static void comsm_task(void *arg)
 {
     while (1) {
         /* Sleep on the command queue while there is nothing to do on the bus. */
+        uds_service();
         bool busy = (s_state != COMSM_IDLE && s_state != COMSM_RETRY_WAIT) || s_pending != REQ_NONE;
         if (!busy && monitor_service()) {
             busy = true;                    /* the monitor poll waits for the adapter itself */

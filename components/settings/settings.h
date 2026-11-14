@@ -51,6 +51,7 @@ typedef struct {
     uint8_t  ble_adapter_addr[6];   /* little endian, as NimBLE */
     uint8_t  ble_adapter_type;
     char     ble_adapter_name[20];
+    char     diag_db[32];           /* Diag page: database file in /sdcard/db/diag, "" = the first one */
 } app_settings_t;
 
 /* Initialises NVS (erasing it if the partition is corrupt/outdated) and loads

@@ -17,6 +17,7 @@ void action_nav_ble(lv_event_t *e)         { nav_go("ble"); }
 void action_nav_io(lv_event_t *e)          { nav_go("io"); }
 void action_nav_display(lv_event_t *e)     { nav_go("display"); }
 void action_dash_reload(lv_event_t *e)     { view_dash_reload(); }
+void action_diag_scan(lv_event_t *e)       { view_diag_scan(); }
 void action_dash_apply(lv_event_t *e)      { view_dash_apply(); }
 void action_nav_dash_setup(lv_event_t *e)  { nav_go("dash_setup"); }
 void action_nav_dash_signals(lv_event_t *e) { nav_go("dash_signals"); }

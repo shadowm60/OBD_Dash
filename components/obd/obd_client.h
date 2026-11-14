@@ -77,6 +77,8 @@ const char *obd_client_link_error(void);
 
 void obd_client_set_functional(void);
 void obd_client_set_physical(uint32_t ecu_resp_id);
+/* Any request / response ID pair (UDS diagnostics, e.g. 714 / 77E). */
+void obd_client_set_ids(uint32_t tx_id, uint32_t rx_id);
 
 /* Start a request (payload = service [+ data]). Fails if one is already pending. */
 esp_err_t obd_client_request(const uint8_t *req, uint16_t len);

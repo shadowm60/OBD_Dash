@@ -274,8 +274,15 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
 **B. Dash page: custom dash from a DBC (rusEFI first)**
 - rusEFI broadcasts on CAN (base ID 512 = the removed `rusefi_base_id` setting), decoded
   with its DBC. Listen only, board CAN only (see A limits).
-- The PC tool converts `.dbc` -> compact signal file on the SD card (ID, start bit, length,
-  byte order, sign, scale, offset, unit, name); the dash only parses that.
+- Changed (2026-11-14): the dash parses the `.dbc` itself (components/dbc, pure C, PC test
+  `tools/test/test_dbc.sh`: Intel / Motorola, signed, scale / offset, 29-bit, M / mN mux,
+  short frames). No PC conversion needed; the PC tool is for the layout only.
+- **B1 done, built, not run yet:** `dash_svc` loads the first *.dbc in /sdcard/db/dbc/ (else
+  /sdcard/), decodes the board CAN through monitor slot CAN_IF_MON_DASH + accept-all owner
+  CAN_IF_ALL_DASH while the Dash page is shown; the page lists every signal (unscii_8,
+  objects.dash_signal_table) with value, unit, age; Reload DBC. web_svc: DBC group, upload
+  (`POST /up/dbc/<name>`, 1 MB max), download, delete. Needs the owner's rusEFI DBC (its
+  firmware version) and a rusEFI ECU broadcasting on the bench.
 - Tile layout + alarm limits in `/sdcard/db/dash/layout.json`, edited in the PC tool.
 
 **C. Diag page: manufacturer diagnostics over UDS (VW group, Mercedes first)**

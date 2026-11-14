@@ -35,6 +35,8 @@ io_svc          IO page: DI / DO through the CH422G, I2C scan, chip temperature
 canmon          CAN page bus monitor: ID table, rates, bus load (from Esp32_monitor, without its logger)
 wifi_svc        Wi-Fi station: scan, connect, stored network, retry in the background, SNTP clock (from Esp32_monitor)
 web_svc         log file manager over Wi-Fi (http://<IP>/): download / delete the SD card logs
+dash_svc        Dash page: decodes a CAN broadcast (rusEFI) with a DBC from the SD card
+dbc             DBC parser + frame decoder, pure C (PC test: tools/test/test_dbc.sh)
 ble_svc         Bluetooth LE central (NimBLE): scan, connect, pair (from Esp32_monitor)
 vehicle_data    latest value + timestamp of every signal (producers -> consumers)
 settings        persistent user config in NVS (one versioned blob, saved 2 s after last change)
@@ -82,7 +84,7 @@ the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on eve
 | **Home** | Board and firmware, uptime, clock, free RAM; one line per service (OBD, CAN, Wi-Fi, BLE, SD, logging) |
 | **OBD** | Connect / disconnect, ECU status, MIL telltale next to Connect while connected (red = MIL on, amber = stored codes without MIL, green = none; tap = DTC page), the three live views, Select parameters, read speed, log parameters, Link: board CAN or a BLE ELM327 adapter (connect it on the BLE page first; used from the next Connect) |
 | **DTC** | Read / clear / save the trouble codes, freeze frame. Read (and Clear, freeze frame) connect to the ECU first when OBD is not connected; it stays connected afterwards |
-| **Dash** | placeholder: custom dash from a DBC (rusEFI first), see CLAUDE.md roadmap |
+| **Dash** | live table of every signal decoded from the CAN broadcast with the DBC file in `/db/dbc/` on the SD card (rusEFI first; upload it on the web page), value, unit, age; Reload DBC. Listen only, board CAN, CAN page bitrate. The tile dash comes next |
 | **Diag** | placeholder: UDS diagnostics (VW group, Mercedes), see CLAUDE.md roadmap |
 | **CAN** | Bus monitor: every ID on the bus (DLC, last data, count, period; our own OBD requests too), frames/s, peak, bus load, error counters. Bitrate and listen-only (only while OBD is disconnected; Connect switches listen-only off). Raw log options |
 | **Wi-Fi** | Scan, connect, forget, auto connect; IP, RSSI, SNTP time (stored in the RTC), address of the log file web page |
@@ -242,7 +244,7 @@ No need to pull the card: with the dash on Wi-Fi, open `http://<IP>/` (the Wi-Fi
 page shows the address, e.g. `http://192.168.1.57/`) in a browser on the same network.
 The page lists the `can_`, `par_`, `evt_` and `dtc_` files on the card by type, newest
 first, with date and size, and the free space on the card. Click a name to download it;
-delete single files or tick several (or "select all" per type) and **Delete selected**.
+delete single files or tick several (or "select all" per type) and **Delete selected**. DBC files for the Dash page are listed too and can be uploaded there (into `/db/dbc/`).
 Files being recorded right now are marked *(recording)*: they can be downloaded (contents
 up to the last sync) but not deleted. Nothing else on the card is listed or reachable.
 There is no password, so anyone on the same network can do this; use it on your own

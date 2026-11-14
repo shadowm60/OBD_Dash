@@ -79,12 +79,14 @@ typedef struct {
 typedef enum {
     CAN_IF_MON_LOG = 0,         /* datalog: raw CAN log */
     CAN_IF_MON_VIEW,            /* canmon: bus monitor (CAN page) */
+    CAN_IF_MON_DASH,            /* dash_svc: DBC decoding (Dash page) */
     CAN_IF_MON_COUNT,
 } can_if_monitor_t;
 
 /* Owners of "accept all IDs" (the filter is open while any of them wants it). */
 #define CAN_IF_ALL_LOG      0x01    /* raw log with All traffic */
 #define CAN_IF_ALL_MONITOR  0x02    /* bus monitor running */
+#define CAN_IF_ALL_DASH     0x04    /* Dash page decoding a broadcast (rusEFI) */
 
 /* Same as can_if_start(). */
 esp_err_t can_if_init(const can_if_config_t *cfg);

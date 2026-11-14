@@ -38,6 +38,7 @@
 #include "canmon.h"
 #include "io_svc.h"
 #include "web_svc.h"
+#include "dash_svc.h"
 #include "obd_client.h"
 
 static const char *TAG = "app_main";
@@ -94,6 +95,7 @@ void app_main(void)
     can_cfg.bitrate = BITRATES[boot_cfg.can_bitrate_idx < 4 ? boot_cfg.can_bitrate_idx : 2];
     ESP_ERROR_CHECK(can_if_init(&can_cfg));
     ESP_ERROR_CHECK(canmon_init());
+    ESP_ERROR_CHECK(dash_svc_init());
     ESP_ERROR_CHECK(io_svc_init());
     ESP_ERROR_CHECK(comsm_init());
     /* OBD can also run through a BLE ELM327 adapter (OBD page: Link) */

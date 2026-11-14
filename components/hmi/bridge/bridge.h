@@ -85,6 +85,9 @@ void view_ble_scan(void);
 void view_ble_connect(void);
 void view_ble_disconnect(void);
 void view_ble_forget(void);
+/* Dash page (view_dash.c) */
+void view_dash_update(bool visible);
+void view_dash_reload(void);
 /* BLE adapter console (view_elm.c) */
 void view_elm_update(bool visible);
 void view_elm_send(const char *cmd);

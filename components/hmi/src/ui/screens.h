@@ -547,6 +547,7 @@ typedef struct _objects_t {
     lv_obj_t *obj480;
     lv_obj_t *obj481;
     lv_obj_t *obj482;
+    lv_obj_t *dash_signal_table;
     lv_obj_t *obj483;
     lv_obj_t *obj484;
     lv_obj_t *obj485;
@@ -613,6 +614,8 @@ typedef struct _objects_t {
     lv_obj_t *obj546;
     lv_obj_t *obj547;
     lv_obj_t *obj548;
+    lv_obj_t *obj549;
+    lv_obj_t *obj550;
 } objects_t;
 
 extern objects_t objects;

@@ -39,6 +39,7 @@ static void fast_cb(lv_timer_t *t)
     view_wifi_update(nav_is("wifi"));
     view_ble_update(nav_is("ble"));
     view_elm_update(nav_is("ble_console"));
+    view_dash_update(nav_is("dash"));
     view_can_update(nav_is("can"));
     view_io_update(nav_is("io"));
     view_display_update(nav_is("display"));
@@ -61,6 +62,9 @@ void hmi_init(void)
     /* EEZ 0.29 offers only Montserrat: the ID table wants fixed width. */
     if (objects.can_id_table != NULL) {
         lv_obj_set_style_text_font(objects.can_id_table, &lv_font_unscii_8, 0);
+    }
+    if (objects.dash_signal_table != NULL) {
+        lv_obj_set_style_text_font(objects.dash_signal_table, &lv_font_unscii_8, 0);
     }
     screen_init(cfg.brightness, cfg.screen_timeout_idx);
     view_home_init();

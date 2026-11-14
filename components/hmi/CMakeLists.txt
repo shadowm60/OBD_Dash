@@ -21,6 +21,7 @@ idf_component_register(SRCS "./src/ui/images.c"
                             "./bridge/view_can.c"
                             "./bridge/view_io.c"
                             "./bridge/view_elm.c"
+                            "./bridge/view_dash.c"
                             "./bridge/ui_bridge.c"
                             "./bridge/diag_view.c"
                             "./bridge/pid_select_view.c"
@@ -31,7 +32,7 @@ idf_component_register(SRCS "./src/ui/images.c"
                     INCLUDE_DIRS "./bridge"
                     PRIV_INCLUDE_DIRS "./src/ui"
                     REQUIRES lvgl
-                    PRIV_REQUIRES board comsm obd vehicle_data settings datalog can_if canmon io_svc wifi_svc ble_svc web_svc
+                    PRIV_REQUIRES board comsm obd vehicle_data settings datalog can_if canmon io_svc wifi_svc ble_svc web_svc dash_svc
                                   esp_timer esp_driver_ledc esp_app_format esp_psram fatfs spi_flash)
 
 # EEZ variable and screen names -> indices, from the generated vars.h / screens.h

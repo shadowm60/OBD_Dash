@@ -23,6 +23,11 @@ static const char *TAG = "web_svc";
 static const char *const PREFIXES[] = { "can_", "par_", "evt_", "dtc_" };
 #define NPREFIXES (sizeof(PREFIXES) / sizeof(PREFIXES[0]))
 
+/* DBC files for the Dash page (dash_svc reads this folder): "dbc/<name>.dbc" in the API */
+#define DBC_DIR     MOUNT_POINT "/db/dbc"
+#define DBC_KEY     "dbc/"
+#define MAX_UPLOAD  (1024 * 1024)
+
 static httpd_handle_t s_srv;
 
 /* ---------------------------------------------------------------- page */
@@ -40,12 +45,14 @@ static const char PAGE[] =
 "button:disabled{opacity:.4;cursor:default}.bar{position:sticky;top:0;background:#0b0f14;padding:8px 0;"
 "display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #253041}"
 "#msg{color:#3ecf6e;min-height:20px}.open{color:#e0b341}"
+".up{margin:16px 0;padding:12px;border:1px dashed #253041;border-radius:8px}"
 "</style></head><body><h1>OBD Dash &ndash; log files</h1><div id=card></div>"
 "<div class=bar><button onclick=load()>Refresh</button>"
 "<button class=del id=dsel onclick=delsel() disabled>Delete selected</button><span id=msg></span></div>"
-"<div id=list></div><script>"
+"<div id=list></div><div class=up>Upload a DBC file (Dash page, then Reload DBC on the dash): "
+"<input type=file id=f accept='.dbc'> <button onclick=up()>Upload</button></div><script>"
 "const G=[['can_','CAN traces (can_)'],['par_','Parameter logs (par_)'],['evt_','Event logs (evt_)'],"
-"['dtc_','DTC reports (dtc_)']];"
+"['dtc_','DTC reports (dtc_)'],['dbc/','DBC files for the Dash page (db/dbc/)']];"
 "function sz(b){return b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' kB':(b/1048576).toFixed(1)+' MB'}"
 "function esc(s){return s.replace(/[&<>\"']/g,c=>'&#'+c.charCodeAt(0)+';')}"
 "function tm(t){if(t<1700000000)return'';let d=new Date(t*1000);return d.toLocaleString()}"
@@ -73,6 +80,9 @@ static const char PAGE[] =
 "async function delsel(){let s=sel();if(!s.length||!confirm('Delete '+s.length+' file(s)?'))return;"
 "let k=0;for(const n of s){msg('Deleting '+n+' ...');if(!await rm(n))break;k++}"
 "if(k==s.length)msg(k+' file(s) deleted');load()}"
+"async function up(){let f=document.getElementById('f').files[0];if(!f)return;msg('Uploading '+f.name+' ...');"
+"let r=await fetch('/up/dbc/'+encodeURIComponent(f.name),{method:'POST',body:f});"
+"msg(r.ok?f.name+' uploaded':'Upload failed: '+await r.text());document.getElementById('f').value='';load()}"
 "load()</script></body></html>";
 
 static esp_err_t page_get(httpd_req_t *req)
@@ -101,8 +111,15 @@ static bool is_log_name(const char *name)
     return false;
 }
 
-/* "/dl/can_20261114_101002.log" after the prefix -> decoded, checked file name */
-static bool parse_target(const char *uri, const char *prefix, char *name, size_t len)
+static bool is_dbc_name(const char *name)
+{
+    size_t n = strlen(name);
+    return n > 4 && strcasecmp(name + n - 4, ".dbc") == 0;
+}
+
+/* "/dl/can_20261114_101002.log" or "/dl/dbc/rusefi.dbc" after the prefix ->
+ * decoded, checked name (as in the API) and the path on the card. */
+static bool parse_target(const char *uri, const char *prefix, char *name, size_t len, char *path, size_t plen)
 {
     size_t n = 0;
     for (const char *s = uri + strlen(prefix); *s && *s != '?'; s++) {
@@ -117,12 +134,16 @@ static bool parse_target(const char *uri, const char *prefix, char *name, size_t
         name[n++] = c;
     }
     name[n] = '\0';
-    /* plain log names only: no path, no control characters */
-    if (n == 0 || strpbrk(name, "/\\:*?\"<>|") != NULL || strstr(name, "..") != NULL) return false;
-    for (size_t i = 0; i < n; i++) {
-        if ((unsigned char)name[i] < 0x20) return false;
+    bool dbc = strncmp(name, DBC_KEY, strlen(DBC_KEY)) == 0;
+    const char *file = dbc ? name + strlen(DBC_KEY) : name;
+    /* plain names only: no path, no control characters */
+    if (file[0] == '\0' || strpbrk(file, "/\\:*?\"<>|") != NULL || strstr(file, "..") != NULL) return false;
+    for (const char *c = file; *c; c++) {
+        if ((unsigned char)*c < 0x20) return false;
     }
-    return is_log_name(name);
+    if (dbc ? !is_dbc_name(file) : !is_log_name(file)) return false;
+    snprintf(path, plen, "%s/%s", dbc ? DBC_DIR : MOUNT_POINT, file);
+    return true;
 }
 
 static esp_err_t fail(httpd_req_t *req, const char *status, const char *msg)
@@ -150,6 +171,26 @@ static void json_str(httpd_req_t *req, const char *s)
 
 /* ---------------------------------------------------------------- handlers */
 
+static void list_dir(httpd_req_t *req, const char *dir, const char *key, bool (*want)(const char *), int *k)
+{
+    DIR *d = opendir(dir);
+    struct dirent *e;
+    while (d && (e = readdir(d)) != NULL) {
+        if (e->d_type == DT_DIR || !want(e->d_name) || strlen(e->d_name) >= NAME_MAX_ - 8) continue;
+        char path[sizeof(DBC_DIR) + NAME_MAX_ + 1], name[NAME_MAX_ + 8], b[96];
+        struct stat st;
+        snprintf(path, sizeof(path), "%s/%s", dir, e->d_name);
+        snprintf(name, sizeof(name), "%s%s", key, e->d_name);
+        bool ok = stat(path, &st) == 0;
+        httpd_resp_sendstr_chunk(req, (*k)++ ? ",{\"n\":" : "{\"n\":");
+        json_str(req, name);
+        snprintf(b, sizeof(b), ",\"s\":%ld,\"t\":%lld,\"open\":%s}", ok ? (long)st.st_size : 0L,
+                 ok ? (long long)st.st_mtime : 0LL, datalog_is_open(name) ? "true" : "false");
+        httpd_resp_sendstr_chunk(req, b);
+    }
+    if (d) closedir(d);
+}
+
 static esp_err_t list_get(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "application/json");
@@ -161,31 +202,19 @@ static esp_err_t list_get(httpd_req_t *req)
     snprintf(b, sizeof(b), "{\"sd\":%s,\"total\":%llu,\"free\":%llu,\"files\":[", sd ? "true" : "false",
              (unsigned long long)total, (unsigned long long)free_b);
     httpd_resp_sendstr_chunk(req, b);
-    DIR *d = sd ? opendir(MOUNT_POINT) : NULL;
     int k = 0;
-    struct dirent *e;
-    while (d && (e = readdir(d)) != NULL) {
-        if (e->d_type == DT_DIR || !is_log_name(e->d_name) || strlen(e->d_name) >= NAME_MAX_) continue;
-        char path[sizeof(MOUNT_POINT) + NAME_MAX_ + 1];
-        struct stat st;
-        snprintf(path, sizeof(path), MOUNT_POINT "/%s", e->d_name);
-        bool ok = stat(path, &st) == 0;
-        httpd_resp_sendstr_chunk(req, k++ ? ",{\"n\":" : "{\"n\":");
-        json_str(req, e->d_name);
-        snprintf(b, sizeof(b), ",\"s\":%ld,\"t\":%lld,\"open\":%s}", ok ? (long)st.st_size : 0L,
-                 ok ? (long long)st.st_mtime : 0LL, datalog_is_open(e->d_name) ? "true" : "false");
-        httpd_resp_sendstr_chunk(req, b);
+    if (sd) {
+        list_dir(req, MOUNT_POINT, "", is_log_name, &k);
+        list_dir(req, DBC_DIR, DBC_KEY, is_dbc_name, &k);
     }
-    if (d) closedir(d);
     httpd_resp_sendstr_chunk(req, "]}");
     return httpd_resp_send_chunk(req, NULL, 0);
 }
 
 static esp_err_t dl_get(httpd_req_t *req)
 {
-    char name[NAME_MAX_], path[sizeof(MOUNT_POINT) + NAME_MAX_ + 1];
-    if (!parse_target(req->uri, "/dl/", name, sizeof(name))) return fail(req, "400 Bad Request", "bad file name");
-    snprintf(path, sizeof(path), MOUNT_POINT "/%s", name);
+    char name[NAME_MAX_], path[sizeof(DBC_DIR) + NAME_MAX_ + 1];
+    if (!parse_target(req->uri, "/dl/", name, sizeof(name), path, sizeof(path))) return fail(req, "400 Bad Request", "bad file name");
     FILE *f = fopen(path, "r");
     if (f == NULL) return fail(req, "404 Not Found", "no such file");
     char *buf = heap_caps_malloc(BLOCK, MALLOC_CAP_SPIRAM);
@@ -197,7 +226,8 @@ static esp_err_t dl_get(httpd_req_t *req)
     httpd_resp_set_type(req, ext && strcasecmp(ext, ".csv") == 0 ? "text/csv"
                              : ext && strcasecmp(ext, ".txt") == 0 ? "text/plain" : "application/octet-stream");
     char disp[NAME_MAX_ + 48];
-    snprintf(disp, sizeof(disp), "attachment; filename=\"%s\"", name);
+    const char *base = strrchr(name, '/');
+    snprintf(disp, sizeof(disp), "attachment; filename=\"%s\"", base ? base + 1 : name);
     httpd_resp_set_hdr(req, "Content-Disposition", disp);
     size_t r;
     esp_err_t err = ESP_OK;
@@ -213,12 +243,54 @@ static esp_err_t dl_get(httpd_req_t *req)
 
 static esp_err_t del_post(httpd_req_t *req)
 {
-    char name[NAME_MAX_], path[sizeof(MOUNT_POINT) + NAME_MAX_ + 1];
-    if (!parse_target(req->uri, "/del/", name, sizeof(name))) return fail(req, "400 Bad Request", "bad file name");
+    char name[NAME_MAX_], path[sizeof(DBC_DIR) + NAME_MAX_ + 1];
+    if (!parse_target(req->uri, "/del/", name, sizeof(name), path, sizeof(path))) return fail(req, "400 Bad Request", "bad file name");
     if (datalog_is_open(name)) return fail(req, "409 Conflict", "being recorded, stop logging first");
-    snprintf(path, sizeof(path), MOUNT_POINT "/%s", name);
     if (unlink(path) != 0) return fail(req, "404 Not Found", "cannot delete (not there?)");
     ESP_LOGI(TAG, "deleted %s", name);
+    return httpd_resp_sendstr(req, "ok");
+}
+
+/* Upload: only DBC files, into DBC_DIR (written to a temp file, renamed when complete). */
+static esp_err_t up_post(httpd_req_t *req)
+{
+    char name[NAME_MAX_], path[sizeof(DBC_DIR) + NAME_MAX_ + 1], tmp[sizeof(DBC_DIR) + 16];
+    if (!parse_target(req->uri, "/up/", name, sizeof(name), path, sizeof(path))) return fail(req, "400 Bad Request", "bad file name");
+    if (strncmp(name, DBC_KEY, strlen(DBC_KEY)) != 0) return fail(req, "403 Forbidden", "only .dbc files can be uploaded");
+    if (!waveshare_sd_card_mounted()) return fail(req, "503 Service Unavailable", "no SD card");
+    if (req->content_len > MAX_UPLOAD) return fail(req, "413 Payload Too Large", "file too big (1 MB max)");
+    mkdir(MOUNT_POINT "/db", 0775);
+    mkdir(DBC_DIR, 0775);
+    snprintf(tmp, sizeof(tmp), DBC_DIR "/upload.tmp");
+    FILE *f = fopen(tmp, "w");
+    if (f == NULL) return fail(req, "500 Internal Server Error", "cannot create the file");
+    char *buf = heap_caps_malloc(BLOCK, MALLOC_CAP_SPIRAM);
+    if (buf == NULL) {
+        fclose(f);
+        return fail(req, "500 Internal Server Error", "out of memory");
+    }
+    size_t left = req->content_len;
+    bool ok = true;
+    while (left > 0) {
+        int r = httpd_req_recv(req, buf, left < BLOCK ? left : BLOCK);
+        if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (r <= 0 || fwrite(buf, 1, r, f) != (size_t)r) {
+            ok = false;
+            break;
+        }
+        left -= r;
+    }
+    heap_caps_free(buf);
+    ok = fclose(f) == 0 && ok;
+    if (ok) {
+        unlink(path);                   /* replace a file of that name */
+        ok = rename(tmp, path) == 0;
+    }
+    if (!ok) {
+        unlink(tmp);
+        return fail(req, "500 Internal Server Error", "write failed (card full?)");
+    }
+    ESP_LOGI(TAG, "upload %s, %u bytes", name, (unsigned)req->content_len);
     return httpd_resp_sendstr(req, "ok");
 }
 
@@ -245,6 +317,7 @@ esp_err_t web_svc_init(void)
         { .uri = "/api/list", .method = HTTP_GET,  .handler = list_get },
         { .uri = "/dl/*",     .method = HTTP_GET,  .handler = dl_get },
         { .uri = "/del/*",    .method = HTTP_POST, .handler = del_post },
+        { .uri = "/up/*",     .method = HTTP_POST, .handler = up_post },
     };
     for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
         httpd_register_uri_handler(s_srv, &uris[i]);

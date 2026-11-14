@@ -139,6 +139,8 @@ VARIABLES = {
     'ble_status': ('string', '"..."'),
     'ble_services': ('string', '""'),
     'elm_log': ('string', '""'),
+    'dash_status': ('string', '""'),
+    'dash_signals': ('string', '""'),
     'elm_info': ('string', '""'),
     'elm_cmd': ('string', '""'),
     # display
@@ -158,6 +160,7 @@ ACTIONS = [
     'io_do0_toggle', 'io_do1_toggle', 'io_reset', 'i2c_scan',
     'wifi_scan', 'wifi_connect', 'wifi_disconnect', 'wifi_forget',
     'ble_scan', 'ble_connect', 'ble_disconnect', 'ble_forget',
+    'dash_reload',
     'nav_ble_console', 'elm_atz', 'elm_ati', 'elm_atrv', 'elm_0100', 'elm_send', 'elm_clear',
     'sd_remount', 'screen_off', 'restart',
 ]
@@ -515,15 +518,15 @@ def page_ble_console(b):
 
 
 def page_dash(b):
+    # B1: decoded signal list; the tile dash (B2) comes later
     return [
-        b.panel(CX, TOP, CW, CH, [
-            b.label('Planned (see CLAUDE.md, roadmap)', 0, 0, None, 20),
-            b.label('Custom dash from CAN broadcast data, decoded with a DBC file '
-                    '(rusEFI first, any DBC later):\n'
-                    '- signal definitions converted on the PC, loaded from the SD card\n'
-                    '- tile layout and alarm limits from the SD card, edited in the PC tool\n'
-                    '- listen only: works next to OBD, on the board CAN', 0, 40, CW - 26, 16, GREY, wrap=True),
+        b.panel(CX, TOP, CW, 90, [
+            b.label('dash_status', 0, 0, CW - 26 - 200, 16, expr=True, wrap=True),
+            b.button('Reload DBC', CW - 26 - 180, 0, 180, 44, 'dash_reload', font=16),
         ]),
+        b.panel(CX, TOP + 100, CW, CH - 100, [
+            ident(b.label('dash_signals', 0, 0, CW - 16, 'MONTSERRAT_12', expr=True), 'dash_signal_table')],
+            scroll=True, pad=8),
     ]
 
 

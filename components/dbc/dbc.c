@@ -133,6 +133,7 @@ int dbc_parse(dbc_t *db, FILE *f)
 {
     db->nmsg = db->nsig = 0;
     db->skipped = 0;
+    db->id_offset = 0;
     char *line = malloc(LINE_LEN);
     if (line == NULL) {
         return -1;
@@ -213,8 +214,25 @@ static double physical(const dbc_signal_t *s, const uint8_t *d)
     return (double)raw * s->scale + s->offset;
 }
 
+int dbc_base_id(const dbc_t *db)
+{
+    for (uint16_t i = 0; i < db->nmsg; i++) {
+        if (!db->msgs[i].ext) {
+            return (int)db->msgs[i].id;         /* sorted: the first standard one is the lowest */
+        }
+    }
+    return -1;
+}
+
 int dbc_decode(dbc_t *db, uint32_t id, bool ext, const uint8_t *data, uint8_t dlc, uint32_t ts_ms)
 {
+    if (!ext) {
+        int64_t dbc_id = (int64_t)id - db->id_offset;
+        if (dbc_id < 0 || dbc_id > 0x7FF) {
+            return -1;
+        }
+        id = (uint32_t)dbc_id;
+    }
     int lo = 0, hi = db->nmsg - 1;
     uint64_t key = (uint64_t)ext << 32 | id;
     while (lo <= hi) {

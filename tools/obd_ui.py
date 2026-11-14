@@ -81,12 +81,13 @@ SUB_PAGES = [
     ('select_params', 'obd', 'Select parameters'),
     ('freezFrame', 'readDTC', 'Freeze frame'),
     ('ble_console', 'ble', 'BLE adapter console'),
+    ('dash_setup', 'dash', 'Dash settings'),
 ]
 # replaced by the pages above
 OLD_PAGES = ['startup', 'clearDTC', 'settings', 'system']
 # screen order in the project (= ScreensEnum); the first one is shown at the first boot
 ORDER = ['home', 'obd', 'readDTC', 'select_params', 'freezFrame', 'drive', 'liveData', 'tune',
-         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag', 'ble_console']
+         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag', 'ble_console', 'dash_setup']
 
 # name -> (type, default expression). Existing variables are kept as they are.
 VARIABLES = {
@@ -141,6 +142,10 @@ VARIABLES = {
     'elm_log': ('string', '""'),
     'dash_status': ('string', '""'),
     'dash_signals': ('string', '""'),
+    'dash_files': ('string', '""'),
+    'dash_file_sel': ('integer', '0'),
+    'dash_base_text': ('string', '""'),
+    'dash_setup_info': ('string', '""'),
     'elm_info': ('string', '""'),
     'elm_cmd': ('string', '""'),
     # display
@@ -160,7 +165,7 @@ ACTIONS = [
     'io_do0_toggle', 'io_do1_toggle', 'io_reset', 'i2c_scan',
     'wifi_scan', 'wifi_connect', 'wifi_disconnect', 'wifi_forget',
     'ble_scan', 'ble_connect', 'ble_disconnect', 'ble_forget',
-    'dash_reload',
+    'dash_reload', 'nav_dash_setup', 'dash_apply',
     'nav_ble_console', 'elm_atz', 'elm_ati', 'elm_atrv', 'elm_0100', 'elm_send', 'elm_clear',
     'sd_remount', 'screen_off', 'restart',
 ]
@@ -522,11 +527,28 @@ def page_dash(b):
     return [
         b.panel(CX, TOP, CW, 90, [
             b.label('dash_status', 0, 0, CW - 26 - 200, 16, expr=True, wrap=True),
-            b.button('Reload DBC', CW - 26 - 180, 0, 180, 44, 'dash_reload', font=16),
+            b.button('Settings', CW - 26 - 180, 0, 180, 44, 'nav_dash_setup', font=16),
         ]),
         b.panel(CX, TOP + 100, CW, CH - 100, [
             ident(b.label('dash_signals', 0, 0, CW - 16, 'MONTSERRAT_12', expr=True), 'dash_signal_table')],
             scroll=True, pad=8),
+    ]
+
+
+def page_dash_setup(b):
+    iw = CW - 26
+    return [
+        b.panel(CX, TOP, CW, CH, [
+            b.label('DBC file (upload on the web page into db/dbc/)', 0, 0, None, 16, GREY),
+            b.dropdown('dash_files', 'dash_file_sel', 0, 26, 420, font=16),
+            b.label('Base ID: bus ID of the DBC\'s first (lowest) message, decimal or 0x hex;'
+                    ' empty or 0 = as in the file. rusEFI: its CAN base setting (default 512 = 0x200).',
+                    0, 90, iw, 16, GREY, wrap=True),
+            b.textarea('dash_base_text', 0, 140, 200, '0', maxlen=8, accepted='0123456789xXabcdefABCDEF'),
+            b.button('Apply', 220, 140, 160, 44, 'dash_apply', ACCENT, font=16),
+            b.label('dash_setup_info', 0, 200, iw, 16, expr=True, wrap=True),
+            b.button('Back to\nDash', iw - 164, CH - 26 - 60, 164, 60, 'nav_dash', font=16),
+        ]),
     ]
 
 
@@ -571,7 +593,7 @@ def page_display(b):
 BUILDERS = {
     'home': page_home, 'obd': page_obd, 'readDTC': page_dtc, 'can': page_can, 'wifi': page_wifi,
     'ble': page_ble, 'io': page_io, 'display': page_display,
-    'dash': page_dash, 'diag': page_diag, 'ble_console': page_ble_console,
+    'dash': page_dash, 'diag': page_diag, 'ble_console': page_ble_console, 'dash_setup': page_dash_setup,
     'select_params': page_params, 'freezFrame': page_freeze,
 }
 

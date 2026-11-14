@@ -48,6 +48,8 @@ extern void action_elm_0100(lv_event_t * e);
 extern void action_elm_send(lv_event_t * e);
 extern void action_elm_clear(lv_event_t * e);
 extern void action_dash_reload(lv_event_t * e);
+extern void action_nav_dash_setup(lv_event_t * e);
+extern void action_dash_apply(lv_event_t * e);
 
 #ifdef __cplusplus
 }

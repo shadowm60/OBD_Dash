@@ -5,6 +5,7 @@
 #include <strings.h>
 #include <math.h>
 #include <dirent.h>
+#include <sys/stat.h>
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
@@ -25,6 +26,7 @@ static QueueHandle_t     s_q;
 static dbc_t             s_db;
 static dash_svc_status_t s_st;
 static uint8_t          *s_seen;            /* per message: received at least once */
+static uint16_t          s_base_cfg;        /* 0 = as in the DBC */
 
 #define LOCK()   xSemaphoreTake(s_lock, portMAX_DELAY)
 #define UNLOCK() xSemaphoreGive(s_lock)
@@ -58,10 +60,73 @@ static bool find_dbc(const char *dir, char *out, size_t len)
     return true;
 }
 
-esp_err_t dash_svc_load(void)
+/* caller holds the lock */
+static void apply_base(void)
+{
+    int b = dbc_base_id(&s_db);
+    s_db.id_offset = (b >= 0 && s_base_cfg) ? (int32_t)s_base_cfg - b : 0;
+    s_st.dbc_base = b;
+    s_st.bus_base = b >= 0 ? b + s_db.id_offset : -1;
+    s_st.dbc_last = -1;
+    for (uint16_t i = 0; i < s_db.nmsg; i++) {
+        if (!s_db.msgs[i].ext && (int)s_db.msgs[i].id > s_st.dbc_last) {
+            s_st.dbc_last = (int)s_db.msgs[i].id;
+        }
+    }
+}
+
+void dash_svc_set_base(uint16_t base)
+{
+    if (s_lock == NULL) {
+        return;
+    }
+    LOCK();
+    s_base_cfg = base;
+    apply_base();
+    UNLOCK();
+    ESP_LOGI(TAG, "base %u (offset %ld)", base, (long)s_db.id_offset);
+}
+
+int dash_svc_list_files(char *buf, size_t len)
+{
+    buf[0] = '\0';
+    DIR *d = opendir(DASH_DBC_DIR);
+    if (d == NULL) {
+        return 0;
+    }
+    /* small insertion sort of the names into buf */
+    char names[16][48];
+    int n = 0;
+    struct dirent *e;
+    while ((e = readdir(d)) != NULL && n < 16) {
+        if (e->d_type == DT_DIR || !has_ext(e->d_name, ".dbc") || strlen(e->d_name) >= sizeof(names[0])) {
+            continue;
+        }
+        int i = n++;
+        while (i > 0 && strcasecmp(names[i - 1], e->d_name) > 0) {
+            strcpy(names[i], names[i - 1]);
+            i--;
+        }
+        strcpy(names[i], e->d_name);
+    }
+    closedir(d);
+    size_t o = 0;
+    for (int i = 0; i < n && o + 2 < len; i++) {
+        o += snprintf(buf + o, len - o, "%s%s", i ? "\n" : "", names[i]);
+    }
+    return n;
+}
+
+esp_err_t dash_svc_load(const char *name)
 {
     char path[128];
-    if (!find_dbc(DASH_DBC_DIR, path, sizeof(path)) && !find_dbc("/sdcard", path, sizeof(path))) {
+    bool found = false;
+    if (name && name[0]) {
+        struct stat st;
+        snprintf(path, sizeof(path), DASH_DBC_DIR "/%s", name);
+        found = stat(path, &st) == 0;
+    }
+    if (!found && !find_dbc(DASH_DBC_DIR, path, sizeof(path)) && !find_dbc("/sdcard", path, sizeof(path))) {
         LOCK();
         s_st.loaded = false;
         s_st.file[0] = '\0';
@@ -86,6 +151,7 @@ esp_err_t dash_svc_load(void)
     s_st.skipped = s_db.skipped;
     s_st.frames = s_st.unknown = s_st.dropped = 0;
     s_st.msgs_seen = 0;
+    apply_base();
     const char *base = strrchr(path, '/');
     strlcpy(s_st.file, base ? base + 1 : path, sizeof(s_st.file));
     if (n < 0) {

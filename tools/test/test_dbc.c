@@ -81,6 +81,16 @@ int main(void)
     dbc_decode(&db, 513, false, f3, 4, 200);
     CHECK(NEAR(sigs[rpm].value, 2000) && NEAR(sigs[clt].value, 90));
 
+    /* configurable base: BASE1 (513) sent at 513 + 256 */
+    CHECK(dbc_base_id(&db) == 512);
+    db.id_offset = 256;
+    uint8_t f4[8] = { 0xE8, 0x03 };     /* 1000 rpm */
+    CHECK(dbc_decode(&db, 513, false, f4, 8, 300) == -1);       /* old ID no longer matches */
+    CHECK(dbc_decode(&db, 769, false, f4, 8, 300) >= 0);
+    CHECK(NEAR(sigs[rpm].value, 1000));
+    CHECK(dbc_decode(&db, 2566844926u & 0x1FFFFFFF, true, f2, 8, 9) >= 0);    /* 29-bit: not shifted */
+    db.id_offset = 0;
+
     printf(fails ? "%d FAILED\n" : "all dbc tests passed\n", fails);
     return fails != 0;
 }

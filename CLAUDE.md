@@ -283,6 +283,13 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   objects.dash_signal_table) with value, unit, age; Reload DBC. web_svc: DBC group, upload
   (`POST /up/dbc/<name>`, 1 MB max), download, delete. Needs the owner's rusEFI DBC (its
   firmware version) and a rusEFI ECU broadcasting on the bench.
+- B1 on the board: owner's `rusEFI_CAN_verbose.dbc` -> 12 messages, 70 signals, 0 skipped;
+  bench simulator broadcasts it with sweeping values.
+- **Base ID + DBC choice (built, not run yet):** `dbc_t.id_offset` (bus ID = DBC ID + offset,
+  11-bit only, PC-tested), `dash_svc_set_base()` = bus ID of the DBC's lowest 11-bit ID,
+  0 = as in the file. Settings `dash_base`, `dash_dbc` (new fields; the old `rusefi_base_id`
+  is NOT used, its default 512 would shift other DBCs). Sub-page `dash_setup` (Dash page
+  button Settings): DBC dropdown, base text (decimal / 0x), Apply, shows file vs bus ID range.
 - Tile layout + alarm limits in `/sdcard/db/dash/layout.json`, edited in the PC tool.
 
 **C. Diag page: manufacturer diagnostics over UDS (VW group, Mercedes first)**

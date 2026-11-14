@@ -56,6 +56,8 @@ typedef struct {
     uint16_t       nmsg, nsig;
     uint16_t       max_msg, max_sig;
     uint32_t       skipped;     /* SG_ lines that could not be parsed / didn't fit */
+    int32_t        id_offset;   /* added to every 11-bit DBC ID: bus ID = DBC ID + offset
+                                   (an ECU with a configurable base, e.g. rusEFI) */
 } dbc_t;
 
 /* Caller provides the tables (e.g. PSRAM). Returns the number of signals
@@ -64,6 +66,9 @@ int  dbc_parse(dbc_t *db, FILE *f);
 
 /* Decode one frame; returns the message index or -1 if not in the database. */
 int  dbc_decode(dbc_t *db, uint32_t id, bool ext, const uint8_t *data, uint8_t dlc, uint32_t ts_ms);
+
+/* Lowest 11-bit message ID in the DBC (its "base"), -1 if it has none. */
+int  dbc_base_id(const dbc_t *db);
 
 /* Raw bit extraction, exposed for the tests. */
 uint64_t dbc_extract(const uint8_t *data, uint8_t start, uint8_t len, bool intel);

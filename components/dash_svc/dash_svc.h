@@ -2,8 +2,11 @@
  * dash_svc - decodes a CAN broadcast (rusEFI, or any ECU) with a DBC file
  * from the SD card, for the Dash page.
  *
- * The DBC is the first *.dbc in /sdcard/db/dbc/, else in /sdcard/ (loaded at
- * dash_svc_load(), e.g. when the Dash page opens). While active it gets every
+ * The DBC is a *.dbc in /sdcard/db/dbc/ chosen by name (Dash settings), else
+ * the first one there, else the first in /sdcard/ (dash_svc_load()).
+ * Base ID: an ECU with a configurable CAN base (rusEFI) sends the DBC's
+ * messages shifted; dash_svc_set_base() sets where the DBC's lowest 11-bit ID
+ * is on the bus, and all 11-bit IDs move with it. While active it gets every
  * frame of the board CAN (monitor slot CAN_IF_MON_DASH, hardware filter
  * open) and decodes the messages the DBC knows, in its own task. Listen only:
  * nothing is sent, OBD can run at the same time. Bitrate = the CAN page's.
@@ -28,6 +31,9 @@ typedef struct {
     bool     loaded;
     bool     active;
     char     file[48];          /* DBC file name, "" if none */
+    int      dbc_base;          /* lowest 11-bit ID in the DBC, -1 none */
+    int      dbc_last;          /* highest 11-bit ID in the DBC */
+    int      bus_base;          /* where dbc_base is on the bus */
     uint16_t nmsg, nsig;
     uint32_t skipped;           /* DBC lines not understood */
     uint32_t frames;            /* frames decoded since start */
@@ -39,8 +45,15 @@ typedef struct {
 
 esp_err_t dash_svc_init(void);
 
-/* (Re)load the DBC from the SD card. Blocking (file read), a few 10 ms. */
-esp_err_t dash_svc_load(void);
+/* (Re)load the DBC from the SD card: `name` in DASH_DBC_DIR, "" = the first
+ * one found. Blocking (file read), a few 10 ms. The base is kept. */
+esp_err_t dash_svc_load(const char *name);
+
+/* Bus ID of the DBC's lowest 11-bit message; 0 = as in the DBC. */
+void dash_svc_set_base(uint16_t base);
+
+/* DBC files in DASH_DBC_DIR, sorted, '\n' separated; returns the count. */
+int dash_svc_list_files(char *buf, size_t len);
 
 /* Decode while on (CAN tap + open filter), idle while off. */
 void dash_svc_set_active(bool on);

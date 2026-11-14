@@ -39,6 +39,8 @@ typedef struct {
     uint32_t params_rows;
     uint32_t error_count;       /* increments on every open / write failure */
     char     error[48];         /* last error, "" if none */
+    bool     evt_active;
+    char     evt_file[32];
 } datalog_status_t;
 
 /* dir: mount point of the SD card, e.g. "/sdcard". Logging starts disabled. */
@@ -52,6 +54,10 @@ void datalog_enable_params(bool on);
 void datalog_set_all_traffic(bool on);
 
 void datalog_get_status(datalog_status_t *out);
+
+/* true if `name` (plain file name in the log directory) is open for writing
+ * right now; such a file must not be deleted (web_svc). */
+bool datalog_is_open(const char *name);
 
 #ifdef __cplusplus
 }

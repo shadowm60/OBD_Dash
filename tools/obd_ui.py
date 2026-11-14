@@ -429,7 +429,7 @@ def page_wifi(b):
             b.button('Connect', 0, 0, 216, 44, 'wifi_connect', ACCENT),
             b.button('Disconnect', 0, 54, 216, 44, 'wifi_disconnect'),
             b.button('Forget', 0, 108, 216, 44, 'wifi_forget', DANGER),
-            b.checkbox('Connect at boot', 'wifi_autoconnect', 0, 160, 16),
+            b.checkbox('Auto connect', 'wifi_autoconnect', 0, 160, 16),
         ]),
     ]
 

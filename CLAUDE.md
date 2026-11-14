@@ -204,6 +204,15 @@ Steps, each built, committed and tested on the board by the owner before the nex
    4.7k pull-up). DO = OC0 / OC1 via `ch422g_write_oc()`, low = on; OC written high at
    init. Ask the owner to watch for display / SD glitches with the IO page open while
    logging.
+6. **Done, built, not run yet (owner's follow-up):** `web_svc` = Esp32_monitor's file
+   manager, cut down to the log files in the card root (`can_` `par_` `evt_` `dtc_`
+   prefixes only): list / download / delete, multi-select delete, no upload. Files
+   open in datalog (`datalog_is_open()`, evt name now in the status) can't be deleted.
+   httpd on core 0, priority 2 (below datalog), stack in PSRAM. Page JS checked with
+   headless chromium against a mock API (never name a JS function `all`: inline
+   handlers resolve it to `document.all`). Wi-Fi: with auto connect (setting
+   `wifi_autoconnect`, applied live via `wifi_svc_set_auto_retry`) the station keeps
+   trying every 30 s after the 5 quick retries; manual Disconnect / Forget stops it.
 
 `sdkconfig` (local) got the step 1 options by hand; the previous copy is not kept.
 

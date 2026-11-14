@@ -75,6 +75,15 @@ void datalog_get_status(datalog_status_t *out)
     out->raw_dropped = cs.mon_dropped;
 }
 
+bool datalog_is_open(const char *name)
+{
+    datalog_status_t st;
+    datalog_get_status(&st);
+    return (st.raw_active && strcmp(name, st.raw_file) == 0) ||
+           (st.params_active && strcmp(name, st.params_file) == 0) ||
+           (st.evt_active && strcmp(name, st.evt_file) == 0);
+}
+
 /* ---------------------------------------------------------------- files */
 
 /* Time base of a file, fixed when it is opened: real time if the clock is set
@@ -241,9 +250,16 @@ static void evt_service(uint32_t now)
                        s_evt_cs.tx_frames, s_evt_cs.tx_failed, s_evt_cs.tx_retries, s_evt_cs.rx_frames,
                        s_evt_cs.rx_dropped, s_evt_cs.bus_errors, bus_state_name(s_evt_cs.state));
             s_evt_next_stats = now + EVT_STATS_PERIOD_MS;
+            portENTER_CRITICAL(&s_lock);
+            strcpy(s_status.evt_file, name);
+            s_status.evt_active = true;
+            portEXIT_CRITICAL(&s_lock);
         }
     } else if (s_raw.f == NULL && s_evt.f != NULL) {
         close_file(&s_evt);
+        portENTER_CRITICAL(&s_lock);
+        s_status.evt_active = false;
+        portEXIT_CRITICAL(&s_lock);
     }
     if (s_raw.f == NULL) {
         s_evt.failed = false;

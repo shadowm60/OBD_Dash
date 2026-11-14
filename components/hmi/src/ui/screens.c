@@ -6405,7 +6405,7 @@ void create_screen_wifi() {
                     objects.obj302 = obj;
                     lv_obj_set_pos(obj, 0, 160);
                     lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-                    lv_checkbox_set_text_static(obj, "Connect at boot");
+                    lv_checkbox_set_text_static(obj, "Auto connect");
                     lv_obj_add_event_cb(obj, event_handler_cb_wifi_obj302, LV_EVENT_ALL, flowState);
                     lv_obj_set_style_text_color(obj, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_text_font(obj, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);

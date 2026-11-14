@@ -2,7 +2,7 @@
  * Wi-Fi page.
  *   wifi_list / wifi_sel   dropdown: scan results, two-way selected index
  *   wifi_pass              password text area (two-way), cleared after use
- *   wifi_autoconnect       checkbox -> settings
+ *   wifi_autoconnect       checkbox -> settings + wifi_svc auto retry
  *   wifi_scan_text, wifi_status
  */
 #include <stdio.h>
@@ -12,6 +12,7 @@
 #include "bridge.h"
 #include "wifi_svc.h"
 #include "settings.h"
+#include "web_svc.h"
 
 static uivar_t v_list = UIVAR("wifi_list");
 static uivar_t v_sel = UIVAR("wifi_sel");
@@ -26,9 +27,12 @@ static uint32_t      s_scan_seen;
 static bool          s_auto;
 static char          s_msg[64];     /* feedback of the last action */
 
-static const char *state_text(wifi_svc_state_t s)
+static const char *state_text(const wifi_svc_status_t *st)
 {
-    switch (s) {
+    if (st->state == WIFI_SVC_FAILED && st->retry_waiting) {
+        return "waiting for the network (retry every 30 s)";
+    }
+    switch (st->state) {
     case WIFI_SVC_CONNECTING: return "connecting...";
     case WIFI_SVC_CONNECTED:  return "connected";
     case WIFI_SVC_FAILED:     return "failed";
@@ -75,6 +79,7 @@ void view_wifi_update(bool visible)
         settings_get(&cfg);
         cfg.wifi_autoconnect = a;
         settings_put(&cfg);
+        wifi_svc_set_auto_retry(a);
     }
 
     if (st.scan_count != s_scan_seen) {
@@ -92,7 +97,7 @@ void view_wifi_update(bool visible)
         fmt_duration((uint32_t)(esp_timer_get_time() / 1000000) - st.connected_since_s, up, sizeof(up));
     }
     char buf[512];
-    int o = snprintf(buf, sizeof(buf), "State:  %s\n", state_text(st.state));
+    int o = snprintf(buf, sizeof(buf), "State:  %s\n", state_text(&st));
     if (st.state != WIFI_SVC_IDLE && st.ssid[0]) {
         o += snprintf(buf + o, sizeof(buf) - o, "SSID:  %s\n", st.ssid);
     }
@@ -101,6 +106,9 @@ void view_wifi_update(bool visible)
                       "IP:  %s\nMask:  %s\nGateway:  %s\nDNS:  %s\nRSSI:  %d dBm   ch %u\nUp:  %s\n",
                       st.ip, st.netmask, st.gw, st.dns, st.rssi, st.channel, up);
         o += snprintf(buf + o, sizeof(buf) - o, "Time:  %s\n", st.time_synced ? "synchronised (SNTP)" : "waiting for SNTP");
+        if (web_svc_running()) {
+            o += snprintf(buf + o, sizeof(buf) - o, "Log files:  http://%s/\n", st.ip);
+        }
     }
     if (st.last_reason && st.state != WIFI_SVC_CONNECTED) {
         o += snprintf(buf + o, sizeof(buf) - o, "Last error:  %u %s\n", st.last_reason, st.last_reason_text);

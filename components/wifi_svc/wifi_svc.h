@@ -53,6 +53,7 @@ typedef struct {
     bool     time_synced;       /* SNTP done at least once */
     bool     scanning;
     uint32_t scan_count;        /* increments with every finished scan */
+    bool     retry_waiting;     /* FAILED, next attempt in the background (auto retry) */
 } wifi_svc_status_t;
 
 /* Called (in the SNTP task) after every successful time sync, e.g. to store
@@ -60,8 +61,13 @@ typedef struct {
 typedef void (*wifi_svc_sync_cb_t)(void);
 void wifi_svc_set_sync_cb(wifi_svc_sync_cb_t cb);
 
-/* Starts the station. autoconnect: connect to the stored network now. */
+/* Starts the station. autoconnect: connect to the stored network now, and
+ * keep trying (every 30 s) while it is out of range, also after a lost
+ * connection. A manual disconnect / forget stops the retries. */
 esp_err_t wifi_svc_init(bool autoconnect);
+
+/* Background retries on / off (the "Connect at boot" setting), live. */
+void wifi_svc_set_auto_retry(bool on);
 
 esp_err_t wifi_svc_scan(void);
 

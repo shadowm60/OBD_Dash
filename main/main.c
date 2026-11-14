@@ -7,11 +7,12 @@
  *   comsm        connection state machine, owns the OBD client
  *   vehicle_data latest value of every signal (OBD -> UI / logger)
  *   settings     persistent user configuration (NVS)
- *   datalog      SD card logging (raw CAN, parameters); switched by the Settings screen
+ *   datalog      SD card logging (raw CAN, parameters); switched on the OBD / CAN pages
  *   wifi_svc     Wi-Fi station: scan / connect, SNTP clock (-> RTC)
  *   ble_svc      Bluetooth LE central (NimBLE): scan, connect, pair
  *   canmon       CAN bus monitor for the CAN page (ID table, rates, bus load)
  *   io_svc       isolated DI / DO on the terminal (CH422G), I2C scan, chip temperature
+ *   web_svc      log file manager over Wi-Fi (http://<IP>/): download / delete
  *
  * Init order matters for internal RAM (see Esp32_monitor): the display takes
  * its large contiguous blocks before Wi-Fi and the BT controller fragment /
@@ -36,6 +37,7 @@
 #include "datalog.h"
 #include "canmon.h"
 #include "io_svc.h"
+#include "web_svc.h"
 
 static const char *TAG = "app_main";
 
@@ -101,6 +103,8 @@ void app_main(void)
     wifi_svc_set_sync_cb(on_time_synced);
     if (wifi_svc_init(cfg.wifi_autoconnect) != ESP_OK) {
         ESP_LOGE(TAG, "Wi-Fi init failed");
+    } else if (web_svc_init() != ESP_OK) {
+        ESP_LOGE(TAG, "web log file manager failed to start");
     }
     log_heap("wifi");
     if (ble_svc_init() != ESP_OK) {

@@ -17,7 +17,8 @@
 
 static const char *TAG = "wifi_svc";
 
-#define MAX_RETRIES     5       /* then FAILED until the user tries again */
+#define MAX_RETRIES     5       /* quick retries, then FAILED */
+#define RETRY_PERIOD_S  30      /* then, with auto retry, a new attempt this often */
 
 static SemaphoreHandle_t s_lock;
 static esp_netif_t      *s_netif;
@@ -25,6 +26,9 @@ static wifi_svc_status_t s_st;
 static wifi_svc_ap_t     s_aps[WIFI_SVC_MAX_APS];
 static int               s_nap;
 static bool              s_want_connected;      /* user wants a connection */
+static bool              s_keep;                /* keep trying in the background (auto retry) */
+static bool              s_auto_retry;          /* setting: background retries allowed */
+static esp_timer_handle_t s_retry_timer;
 static int               s_retries;
 static bool              s_sntp_started;
 static wifi_svc_sync_cb_t s_sync_cb;
@@ -190,7 +194,13 @@ static void event_handler(void *arg, esp_event_base_t base, int32_t id, void *da
                 s_want_connected = false;
             }
             bool retry = s_want_connected;
+            bool later = !retry && s_keep && s_st.state == WIFI_SVC_FAILED;
+            s_st.retry_waiting = later;
             UNLOCK();
+            if (later) {
+                esp_timer_stop(s_retry_timer);
+                esp_timer_start_once(s_retry_timer, (uint64_t)RETRY_PERIOD_S * 1000000);
+            }
             ESP_LOGW(TAG, "disconnected, reason %u %s%s", e->reason, reason_text(e->reason),
                      retry ? ", retrying" : "");
             if (retry) {
@@ -222,12 +232,65 @@ static void event_handler(void *arg, esp_event_base_t base, int32_t id, void *da
     }
 }
 
+/* esp_timer task: the stored network was not reachable, try again. */
+static void retry_cb(void *arg)
+{
+    LOCK();
+    bool go = s_keep && s_st.state == WIFI_SVC_FAILED && !s_st.scanning;
+    bool busy = s_keep && s_st.state == WIFI_SVC_FAILED && s_st.scanning;
+    if (go) {
+        s_want_connected = true;
+        s_retries = MAX_RETRIES;        /* one attempt (scan of all channels) per period */
+        s_st.state = WIFI_SVC_CONNECTING;
+        s_st.retry_waiting = false;
+        snprintf(s_st.ssid, sizeof(s_st.ssid), "%s", s_st.saved_ssid);
+    }
+    UNLOCK();
+    if (go) {
+        ESP_LOGI(TAG, "retrying %s", s_st.saved_ssid);
+        esp_wifi_connect();
+    } else if (busy) {
+        esp_timer_start_once(s_retry_timer, 5 * 1000000);     /* user scan running */
+    }
+}
+
+/* Caller holds the lock. */
+static void set_keep(bool keep)
+{
+    s_keep = keep && s_auto_retry;
+    if (!s_keep) {
+        s_st.retry_waiting = false;
+        if (s_retry_timer) {
+            esp_timer_stop(s_retry_timer);
+        }
+    }
+}
+
+void wifi_svc_set_auto_retry(bool on)
+{
+    if (s_lock == NULL) {
+        s_auto_retry = on;
+        return;
+    }
+    LOCK();
+    s_auto_retry = on;
+    bool start = on && s_st.has_saved && s_st.state == WIFI_SVC_FAILED;
+    set_keep(on && s_st.has_saved && s_st.state != WIFI_SVC_IDLE);
+    UNLOCK();
+    if (start) {
+        retry_cb(NULL);
+    }
+}
+
 esp_err_t wifi_svc_init(bool autoconnect)
 {
     s_lock = xSemaphoreCreateMutex();
     if (s_lock == NULL) {
         return ESP_ERR_NO_MEM;
     }
+    const esp_timer_create_args_t ta = { .callback = retry_cb, .name = "wifi_retry" };
+    ESP_RETURN_ON_ERROR(esp_timer_create(&ta, &s_retry_timer), TAG, "timer");
+    s_auto_retry = autoconnect;
     setenv("TZ", CONFIG_APP_TZ, 1);
     tzset();
 
@@ -253,6 +316,7 @@ esp_err_t wifi_svc_init(bool autoconnect)
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     refresh_saved();
     s_want_connected = autoconnect && s_st.has_saved;
+    set_keep(s_want_connected);
     s_st.state = s_want_connected ? WIFI_SVC_CONNECTING : WIFI_SVC_IDLE;
     if (s_want_connected) {
         snprintf(s_st.ssid, sizeof(s_st.ssid), "%s", s_st.saved_ssid);
@@ -316,8 +380,10 @@ esp_err_t wifi_svc_connect(const char *ssid, const char *password)
 
     LOCK();
     s_want_connected = true;
+    set_keep(true);
     s_retries = 0;
     s_st.state = WIFI_SVC_CONNECTING;
+    s_st.retry_waiting = false;
     snprintf(s_st.ssid, sizeof(s_st.ssid), "%s", ssid);
     refresh_saved();
     UNLOCK();
@@ -334,7 +400,9 @@ esp_err_t wifi_svc_connect_saved(void)
     bool has = s_st.has_saved;
     if (has) {
         s_want_connected = true;
+        set_keep(true);
         s_retries = 0;
+        s_st.retry_waiting = false;
         s_st.state = WIFI_SVC_CONNECTING;
         snprintf(s_st.ssid, sizeof(s_st.ssid), "%s", s_st.saved_ssid);
     }
@@ -349,6 +417,7 @@ esp_err_t wifi_svc_disconnect(void)
     }
     LOCK();
     s_want_connected = false;
+    set_keep(false);
     s_st.state = WIFI_SVC_IDLE;
     UNLOCK();
     return esp_wifi_disconnect();

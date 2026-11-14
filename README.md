@@ -33,7 +33,8 @@ can_if          esp_twai driver: start / restart (bitrate, listen-only), TX queu
 datalog         SD logging task: raw CAN (candump .log) + polled parameters (.csv)
 io_svc          IO page: DI / DO through the CH422G, I2C scan, chip temperature
 canmon          CAN page bus monitor: ID table, rates, bus load (from Esp32_monitor, without its logger)
-wifi_svc        Wi-Fi station: scan, connect, stored network, SNTP clock (from Esp32_monitor)
+wifi_svc        Wi-Fi station: scan, connect, stored network, retry in the background, SNTP clock (from Esp32_monitor)
+web_svc         log file manager over Wi-Fi (http://<IP>/): download / delete the SD card logs
 ble_svc         Bluetooth LE central (NimBLE): scan, connect, pair (from Esp32_monitor)
 vehicle_data    latest value + timestamp of every signal (producers -> consumers)
 settings        persistent user config in NVS (one versioned blob, saved 2 s after last change)
@@ -82,7 +83,7 @@ the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on eve
 | **OBD** | Connect / disconnect, ECU status, the three live views, Select parameters, log parameters, read speed, connection type |
 | **DTC** | Read / clear / save the trouble codes, freeze frame |
 | **CAN** | Bus monitor: every ID on the bus (DLC, last data, count, period; our own OBD requests too), frames/s, peak, bus load, error counters. Bitrate and listen-only (only while OBD is disconnected; Connect switches listen-only off). Raw log options |
-| **Wi-Fi** | Scan, connect, forget, connect at boot; IP, RSSI, SNTP time (stored in the RTC) |
+| **Wi-Fi** | Scan, connect, forget, auto connect; IP, RSSI, SNTP time (stored in the RTC), address of the log file web page |
 | **BLE** | 10 s scan, connect + pair, GATT services, forget bonds |
 | **IO** | Isolated inputs DI0 / DI1 (state, change counters; read only while the page is open), outputs DO0 / DO1 (tap to switch; off at power-up), I2C scan of the terminal's SDA / SCL, chip temperature |
 | **Display** | Brightness, screen timeout, gauge animation, SD card (remount), restart |
@@ -219,6 +220,24 @@ Time zone: `CONFIG_APP_TZ` (menuconfig > Clock and network, default Romania).
 
 Files are synced every `CONFIG_DATALOG_SYNC_PERIOD_MS` (2 s); untick the box before
 pulling the card. Status line shows `REC` while a log is open.
+
+### Getting the logs over Wi-Fi
+
+No need to pull the card: with the dash on Wi-Fi, open `http://<IP>/` (the Wi-Fi
+page shows the address, e.g. `http://192.168.1.57/`) in a browser on the same network.
+The page lists the `can_`, `par_`, `evt_` and `dtc_` files on the card by type, newest
+first, with date and size, and the free space on the card. Click a name to download it;
+delete single files or tick several (or "select all" per type) and **Delete selected**.
+Files being recorded right now are marked *(recording)*: they can be downloaded (contents
+up to the last sync) but not deleted. Nothing else on the card is listed or reachable.
+There is no password, so anyone on the same network can do this; use it on your own
+network or a phone hotspot.
+
+**Auto connect** (Wi-Fi page, on by default): connect to the stored network at boot,
+and keep trying while it is out of reach (5 quick attempts, then one every 30 s), also
+after the connection is lost. So a dash started in the car connects by itself once it
+is back in range of the home network. Disconnect or Forget stops the retries until the
+next Connect.
 
 ## Enclosure
 

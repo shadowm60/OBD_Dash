@@ -4,6 +4,7 @@
  *   elm_log    last lines, "> " = sent, the rest = received
  *   elm_info   serial port / state
  *   elm_cmd    text area for a custom command (two-way)
+ * Every line also goes to the serial log (tag view_elm), for copy / paste.
  * Commands get the ELM327 terminator '\r'. Step A1 of the roadmap (CLAUDE.md):
  * proves the BLE link before OBD uses it.
  */
@@ -38,6 +39,9 @@ static void push_line(const char *text)
         return;                         /* ELM sends "\r\r>": no runs of blank lines */
     }
     s_last_empty = empty;
+    if (!empty) {
+        ESP_LOGI(TAG, "%s", text);      /* the console in the serial log too, for copy / paste */
+    }
     strlcpy(s_lines[s_head], text, LINE_LEN);
     s_head = (s_head + 1) % LINES;
     if (s_count < LINES) {
@@ -88,7 +92,6 @@ static void send(const char *cmd)
     if (ble_svc_serial_write(tx, (size_t)n) != ESP_OK) {
         push_line("(send failed)");
     }
-    ESP_LOGI(TAG, "sent %s", cmd);
 }
 
 void view_elm_send(const char *cmd)

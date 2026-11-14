@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include "esp_attr.h"
+#include "esp_log.h"
+#include "esp_timer.h"
 #include "bridge.h"
 #include "settings.h"
 #include "comsm.h"
@@ -30,7 +32,11 @@ static uivar_t v_load = UIVAR("can_load");
 static uivar_t v_load_text = UIVAR("can_load_text");
 static uivar_t v_ids = UIVAR("can_ids");
 
+static const char *TAG = "view_can";
+
 static int  s_sel;
+static int64_t s_pending_us;      /* start / stop sent, waiting for canmon */
+static bool s_pending_run;
 static bool s_listen;
 EXT_RAM_BSS_ATTR static char s_ids[IDS_LEN];     /* PSRAM */
 
@@ -89,7 +95,14 @@ void view_can_update(bool visible)
 
     canmon_stats_t st;
     canmon_get_stats(&st);
-    uv_str(&v_run, st.running ? "Stop monitor" : "Start monitor");
+    if (s_pending_us && (st.running == s_pending_run || esp_timer_get_time() - s_pending_us > 2000000)) {
+        if (st.running != s_pending_run) {
+            ESP_LOGW(TAG, "monitor did not %s within 2 s", s_pending_run ? "start" : "stop");
+        }
+        s_pending_us = 0;
+    }
+    uv_str(&v_run, s_pending_us ? (s_pending_run ? "Starting..." : "Stopping...")
+                                : st.running ? "Stop monitor" : "Start monitor");
     uv_int(&v_load, st.running ? st.load_pct : 0);
     uv_strf(&v_load_text, "%u %%", st.running ? st.load_pct : 0);
     if (!visible) {
@@ -97,13 +110,16 @@ void view_can_update(bool visible)
     }
 
     char up[24];
+    const char *what = !st.running ? "monitor stopped - "
+                     : (st.frames == 0 && st.uptime_s >= 2) ? "no frames received (quiet bus?) - "
+                     : "";
     uv_strf(&v_stats,
             "%" PRIu32 " kbit/s%s, bus %s\n"
             "%s%" PRIu32 " frames/s (peak %" PRIu32 "), %" PRIu32 " IDs%s\n"
             "%" PRIu32 " frames (%" PRIu32 " std, %" PRIu32 " ext) in %s\n"
             "errors: bus %" PRIu32 ", TEC %" PRIu32 ", REC %" PRIu32 "%s",
             st.bitrate / 1000, st.listen_only ? ", listen only" : "", st.state,
-            st.running ? "" : "monitor stopped - ", st.fps, st.fps_peak, st.ids,
+            what, st.fps, st.fps_peak, st.ids,
             st.id_table_full ? " (table full)" : "",
             st.frames, st.std_frames, st.ext_frames, fmt_duration(st.uptime_s, up, sizeof(up)),
             st.bus_errors, st.tec, st.rec, st.dropped ? ", some frames dropped" : "");
@@ -115,10 +131,13 @@ void view_can_start_stop(void)
 {
     canmon_stats_t st;
     canmon_get_stats(&st);
-    if (st.running) {
-        canmon_stop();
+    esp_err_t err = st.running ? canmon_stop() : canmon_start();
+    ESP_LOGI(TAG, "%s monitor: %s", st.running ? "stop" : "start", esp_err_to_name(err));
+    if (err == ESP_OK) {
+        s_pending_run = !st.running;
+        s_pending_us = esp_timer_get_time();
     } else {
-        canmon_start();
+        view_show_message("CAN monitor", "The monitor task did not take the command.");
     }
 }
 

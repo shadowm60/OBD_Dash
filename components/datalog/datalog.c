@@ -429,8 +429,13 @@ static void params_row(uint32_t now)
 
 static void params_service(uint32_t now)
 {
+    /* The supported-PID list survives a disconnect, so it alone would keep the
+     * file open (empty rows) after Disconnect: close when OBD is idle. A short
+     * ECU dropout (retry) keeps the file, rows only while polling. */
+    comsm_status_t cs;
+    comsm_get_status(&cs);
     vd_signal_t cols[MAX_COLUMNS];
-    int n = s_want_params ? current_columns(cols) : 0;
+    int n = (s_want_params && cs.state != COMSM_IDLE) ? current_columns(cols) : 0;
 
     /* Nothing polled (disconnected / nothing selected) or columns changed: close. */
     bool changed = (n != s_ncols) || memcmp(cols, s_cols, n * sizeof(cols[0])) != 0;
@@ -439,11 +444,13 @@ static void params_service(uint32_t now)
         ESP_LOGI(TAG, "params log closed (%" PRIu32 " rows)", s_status.params_rows);
         s_ncols = 0;
     }
-    if (n > 0 && s_par.f == NULL) {
+    if (n > 0 && s_par.f == NULL && cs.state == COMSM_RUNNING) {
         params_open(cols, n);
     }
     if (s_par.f != NULL) {
-        params_row(now);
+        if (cs.state == COMSM_RUNNING) {
+            params_row(now);
+        }
     } else {
         portENTER_CRITICAL(&s_lock);
         s_status.params_active = false;

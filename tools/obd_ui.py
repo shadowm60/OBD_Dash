@@ -83,12 +83,13 @@ SUB_PAGES = [
     ('ble_console', 'ble', 'BLE adapter console'),
     ('dash_setup', 'dash', 'Dash settings'),
     ('dash_signals', 'dash', 'Dash signals'),
+    ('dash_tile', 'dash', 'Dash tile'),
 ]
 # replaced by the pages above
 OLD_PAGES = ['startup', 'clearDTC', 'settings', 'system']
 # screen order in the project (= ScreensEnum); the first one is shown at the first boot
 ORDER = ['home', 'obd', 'readDTC', 'select_params', 'freezFrame', 'drive', 'liveData', 'tune',
-         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag', 'ble_console', 'dash_setup', 'dash_signals']
+         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag', 'ble_console', 'dash_setup', 'dash_signals', 'dash_tile']
 
 # name -> (type, default expression). Existing variables are kept as they are.
 VARIABLES = {
@@ -148,6 +149,12 @@ VARIABLES = {
     'dash_base_text': ('string', '""'),
     'dash_setup_info': ('string', '""'),
     'dash_tile_sel': ('integer', '0'),
+    'dash_edit_title': ('string', '""'),
+    'dash_edit_info': ('string', '""'),
+    'dash_wlo': ('string', '""'),
+    'dash_whi': ('string', '""'),
+    'dash_alo': ('string', '""'),
+    'dash_ahi': ('string', '""'),
     'dash_sig_list': ('string', '""'),
     'dash_sig_sel': ('integer', '0'),
     'dash_t1_name': ('string', '""'),
@@ -197,7 +204,7 @@ ACTIONS = [
     'io_do0_toggle', 'io_do1_toggle', 'io_reset', 'i2c_scan',
     'wifi_scan', 'wifi_connect', 'wifi_disconnect', 'wifi_forget',
     'ble_scan', 'ble_connect', 'ble_disconnect', 'ble_forget',
-    'dash_reload', 'nav_dash_setup', 'dash_apply', 'nav_dash_signals',
+    'dash_reload', 'nav_dash_setup', 'dash_apply', 'nav_dash_signals', 'dash_tile_save', 'dash_tile_clear',
     'nav_ble_console', 'elm_atz', 'elm_ati', 'elm_atrv', 'elm_0100', 'elm_send', 'elm_clear',
     'sd_remount', 'screen_off', 'restart',
 ]
@@ -579,6 +586,31 @@ def page_dash(b):
     ] + tiles
 
 
+def page_dash_tile(b):
+    # keyboard (screen.c) covers the bottom 220 px: the limit fields stay above it
+    iw = CW - 26
+    return [
+        b.panel(CX, TOP, CW, CH, [
+            b.label('dash_edit_title', 0, 10, 100, 20, expr=True),
+            b.dropdown('dash_sig_list', 'dash_sig_sel', 110, 0, iw - 110, font=16),
+            b.label('dash_edit_info', 0, 52, iw, 12, GREY, expr=True),
+            b.label('below', 130, 76, None, 12, GREY),
+            b.label('above', 330, 76, None, 12, GREY),
+            b.label('Warning', 0, 106, None, 16, '#e0b341'),
+            b.textarea('dash_wlo', 130, 96, 180, '-', maxlen=10, accepted='0123456789.-'),
+            b.textarea('dash_whi', 330, 96, 180, '-', maxlen=10, accepted='0123456789.-'),
+            b.label('Alarm', 0, 158, None, 16, '#ff6060'),
+            b.textarea('dash_alo', 130, 148, 180, '-', maxlen=10, accepted='0123456789.-'),
+            b.textarea('dash_ahi', 330, 148, 180, '-', maxlen=10, accepted='0123456789.-'),
+            b.label('Empty = no limit. The tile turns amber at a warning and red (blinking) at an alarm.',
+                    0, 204, iw, 16, GREY, wrap=True),
+            b.button('Save', 0, CH - 26 - 50, 164, 50, 'dash_tile_save', ACCENT, font=16),
+            b.button('Clear limits', 184, CH - 26 - 50, 164, 50, 'dash_tile_clear', font=16),
+            b.button('Back to\nDash', iw - 164, CH - 26 - 50, 164, 50, 'nav_dash', font=16),
+        ]),
+    ]
+
+
 def page_dash_signals(b):
     rw = 190
     return [
@@ -605,10 +637,8 @@ def page_dash_setup(b):
             b.textarea('dash_base_text', 0, 140, 200, '0', maxlen=8, accepted='0123456789xXabcdefABCDEF'),
             b.button('Apply', 220, 140, 160, 44, 'dash_apply', ACCENT, font=16),
             b.label('dash_setup_info', 0, 196, iw, 16, expr=True, wrap=True),
-            b.label('Tile', 0, 300, None, 16, GREY),
-            b.dropdown(None, 'dash_tile_sel', 44, 290, 90, literal_options=[str(i + 1) for i in range(DASH_TILES)], font=16),
-            b.label('shows', 148, 300, None, 16, GREY),
-            b.dropdown('dash_sig_list', 'dash_sig_sel', 204, 290, iw - 204, font=16),
+            b.label('Tiles: tap a tile on the Dash page to choose its signal and warning / alarm limits.',
+                    0, 290, iw - 360, 16, GREY, wrap=True),
             b.button('All signals', iw - 340, CH - 26 - 50, 164, 50, 'nav_dash_signals', font=16),
             b.button('Back to\nDash', iw - 164, CH - 26 - 50, 164, 50, 'nav_dash', font=16),
         ]),
@@ -656,7 +686,7 @@ def page_display(b):
 BUILDERS = {
     'home': page_home, 'obd': page_obd, 'readDTC': page_dtc, 'can': page_can, 'wifi': page_wifi,
     'ble': page_ble, 'io': page_io, 'display': page_display,
-    'dash': page_dash, 'diag': page_diag, 'ble_console': page_ble_console, 'dash_setup': page_dash_setup, 'dash_signals': page_dash_signals,
+    'dash': page_dash, 'diag': page_diag, 'ble_console': page_ble_console, 'dash_setup': page_dash_setup, 'dash_signals': page_dash_signals, 'dash_tile': page_dash_tile,
     'select_params': page_params, 'freezFrame': page_freeze,
 }
 

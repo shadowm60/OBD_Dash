@@ -29,7 +29,8 @@ enum ScreensEnum {
     SCREEN_ID_BLE_CONSOLE = 16,
     SCREEN_ID_DASH_SETUP = 17,
     SCREEN_ID_DASH_SIGNALS = 18,
-    _SCREEN_ID_LAST = 18
+    SCREEN_ID_DASH_TILE = 19,
+    _SCREEN_ID_LAST = 19
 };
 
 typedef struct _objects_t {
@@ -51,6 +52,7 @@ typedef struct _objects_t {
     lv_obj_t *ble_console;
     lv_obj_t *dash_setup;
     lv_obj_t *dash_signals;
+    lv_obj_t *dash_tile;
     lv_obj_t *obj0;
     lv_obj_t *obj1;
     lv_obj_t *obj2;
@@ -713,14 +715,53 @@ typedef struct _objects_t {
     lv_obj_t *obj633;
     lv_obj_t *obj634;
     lv_obj_t *obj635;
+    lv_obj_t *dash_signal_table;
     lv_obj_t *obj636;
     lv_obj_t *obj637;
     lv_obj_t *obj638;
-    lv_obj_t *dash_signal_table;
     lv_obj_t *obj639;
     lv_obj_t *obj640;
     lv_obj_t *obj641;
     lv_obj_t *obj642;
+    lv_obj_t *obj643;
+    lv_obj_t *obj644;
+    lv_obj_t *obj645;
+    lv_obj_t *obj646;
+    lv_obj_t *obj647;
+    lv_obj_t *obj648;
+    lv_obj_t *obj649;
+    lv_obj_t *obj650;
+    lv_obj_t *obj651;
+    lv_obj_t *obj652;
+    lv_obj_t *obj653;
+    lv_obj_t *obj654;
+    lv_obj_t *obj655;
+    lv_obj_t *obj656;
+    lv_obj_t *obj657;
+    lv_obj_t *obj658;
+    lv_obj_t *obj659;
+    lv_obj_t *obj660;
+    lv_obj_t *obj661;
+    lv_obj_t *obj662;
+    lv_obj_t *obj663;
+    lv_obj_t *obj664;
+    lv_obj_t *obj665;
+    lv_obj_t *obj666;
+    lv_obj_t *obj667;
+    lv_obj_t *obj668;
+    lv_obj_t *obj669;
+    lv_obj_t *obj670;
+    lv_obj_t *obj671;
+    lv_obj_t *obj672;
+    lv_obj_t *obj673;
+    lv_obj_t *obj674;
+    lv_obj_t *obj675;
+    lv_obj_t *obj676;
+    lv_obj_t *obj677;
+    lv_obj_t *obj678;
+    lv_obj_t *obj679;
+    lv_obj_t *obj680;
+    lv_obj_t *obj681;
 } objects_t;
 
 extern objects_t objects;
@@ -793,6 +834,9 @@ void tick_screen_dash_setup();
 
 void create_screen_dash_signals();
 void tick_screen_dash_signals();
+
+void create_screen_dash_tile();
+void tick_screen_dash_tile();
 
 void tick_screen_by_id(enum ScreensEnum screenId);
 void tick_screen(int screen_index);

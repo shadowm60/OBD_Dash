@@ -73,6 +73,7 @@ void hmi_init(void)
     view_ble_init();
     view_obd_init();
     view_can_init();
+    view_dash_init();
     obd_bridge_init();
     nav_init(cfg.page);
 

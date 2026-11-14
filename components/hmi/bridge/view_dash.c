@@ -6,13 +6,18 @@
  *                 panels objects.dash_tile<n>; dash_status. Values 10x/s
  *                 (view_dash_tick, ui_bridge's 100 ms timer), "--" when not
  *                 received for STALE_MS.
- *   dash_setup    DBC file + base ID (settings dash_dbc / dash_base, Apply),
- *                 tile assignment: dash_tile_sel + dash_sig_list / dash_sig_sel,
- *                 saved at once; dash_setup_info.
+ *   dash_setup    DBC file + base ID (settings dash_dbc / dash_base, Apply);
+ *                 dash_setup_info.
+ *   dash_tile     a tapped tile: signal (dash_sig_list / dash_sig_sel) and
+ *                 limits dash_wlo / dash_whi (warning below / above),
+ *                 dash_alo / dash_ahi (alarm); Save writes the layout.
  *   dash_signals  every signal as a table (objects.dash_signal_table).
  *
  * Layout: one file per DBC, /sdcard/db/dash/<dbc file name>.txt, lines
- * "<tile> = <signal name>" ('#' comments), written when a tile is changed.
+ * "<tile> = <signal name> [| wlo=<v> whi=<v> alo=<v> ahi=<v>]" ('#'
+ * comments), written when a tile is saved. Tile colour: amber = warning,
+ * red blinking = alarm; leaving a level needs 1 % of the DBC range
+ * (hysteresis), so a value on the limit doesn't flicker.
  * Without a file the tiles get common signals picked by name (DEFAULTS),
  * then the first ones left. Decoding runs while any of the pages is shown.
  */
@@ -28,6 +33,7 @@
 #include "dash_svc.h"
 #include "settings.h"
 #include "sd_card.h"
+#include "screens.h"
 
 static const char *TAG = "view_dash";
 
@@ -42,7 +48,11 @@ static uivar_t v_files = UIVAR("dash_files");
 static uivar_t v_file_sel = UIVAR("dash_file_sel");
 static uivar_t v_base = UIVAR("dash_base_text");
 static uivar_t v_info = UIVAR("dash_setup_info");
-static uivar_t v_tile_sel = UIVAR("dash_tile_sel");
+static uivar_t v_edit_title = UIVAR("dash_edit_title");
+static uivar_t v_edit_info = UIVAR("dash_edit_info");
+static uivar_t v_lim[4] = { UIVAR("dash_wlo"), UIVAR("dash_whi"), UIVAR("dash_alo"), UIVAR("dash_ahi") };
+static const char *const LIM_KEY[4] = { "wlo", "whi", "alo", "ahi" };
+enum { WLO, WHI, ALO, AHI };
 static uivar_t v_sig_list = UIVAR("dash_sig_list");
 static uivar_t v_sig_sel = UIVAR("dash_sig_sel");
 
@@ -69,8 +79,17 @@ static bool     s_tried;
 static bool     s_setup_shown;
 static uint32_t s_gen = UINT32_MAX;         /* dash_svc generation the tiles are resolved for */
 static int      s_tile[DASH_TILES];         /* signal index per tile, -1 = empty */
+typedef struct {
+    bool   has[4];
+    double v[4];
+} limits_t;
+static limits_t s_lim[DASH_TILES];
+static int      s_level[DASH_TILES];        /* 0 normal, 1 warning, 2 alarm (colour shown) */
+static int      s_edit = -1;                /* tile on the dash_tile page */
+static bool     s_edit_shown;
+static uint32_t s_ticks;
+static lv_obj_t *s_tile_obj[DASH_TILES];
 static char     s_dbc_file[48];
-static int      s_tile_shown = -1, s_sig_shown = -1;    /* tile picker state */
 EXT_RAM_BSS_ATTR static char s_table[ROWS * 64 + 128];
 EXT_RAM_BSS_ATTR static char s_files[16 * 48];
 EXT_RAM_BSS_ATTR static char s_names[8192];
@@ -161,7 +180,8 @@ static bool layout_read(void)
     for (int t = 0; t < DASH_TILES; t++) {
         s_tile[t] = -1;
     }
-    char line[96];
+    memset(s_lim, 0, sizeof(s_lim));
+    char line[160];
     while (fgets(line, sizeof(line), f)) {
         char *p = line;
         while (isspace((unsigned char)*p)) p++;
@@ -170,6 +190,19 @@ static bool layout_read(void)
         char *eq = strchr(p, '=');
         if (t < 1 || t > DASH_TILES || eq == NULL) continue;
         char *name = eq + 1;
+        char *bar = strchr(name, '|');
+        if (bar) {
+            *bar = '\0';
+            for (char *tok = strtok(bar + 1, " \t\r\n"); tok; tok = strtok(NULL, " \t\r\n")) {
+                for (int k = 0; k < 4; k++) {
+                    size_t kl = strlen(LIM_KEY[k]);
+                    if (strncasecmp(tok, LIM_KEY[k], kl) == 0 && tok[kl] == '=') {
+                        s_lim[t - 1].has[k] = true;
+                        s_lim[t - 1].v[k] = strtod(tok + kl + 1, NULL);
+                    }
+                }
+            }
+        }
         while (isspace((unsigned char)*name)) name++;
         char *e = name + strlen(name);
         while (e > name && isspace((unsigned char)e[-1])) *--e = '\0';
@@ -193,11 +226,20 @@ static void layout_write(void)
         view_show_message("Dash", "Could not write the layout to the SD card.");
         return;
     }
-    fprintf(f, "# OBD_Dash dash layout for %s: <tile 1..%d, row by row> = <signal name>\n",
+    fprintf(f, "# OBD_Dash dash layout for %s: <tile 1..%d, row by row> = <signal name>"
+            " [| wlo=<warning below> whi=<warning above> alo=<alarm below> ahi=<alarm above>]\n",
             s_dbc_file, DASH_TILES);
     for (int t = 0; t < DASH_TILES; t++) {
         dash_svc_value_t v;
-        fprintf(f, "%d = %s\n", t + 1, s_tile[t] >= 0 && dash_svc_value(s_tile[t], &v) ? v.name : "");
+        fprintf(f, "%d = %s", t + 1, s_tile[t] >= 0 && dash_svc_value(s_tile[t], &v) ? v.name : "");
+        const char *sep = " |";
+        for (int k = 0; k < 4; k++) {
+            if (s_lim[t].has[k]) {
+                fprintf(f, "%s %s=%g", sep, LIM_KEY[k], s_lim[t].v[k]);
+                sep = "";
+            }
+        }
+        fputc('\n', f);
     }
     fclose(f);
     ESP_LOGI(TAG, "layout saved: %s", path);
@@ -217,34 +259,89 @@ static void resolve_layout(void)
         for (int t = 0; t < DASH_TILES; t++) {
             s_tile[t] = -1;
         }
+        memset(s_lim, 0, sizeof(s_lim));
     } else if (!layout_read()) {
+        memset(s_lim, 0, sizeof(s_lim));
         layout_defaults();
     }
-    s_tile_shown = s_sig_shown = -1;            /* tile picker shows the new state */
 }
 
 /* ---------------------------------------------------------------- tiles */
+
+/* 0 normal, 1 warning, 2 alarm; `cur` = level shown, leaving it needs `h` */
+static int level_of(const limits_t *l, double x, int cur, double h)
+{
+    double ha = cur >= 2 ? h : 0, hw = cur >= 1 ? h : 0;
+    if ((l->has[AHI] && x >= l->v[AHI] - ha) || (l->has[ALO] && x <= l->v[ALO] + ha)) {
+        return 2;
+    }
+    if ((l->has[WHI] && x >= l->v[WHI] - hw) || (l->has[WLO] && x <= l->v[WLO] + hw)) {
+        return 1;
+    }
+    return 0;
+}
+
+static void set_tile_colour(int t, int level, bool blink_off)
+{
+    static const uint32_t COL[] = { 0x161e28, 0x7a5a00, 0xa01c1c };     /* panel, amber, red */
+    if (s_tile_obj[t] == NULL) {
+        return;
+    }
+    uint32_t c = level == 2 && blink_off ? 0x4a1010 : COL[level];
+    lv_obj_set_style_bg_color(s_tile_obj[t], lv_color_hex(c), LV_PART_MAIN);
+}
 
 void view_dash_tick(void)
 {
     if (!nav_is("dash")) {
         return;
     }
+    s_ticks++;
+    bool blink_off = (s_ticks / 4) & 1;         /* 0.8 s period */
     resolve_layout();
     for (int t = 0; t < DASH_TILES; t++) {
         dash_svc_value_t v;
+        int level = 0;
         if (s_tile[t] < 0 || !dash_svc_value(s_tile[t], &v)) {
             uv_str(&v_tname[t], "");
             uv_str(&v_tvalue[t], "");
             uv_str(&v_tunit[t], "");
-            continue;
-        }
-        uv_str(&v_tname[t], v.name);
-        uv_str(&v_tunit[t], v.unit);
-        if (!v.received || v.age_ms > STALE_MS) {
-            uv_str(&v_tvalue[t], "--");
         } else {
-            uv_strf(&v_tvalue[t], "%.*f", v.decimals, v.value);
+            uv_str(&v_tname[t], v.name);
+            uv_str(&v_tunit[t], v.unit);
+            if (!v.received || v.age_ms > STALE_MS) {
+                uv_str(&v_tvalue[t], "--");
+            } else {
+                uv_strf(&v_tvalue[t], "%.*f", v.decimals, v.value);
+                double range = v.max - v.min;
+                level = level_of(&s_lim[t], v.value, s_level[t], range > 0 ? range * 0.01 : 0);
+            }
+        }
+        if (level != s_level[t] || level == 2) {
+            set_tile_colour(t, level, blink_off);
+            s_level[t] = level;
+        }
+    }
+}
+
+static void tile_clicked_cb(lv_event_t *e)
+{
+    s_edit = (int)(intptr_t)lv_event_get_user_data(e);
+    s_edit_shown = false;
+    nav_go("dash_tile");
+}
+
+void view_dash_init(void)
+{
+    lv_obj_t *const tiles[DASH_TILES] = {
+        objects.dash_tile1, objects.dash_tile2, objects.dash_tile3, objects.dash_tile4, objects.dash_tile5,
+        objects.dash_tile6, objects.dash_tile7, objects.dash_tile8, objects.dash_tile9,
+    };
+    for (int t = 0; t < DASH_TILES; t++) {
+        s_tile_obj[t] = tiles[t];
+        if (tiles[t]) {
+            lv_obj_add_flag(tiles[t], LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_add_event_cb(tiles[t], tile_clicked_cb, LV_EVENT_CLICKED, (void *)(intptr_t)t);
         }
     }
 }
@@ -305,7 +402,6 @@ static void setup_enter(void)
     } else {
         uv_str(&v_base, "");
     }
-    s_tile_shown = s_sig_shown = -1;
 }
 
 void view_dash_apply(void)
@@ -329,32 +425,69 @@ void view_dash_apply(void)
     ESP_LOGI(TAG, "dash: %s, base %lu", name[0] ? name : "(first DBC)", base);
 }
 
-/* Tile picker: choosing a tile shows its signal; choosing a signal assigns it. */
-static void update_tile_picker(void)
+/* ---------------------------------------------------------------- tile page */
+
+static void edit_enter(void)
 {
-    if (s_tile_shown < 0) {                     /* first time / after a load */
-        build_sig_list();
-        s_tile_shown = uv_get_int(&v_tile_sel, 0);
-        if (s_tile_shown < 0 || s_tile_shown >= DASH_TILES) {
-            s_tile_shown = 0;
+    build_sig_list();
+    uv_strf(&v_edit_title, "Tile %d", s_edit + 1);
+    uv_int(&v_sig_sel, s_tile[s_edit] + 1);
+    for (int k = 0; k < 4; k++) {
+        if (s_lim[s_edit].has[k]) {
+            uv_strf(&v_lim[k], "%g", s_lim[s_edit].v[k]);
+        } else {
+            uv_str(&v_lim[k], "");
         }
-        s_sig_shown = s_tile[s_tile_shown] + 1;
-        uv_int(&v_sig_sel, s_sig_shown);
+    }
+}
+
+static void update_edit(void)
+{
+    int sig = uv_get_int(&v_sig_sel, 0) - 1;
+    dash_svc_value_t v;
+    if (sig < 0 || !dash_svc_value(sig, &v)) {
+        uv_str(&v_edit_info, "empty tile");
+    } else if (!v.received) {
+        uv_strf(&v_edit_info, "%s: not received yet, range %g..%g %s", v.name, v.min, v.max, v.unit);
+    } else {
+        uv_strf(&v_edit_info, "%s: now %.*f %s, range %g..%g", v.name, v.decimals, v.value, v.unit, v.min, v.max);
+    }
+}
+
+void view_dash_tile_clear(void)
+{
+    for (int k = 0; k < 4; k++) {
+        uv_str(&v_lim[k], "");
+    }
+}
+
+void view_dash_tile_save(void)
+{
+    if (s_edit < 0 || s_edit >= DASH_TILES) {
         return;
     }
-    int tile = uv_get_int(&v_tile_sel, s_tile_shown);
-    if (tile != s_tile_shown && tile >= 0 && tile < DASH_TILES) {
-        s_tile_shown = tile;
-        s_sig_shown = s_tile[tile] + 1;
-        uv_int(&v_sig_sel, s_sig_shown);
-        return;
+    limits_t l = { 0 };
+    for (int k = 0; k < 4; k++) {
+        char t[16];
+        uv_get_str(&v_lim[k], t, sizeof(t));
+        if (t[0] == '\0') {
+            continue;
+        }
+        char *end;
+        double x = strtod(t, &end);
+        if (*end != '\0') {
+            view_show_message("Limits", "Use plain numbers, e.g. 105 or -0.5; empty = no limit.");
+            return;
+        }
+        l.has[k] = true;
+        l.v[k] = x;
     }
-    int sig = uv_get_int(&v_sig_sel, s_sig_shown);
-    if (sig != s_sig_shown && sig >= 0 && sig <= dash_svc_signal_count()) {
-        s_sig_shown = sig;
-        s_tile[s_tile_shown] = sig - 1;
-        layout_write();
-    }
+    int sig = uv_get_int(&v_sig_sel, 0) - 1;
+    s_tile[s_edit] = sig >= 0 && sig < dash_svc_signal_count() ? sig : -1;
+    s_lim[s_edit] = l;
+    s_level[s_edit] = -1;               /* recolour */
+    layout_write();
+    nav_go("dash");
 }
 
 static void update_setup(void)
@@ -374,7 +507,6 @@ static void update_setup(void)
                 st.dbc_base + off, st.dbc_last + off, st.dbc_base + off, st.dbc_last + off,
                 st.dbc_last + off > 0x7FF ? "\nWarning: beyond 0x7FF, those messages can't match." : "");
     }
-    update_tile_picker();
 }
 
 /* ---------------------------------------------------------------- 250 ms */
@@ -383,9 +515,17 @@ void view_dash_update(bool visible)
 {
     bool setup = nav_is("dash_setup");
     bool signals = nav_is("dash_signals");
-    dash_svc_set_active(visible || setup || signals);
+    bool tile = nav_is("dash_tile");
+    dash_svc_set_active(visible || setup || signals || tile);
     if ((visible || setup || signals) && !s_tried && waveshare_sd_card_mounted()) {
         load_from_settings();
+    }
+    if (tile && s_edit >= 0) {
+        if (!s_edit_shown) {
+            edit_enter();
+            s_edit_shown = true;
+        }
+        update_edit();
     }
     if (visible || setup) {
         resolve_layout();

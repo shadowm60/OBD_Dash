@@ -298,6 +298,16 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   picked by name (RPM, CLT, TPS, MAP, lambda, IAT, battery, speed, oil), then the first ones.
   Signal table moved to sub-page `dash_signals` (settings: "All signals"). Tile panels
   have identifiers `dash_tile1..9` for B3 (alarm colours).
+- **B3 done, built, not run yet:** tap a tile -> sub-page `dash_tile`: signal + limits
+  (warning below / above, alarm below / above; fields above the 220 px keyboard). Layout
+  line `N = <signal> | wlo=.. whi=.. alo=.. ahi=..`. Tile bg: amber warning, red blinking
+  (0.8 s) alarm, 1 % of the DBC range hysteresis to leave a level; stale = no colour.
+  The tile choice moved from the settings page to the tile page.
+- **Next (owner, 2026-11-14):** move the link choice from the OBD page to the CAN page as a
+  general "Car link" (board CAN / BLE adapter) for OBD, Dash, logging. Dash over the adapter
+  = ELM monitor mode (ATMA + ATCF/ATCM ID filter), not at the same time as OBD over the
+  adapter; adapter-internal UART speed unknown (BUFFER FULL risk). CAN monitor / all-traffic
+  log over the adapter: limited.
 - Tile layout + alarm limits in `/sdcard/db/dash/layout.json`, edited in the PC tool.
 
 **C. Diag page: manufacturer diagnostics over UDS (VW group, Mercedes first)**

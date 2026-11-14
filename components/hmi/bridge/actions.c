@@ -16,6 +16,8 @@ void action_nav_wifi(lv_event_t *e)        { nav_go("wifi"); }
 void action_nav_ble(lv_event_t *e)         { nav_go("ble"); }
 void action_nav_io(lv_event_t *e)          { nav_go("io"); }
 void action_nav_display(lv_event_t *e)     { nav_go("display"); }
+void action_nav_dash(lv_event_t *e)        { nav_go("dash"); }
+void action_nav_diag(lv_event_t *e)        { nav_go("diag"); }
 
 /* sub pages */
 void action_nav_params(lv_event_t *e)

@@ -216,6 +216,64 @@ Steps, each built, committed and tested on the board by the owner before the nex
 
 `sdkconfig` (local) got the step 1 options by hand; the previous copy is not kept.
 
+## Roadmap (agreed 2026-11-14, owner: "structure it and don't forget")
+
+Same process as the port: one step at a time, it builds, gets committed, the owner tests it
+on the board/car before the next step. Order decided by the owner: **link layer first**,
+the Dash UI later. Dash and Diag pages already exist in the sidebar as placeholders
+(`page_dash` / `page_diag` in tools/obd_ui.py, text only).
+
+**A. Car link layer: BLE ELM327 adapter as a standard input next to the board CAN**
+Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board's CAN 2.0
+(TWAI) or a BLE ELM327 adapter, chosen by a setting.
+- Owner's adapter: Vgate iCar Pro 2S, advertises as `IOS-Vlink`, pairs fine (encrypted, no
+  passkey). Serial port = service `e7810a71-73ae-499d-8c15-faa9aef0c3f2`, characteristic
+  `bef8d6c9-9c21-4c9e-b632-bd58c1009f9f` (R W w N I, value handle 28 on this unit; CCCD
+  presumably 29). Fallback layout used by other adapters: service `0x18F0`, notify `0x2AF0`,
+  write `0x2AF1`. Leave `0xFF12` (FF14/FF15, vendor, likely firmware update) alone. Look
+  characteristics up by UUID, never by handle.
+- ESP32-S3 = BLE only: Classic-Bluetooth ELM327 adapters can't be supported.
+- ELM327 set-up: `ATZ ATE0 ATL0 ATS0 ATH1 ATSP6`; per ECU `ATSH <tx>` + `ATCRA <rx>`; request
+  as hex text, reply in notification chunks until the `>` prompt. The adapter does ISO-TP.
+- Limits to keep in mind: ~10-30 requests/s over BLE (slower than the board CAN); `ATMA`
+  (monitor all) overflows on a busy bus, so the CAN monitor / Dash stay on the board CAN,
+  and "CAN logging over BLE" can only log our own requests and replies; VW TP2.0 only with
+  raw frames (tight timing); KWP1281 not possible with ELM327.
+- Adds K-line (ISO 9141 / KWP2000) and J1850 for older cars.
+- Steps: A1 GATT client in ble_svc (find serial char, notify on, write, RX buffer) + a raw
+  ELM test on the BLE page (ATZ, ATI, 0100); A2 `car_link` interface (request/response with
+  tx/rx IDs, timeouts) with two backends, board CAN (obd_client / isotp) and ELM327; comsm
+  uses it; A3 setting + UI (OBD page: link = board CAN / BLE adapter), datalog logs the
+  conversation from either link; A4 auto-reconnect to the bonded adapter.
+
+**B. Dash page: custom dash from a DBC (rusEFI first)**
+- rusEFI broadcasts on CAN (base ID 512 = the removed `rusefi_base_id` setting), decoded
+  with its DBC. Listen only, board CAN only (see A limits).
+- The PC tool converts `.dbc` -> compact signal file on the SD card (ID, start bit, length,
+  byte order, sign, scale, offset, unit, name); the dash only parses that.
+- Tile layout + alarm limits in `/sdcard/db/dash/layout.json`, edited in the PC tool.
+
+**C. Diag page: manufacturer diagnostics over UDS (VW group, Mercedes first)**
+- UDS (ISO 14229) over ISO-TP, CAN first; a `uds_client` beside obd_client (NRC 0x78
+  response pending, P2* up to 5 s), OBD polling paused during a job; runs over either link (A).
+- Read only: ECU scan (`3E 00` to every address in the DB), identification (`22` F187 part
+  number, F189 SW version, F190 VIN, F18C serial, F197 system name), DTCs `19 02 FF` with
+  status, clear `14 FF FF FF` with confirmation, read data by ID `22 xx xx`. NO 2E writes,
+  27 security access, 31 routines, coding.
+- Later: KWP2000 for older Mercedes (ISO-TP), maybe VW TP2.0.
+
+**D. Database on the SD card + PC tool**
+- `/sdcard/db/`: `manifest.json` (version, files, checksums), `ecus/<make>.json` (name,
+  address, request/response CAN ID, protocol), `dtc/<make>_<ecu>.tsv` (code, text),
+  `did/<make>_<ecu>.json` (name, type, scale, offset, unit, enum), `dbc/*.sig`,
+  `dash/layout.json`. Loaded per ECU into PSRAM.
+- Sources: open data only (SAE generic DTCs, standard UDS DIDs, opendbc (MIT), rusEFI DBC,
+  own findings). Never ship or import ODIS / Xentry databases (proprietary).
+- PC tool (Python + Tk): edit tables, import DBC / CSV, validate, export; deploy over Wi-Fi
+  to the dash IP (needs an upload endpoint for /sdcard/db in web_svc); live console: send a
+  UDS request through the dash (`POST /api/uds`), see the reply, save the decoding into the
+  DB. Needs a PIN shown on the dash, and the dash only forwards the read-only services.
+
 ## Status (last session ended 2026-11-12)
 
 Done:

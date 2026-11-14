@@ -38,6 +38,8 @@ extern void action_io_do0_toggle(lv_event_t * e);
 extern void action_io_do1_toggle(lv_event_t * e);
 extern void action_io_reset(lv_event_t * e);
 extern void action_i2c_scan(lv_event_t * e);
+extern void action_nav_dash(lv_event_t * e);
+extern void action_nav_diag(lv_event_t * e);
 
 #ifdef __cplusplus
 }

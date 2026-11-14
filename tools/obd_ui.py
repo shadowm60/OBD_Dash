@@ -44,8 +44,8 @@ WHITE = '#ffffff'
 GREY = '#8a96a3'
 
 SIDEBAR_W = 120
-NAV_STEP = 58                # sidebar button pitch (8 pages in 480 px)
-NAV_H = 52
+NAV_STEP = 46                # sidebar button pitch (10 pages in 480 px, one line each)
+NAV_H = 40
 CX = SIDEBAR_W + 10          # content x
 CW = 800 - CX - 10           # content width
 TOP = 48                     # content y
@@ -59,18 +59,22 @@ SYM_CAN = ''           # LV_SYMBOL_SHUFFLE
 SYM_WIFI = ''
 SYM_BT = ''
 SYM_IO = '\uf011'            # LV_SYMBOL_POWER (only LVGL's built-in symbols are in the fonts)
+SYM_DASH = '\uf06e'          # LV_SYMBOL_EYE_OPEN
+SYM_DIAG = '\uf00b'          # LV_SYMBOL_LIST
 SYM_DISP = ''          # LV_SYMBOL_SETTINGS
 
 # sidebar pages: screen name, sidebar text, title
 MENU_PAGES = [
-    ('home', SYM_HOME + '\nHome', 'OBD Dash'),
-    ('obd', SYM_OBD + '\nOBD', 'OBD scanner'),
-    ('readDTC', SYM_WARN + '\nDTC', 'Trouble codes'),
-    ('can', SYM_CAN + '\nCAN', 'CAN bus'),
-    ('wifi', SYM_WIFI + '\nWi-Fi', 'Wi-Fi'),
-    ('ble', SYM_BT + '\nBLE', 'Bluetooth LE'),
-    ('io', SYM_IO + '\nIO', 'Inputs / outputs'),
-    ('display', SYM_DISP + '\nDisplay', 'Display & system'),
+    ('home', SYM_HOME + ' Home', 'OBD Dash'),
+    ('obd', SYM_OBD + ' OBD', 'OBD scanner'),
+    ('dash', SYM_DASH + ' Dash', 'Custom dash (CAN / DBC)'),
+    ('readDTC', SYM_WARN + ' DTC', 'Trouble codes'),
+    ('diag', SYM_DIAG + ' Diag', 'Diagnostics (UDS)'),
+    ('can', SYM_CAN + ' CAN', 'CAN bus'),
+    ('wifi', SYM_WIFI + ' Wi-Fi', 'Wi-Fi'),
+    ('ble', SYM_BT + ' BLE', 'Bluetooth LE'),
+    ('io', SYM_IO + ' IO', 'Inputs / outputs'),
+    ('display', SYM_DISP + ' Display', 'Display & system'),
 ]
 # pages without their own sidebar button: screen name, parent page, title
 SUB_PAGES = [
@@ -81,7 +85,7 @@ SUB_PAGES = [
 OLD_PAGES = ['startup', 'clearDTC', 'settings', 'system']
 # screen order in the project (= ScreensEnum); the first one is shown at the first boot
 ORDER = ['home', 'obd', 'readDTC', 'select_params', 'freezFrame', 'drive', 'liveData', 'tune',
-         'can', 'wifi', 'ble', 'io', 'display']
+         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag']
 
 # name -> (type, default expression). Existing variables are kept as they are.
 VARIABLES = {
@@ -143,7 +147,7 @@ VARIABLES = {
 
 ACTIONS = [
     'nav_home', 'nav_obd', 'nav_readdtc', 'nav_can', 'nav_wifi', 'nav_ble', 'nav_io', 'nav_display',
-    'nav_params', 'nav_freeze',
+    'nav_params', 'nav_freeze', 'nav_dash', 'nav_diag',
     'conn_button_pressed', 'obd_drive', 'obd_race', 'obd_tune',
     'can_start_stop', 'can_reset',
     'io_do0_toggle', 'io_do1_toggle', 'io_reset', 'i2c_scan',
@@ -480,6 +484,35 @@ def page_io(b):
     ]
 
 
+def page_dash(b):
+    return [
+        b.panel(CX, TOP, CW, CH, [
+            b.label('Planned (see CLAUDE.md, roadmap)', 0, 0, None, 20),
+            b.label('Custom dash from CAN broadcast data, decoded with a DBC file '
+                    '(rusEFI first, any DBC later):\n'
+                    '- signal definitions converted on the PC, loaded from the SD card\n'
+                    '- tile layout and alarm limits from the SD card, edited in the PC tool\n'
+                    '- listen only: works next to OBD, on the board CAN', 0, 40, CW - 26, 16, GREY, wrap=True),
+        ]),
+    ]
+
+
+def page_diag(b):
+    return [
+        b.panel(CX, TOP, CW, CH, [
+            b.label('Planned (see CLAUDE.md, roadmap)', 0, 0, None, 20),
+            b.label('Manufacturer diagnostics over UDS (VW group, Mercedes first):\n'
+                    '- ECU scan: which control units answer\n'
+                    '- identification (part number, software, VIN, serial)\n'
+                    '- trouble codes per ECU, clear with confirmation\n'
+                    '- read data by identifier\n'
+                    '- texts and decoding from a database on the SD card, built with a PC tool\n'
+                    '- read only: no coding, no security access, no routines\n'
+                    '- over the board CAN or a BLE ELM327 adapter', 0, 40, CW - 26, 16, GREY, wrap=True),
+        ]),
+    ]
+
+
 def page_display(b):
     timeouts = ['Never', '30 s', '1 min', '5 min', '10 min']
     return [
@@ -505,6 +538,7 @@ def page_display(b):
 BUILDERS = {
     'home': page_home, 'obd': page_obd, 'readDTC': page_dtc, 'can': page_can, 'wifi': page_wifi,
     'ble': page_ble, 'io': page_io, 'display': page_display,
+    'dash': page_dash, 'diag': page_diag,
     'select_params': page_params, 'freezFrame': page_freeze,
 }
 

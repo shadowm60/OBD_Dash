@@ -155,22 +155,130 @@ esp_err_t ble_svc_scan_stop(void)
     return rc == 0 ? ESP_OK : ESP_ERR_INVALID_STATE;
 }
 
-/* ---------------------------------------------------------------- GATT discovery */
+/* ---------------------------------------------------------------- GATT discovery
+ * All services, then the characteristics of each one (an ELM327 adapter's
+ * serial port is a vendor service with a write + notify characteristic).
+ * Runs at connect and again once the link is encrypted: some devices only
+ * expose their services after pairing. */
+
+#define MAX_DISC_SVCS 12
+static struct { uint16_t start, end; } s_rng[MAX_DISC_SVCS];
+static int  s_nrng, s_rng_idx;
+static bool s_disc_busy, s_disc_again;
+
+static int  on_svc(uint16_t conn, const struct ble_gatt_error *err, const struct ble_gatt_svc *svc, void *arg);
+
+static void add_line(const char *line)
+{
+    LOCK();
+    if (s_st.nsvc < BLE_SVC_MAX_SVCS) {
+        snprintf(s_st.svcs[s_st.nsvc++], sizeof(s_st.svcs[0]), "%s", line);
+    }
+    UNLOCK();
+}
+
+/* 16-bit: "2A19"; 128-bit: first 8 hex digits + "..." (full UUID in the log) */
+static void uuid_short(const ble_uuid_t *u, char *out, size_t len)
+{
+    char buf[BLE_UUID_STR_LEN];
+    ble_uuid_to_str(u, buf);
+    if (u->type == BLE_UUID_TYPE_16) {
+        snprintf(out, len, "%04X", BLE_UUID16(u)->value);
+    } else {
+        snprintf(out, len, "%.8s...", buf);
+    }
+}
+
+static void disc_start(uint16_t conn)
+{
+    if (s_disc_busy) {
+        s_disc_again = true;            /* finish this round, then run again */
+        return;
+    }
+    s_disc_busy = true;
+    s_disc_again = false;
+    s_nrng = s_rng_idx = 0;
+    LOCK();
+    s_st.nsvc = 0;
+    s_st.svc_done = false;
+    UNLOCK();
+    if (ble_gattc_disc_all_svcs(conn, on_svc, NULL) != 0) {
+        s_disc_busy = false;
+        LOCK();
+        s_st.svc_done = true;
+        UNLOCK();
+    }
+}
+
+static void disc_finished(uint16_t conn)
+{
+    s_disc_busy = false;
+    if (s_disc_again) {
+        disc_start(conn);
+        return;
+    }
+    LOCK();
+    s_st.svc_done = true;
+    UNLOCK();
+    ESP_LOGI(TAG, "GATT discovery done");
+}
+
+static int on_chr(uint16_t conn, const struct ble_gatt_error *err, const struct ble_gatt_chr *chr, void *arg);
+
+static void disc_next_chrs(uint16_t conn)
+{
+    while (s_rng_idx < s_nrng) {
+        int i = s_rng_idx++;
+        if (ble_gattc_disc_all_chrs(conn, s_rng[i].start, s_rng[i].end, on_chr, NULL) == 0) {
+            return;                     /* continues in on_chr */
+        }
+    }
+    disc_finished(conn);
+}
+
+static int on_chr(uint16_t conn, const struct ble_gatt_error *err, const struct ble_gatt_chr *chr, void *arg)
+{
+    if (err->status != 0) {             /* BLE_HS_EDONE or an error: next service */
+        if (err->status != BLE_HS_EDONE) {
+            ESP_LOGW(TAG, "characteristic discovery failed (%d)", err->status);
+        }
+        disc_next_chrs(conn);
+        return 0;
+    }
+    char full[BLE_UUID_STR_LEN], u[16], line[40];
+    ble_uuid_to_str(&chr->uuid.u, full);
+    uuid_short(&chr->uuid.u, u, sizeof(u));
+    uint8_t p = chr->properties;
+    char props[8];
+    snprintf(props, sizeof(props), "%s%s%s%s%s",
+             p & BLE_GATT_CHR_PROP_READ ? "R" : "", p & BLE_GATT_CHR_PROP_WRITE ? "W" : "",
+             p & BLE_GATT_CHR_PROP_WRITE_NO_RSP ? "w" : "", p & BLE_GATT_CHR_PROP_NOTIFY ? "N" : "",
+             p & BLE_GATT_CHR_PROP_INDICATE ? "I" : "");
+    snprintf(line, sizeof(line), "  %s %s", u, props);
+    add_line(line);
+    ESP_LOGI(TAG, "  characteristic %s handle %u props 0x%02X (%s)", full, chr->val_handle, p, props);
+    return 0;
+}
 
 static int on_svc(uint16_t conn, const struct ble_gatt_error *err, const struct ble_gatt_svc *svc, void *arg)
 {
     if (err->status == BLE_HS_EDONE) {
-        LOCK();
-        s_st.svc_done = true;
-        UNLOCK();
+        disc_next_chrs(conn);
         return 0;
     }
     if (err->status != 0) {
         set_event("service discovery failed (%d)", err->status);
-        LOCK();
-        s_st.svc_done = true;
-        UNLOCK();
+        ESP_LOGW(TAG, "service discovery failed (%d)", err->status);
+        disc_next_chrs(conn);           /* list what was found */
         return 0;
+    }
+    char full[BLE_UUID_STR_LEN];
+    ble_uuid_to_str(&svc->uuid.u, full);
+    ESP_LOGI(TAG, "service %s handles %u-%u", full, svc->start_handle, svc->end_handle);
+    if (s_nrng < MAX_DISC_SVCS) {
+        s_rng[s_nrng].start = svc->start_handle;
+        s_rng[s_nrng].end = svc->end_handle;
+        s_nrng++;
     }
     char line[40];
     if (svc->uuid.u.type == BLE_UUID_TYPE_16) {
@@ -181,11 +289,7 @@ static int on_svc(uint16_t conn, const struct ble_gatt_error *err, const struct 
         ble_uuid_to_str(&svc->uuid.u, buf);
         snprintf(line, sizeof(line), "%.36s", buf);
     }
-    LOCK();
-    if (s_st.nsvc < BLE_SVC_MAX_SVCS) {
-        snprintf(s_st.svcs[s_st.nsvc++], sizeof(s_st.svcs[0]), "%s", line);
-    }
-    UNLOCK();
+    add_line(line);
     return 0;
 }
 
@@ -317,10 +421,11 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         if (ble_gap_security_initiate(event->connect.conn_handle) != 0) {
             set_event("connected (no pairing)", 0);
         }
-        ble_gattc_disc_all_svcs(event->connect.conn_handle, on_svc, NULL);
+        disc_start(event->connect.conn_handle);
         return 0;
 
     case BLE_GAP_EVENT_DISCONNECT:
+        s_disc_busy = s_disc_again = false;
         LOCK();
         s_conn = BLE_HS_CONN_HANDLE_NONE;
         s_st.state = BLE_SVC_READY;
@@ -343,6 +448,9 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         s_st.nbonds = count_bonds();
         UNLOCK();
         ESP_LOGI(TAG, "encryption change, status %d", event->enc_change.status);
+        if (event->enc_change.status == 0) {
+            disc_start(event->enc_change.conn_handle);  /* may expose more now */
+        }
         return 0;
 
     case BLE_GAP_EVENT_PASSKEY_ACTION: {

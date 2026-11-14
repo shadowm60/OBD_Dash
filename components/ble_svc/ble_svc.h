@@ -23,7 +23,7 @@ extern "C" {
 #endif
 
 #define BLE_SVC_MAX_DEVS    40
-#define BLE_SVC_MAX_SVCS    16
+#define BLE_SVC_MAX_SVCS    32      /* lines: services + their characteristics */
 
 typedef enum {
     BLE_SVC_OFF = 0,            /* host not synced yet */
@@ -55,8 +55,10 @@ typedef struct {
     bool     authenticated;
     uint32_t passkey;           /* numeric comparison value, 0 = none */
     int      nsvc;
-    char     svcs[BLE_SVC_MAX_SVCS][40];    /* "180F Battery", 128-bit UUIDs shortened */
-    bool     svc_done;          /* service discovery finished */
+    char     svcs[BLE_SVC_MAX_SVCS][40];    /* "180F Battery", then "  2A19 R N" per characteristic
+                                              (R read, W write, w write without response,
+                                              N notify, I indicate); full UUIDs in the log */
+    bool     svc_done;          /* service + characteristic discovery finished */
     int      nbonds;
     char     last_event[48];    /* human readable, e.g. "pairing failed (13)" */
 } ble_svc_status_t;

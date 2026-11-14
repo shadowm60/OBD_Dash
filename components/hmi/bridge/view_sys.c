@@ -119,7 +119,7 @@ void view_status_update(void)
     }
     wifi_svc_status_t w;
     wifi_svc_get_status(&w);
-    ble_svc_status_t b;
+    static ble_svc_status_t b;      /* ~1.5 KB, LVGL task only */
     ble_svc_get_status(&b);
     comsm_status_t c;
     comsm_get_status(&c);
@@ -216,7 +216,7 @@ void view_home_update(bool visible)
     can_if_get_stats(&cs);
     wifi_svc_status_t w;
     wifi_svc_get_status(&w);
-    ble_svc_status_t b;
+    static ble_svc_status_t b;      /* ~1.5 KB, LVGL task only */
     ble_svc_get_status(&b);
     datalog_status_t ls;
     datalog_get_status(&ls);

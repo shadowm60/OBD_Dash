@@ -53,7 +53,7 @@ void view_ble_init(void)
 
 void view_ble_update(bool visible)
 {
-    ble_svc_status_t st;
+    static ble_svc_status_t st;     /* ~1.5 KB: off the LVGL stack */
     ble_svc_get_status(&st);
 
     /* Grow the list while scanning (new devices only, so an open dropdown
@@ -94,7 +94,7 @@ void view_ble_update(bool visible)
     uv_str(&v_status, buf);
 
     if (st.state == BLE_SVC_CONNECTED) {
-        char s[BLE_SVC_MAX_SVCS * 42 + 32];
+        static char s[BLE_SVC_MAX_SVCS * 42 + 32];
         size_t k = 0;
         for (int i = 0; i < st.nsvc; i++) {
             k += snprintf(s + k, sizeof(s) - k, "%s\n", st.svcs[i]);
@@ -122,7 +122,7 @@ void view_ble_scan(void)
 void view_ble_connect(void)
 {
     s_msg[0] = '\0';
-    ble_svc_status_t st;
+    static ble_svc_status_t st;     /* LVGL task only */
     ble_svc_get_status(&st);
     int sel = uv_get_int(&v_sel, 0);
     if (st.ndev == 0) {

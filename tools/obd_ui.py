@@ -94,7 +94,7 @@ VARIABLES = {
     'conn_status': ('string', '"Not connected"'),
     'conn_button_text': ('string', '"Connect"'),
     'obd_detail': ('string', '""'),
-    'obd_mil_text': ('string', '"MIL\\n--"'),
+    'obd_mil_text': ('string', '""'),
     'obd_log_params': ('boolean', 'false'),
     'obd_read_speed': ('integer', '6'),
     'obd_speed_text': ('string', '""'),
@@ -328,10 +328,10 @@ def page_obd(b):
     bw = (iw - 20) // 3
     return [
         b.panel(CX, TOP, CW, 112, [
-            b.label('conn_status', 0, 0, iw - 400, 20, expr=True, wrap=True),
-            b.label('obd_detail', 0, 54, iw - 400, 16, GREY, expr=True, wrap=True),
-            # MIL + stored DTC count (PID 01, always polled); tap = Read DTCs page
-            ident(b.button('obd_mil_text', iw - 380, 0, 160, 84, 'nav_readdtc', BTN, font=20, expr=True), 'obd_mil_bt'),
+            b.label('conn_status', 0, 0, iw - 310, 20, expr=True, wrap=True),
+            b.label('obd_detail', 0, 54, iw - 310, 16, GREY, expr=True, wrap=True),
+            # MIL telltale (PID 01, always polled), only while connected; tap = DTC page
+            ident(b.button('obd_mil_text', iw - 290, 0, 70, 60, 'nav_readdtc', BTN, font=24, expr=True), 'obd_mil_bt'),
             b.button('conn_button_text', iw - 210, 0, 210, 60, 'conn_button_pressed', ACCENT, expr=True),
         ]),
         b.panel(CX, TOP + 122, CW, 112, [

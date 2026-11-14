@@ -80,7 +80,7 @@ the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on eve
 | Page | What it does |
 |---|---|
 | **Home** | Board and firmware, uptime, clock, free RAM; one line per service (OBD, CAN, Wi-Fi, BLE, SD, logging) |
-| **OBD** | Connect / disconnect, ECU status, MIL + stored DTC count (red = MIL on, amber = codes without MIL, green = none, grey = unknown; tap = DTC page), the three live views, Select parameters, log parameters, read speed, connection type |
+| **OBD** | Connect / disconnect, ECU status, MIL telltale next to Connect while connected (red = MIL on, amber = stored codes without MIL, green = none; tap = DTC page), the three live views, Select parameters, log parameters, read speed, connection type |
 | **DTC** | Read / clear / save the trouble codes, freeze frame. Read (and Clear, freeze frame) connect to the ECU first when OBD is not connected; it stays connected afterwards |
 | **CAN** | Bus monitor: every ID on the bus (DLC, last data, count, period; our own OBD requests too), frames/s, peak, bus load, error counters. Bitrate and listen-only (only while OBD is disconnected; Connect switches listen-only off). Raw log options |
 | **Wi-Fi** | Scan, connect, forget, auto connect; IP, RSSI, SNTP time (stored in the RTC), address of the log file web page |

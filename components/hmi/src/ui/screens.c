@@ -2073,7 +2073,7 @@ void create_screen_obd() {
                     lv_obj_t *obj = lv_label_create(parent_obj);
                     objects.obj46 = obj;
                     lv_obj_set_pos(obj, 0, 0);
-                    lv_obj_set_size(obj, 234, LV_SIZE_CONTENT);
+                    lv_obj_set_size(obj, 324, LV_SIZE_CONTENT);
                     lv_obj_set_style_text_color(obj, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_text_font(obj, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_label_set_text(obj, "");
@@ -2082,7 +2082,7 @@ void create_screen_obd() {
                     lv_obj_t *obj = lv_label_create(parent_obj);
                     objects.obj47 = obj;
                     lv_obj_set_pos(obj, 0, 54);
-                    lv_obj_set_size(obj, 234, LV_SIZE_CONTENT);
+                    lv_obj_set_size(obj, 324, LV_SIZE_CONTENT);
                     lv_obj_set_style_text_color(obj, lv_color_hex(0x8a96a3), LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_text_font(obj, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_label_set_text(obj, "");
@@ -2091,8 +2091,8 @@ void create_screen_obd() {
                     // obd_mil_bt
                     lv_obj_t *obj = lv_btn_create(parent_obj);
                     objects.obd_mil_bt = obj;
-                    lv_obj_set_pos(obj, 254, 0);
-                    lv_obj_set_size(obj, 160, 84);
+                    lv_obj_set_pos(obj, 344, 0);
+                    lv_obj_set_size(obj, 70, 60);
                     lv_obj_add_event_cb(obj, event_handler_cb_obd_obd_mil_bt, LV_EVENT_ALL, flowState);
                     lv_obj_set_style_bg_color(obj, lv_color_hex(0x22303f), LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_radius(obj, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -2106,7 +2106,7 @@ void create_screen_obd() {
                             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
                             lv_label_set_long_mode(obj, LV_LABEL_LONG_CLIP);
                             lv_obj_set_style_text_color(obj, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
-                            lv_obj_set_style_text_font(obj, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+                            lv_obj_set_style_text_font(obj, &lv_font_montserrat_24, LV_PART_MAIN | LV_STATE_DEFAULT);
                             lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
                             lv_obj_set_style_align(obj, LV_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
                             lv_label_set_text(obj, "");

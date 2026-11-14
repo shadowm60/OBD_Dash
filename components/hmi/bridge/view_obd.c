@@ -5,7 +5,7 @@
  *
  *   obd_conn_sel, obd_rusefi_id, obd_log_params, obd_read_speed (inputs)
  *   obd_speed_text, obd_detail                                  (texts)
- *   obd_mil_text + objects.obd_mil_bt colour: MIL and stored DTC count (PID 01)
+ *   obd_mil_text + objects.obd_mil_bt: MIL telltale (PID 01), only while connected
  *   can_log_raw, can_log_all (inputs), can_log_info             (CAN page)
  *
  * conn_status / conn_button_text (connection line and button) come from
@@ -36,12 +36,12 @@ static uivar_t v_log_info = UIVAR("can_log_info");
 static uivar_t v_mil = UIVAR("obd_mil_text");
 
 static uint32_t s_log_errors;
-static int      s_mil_level = -1;      /* colour shown: 0 unknown, 1 ok, 2 DTCs, 3 MIL on */
+static int      s_mil_level = -1;      /* 0 hidden (unknown), 1 ok, 2 DTCs, 3 MIL on */
 
 #define MIL_STALE_MS 6000              /* PID 01 is polled at ~0.5 Hz */
 
-/* MIL button: red = MIL on, amber = stored DTCs without MIL, green = none,
- * grey = not known (not connected / ECU doesn't support PID 01). */
+/* MIL telltale: red = MIL on, amber = stored DTCs without MIL, green = none;
+ * hidden while not known (not connected / ECU doesn't support PID 01). */
 static void update_mil(void)
 {
     vd_sample_t mil, cnt;
@@ -51,15 +51,16 @@ static void update_mil(void)
     bool on = have_mil && mil.value >= 0.5f;
     int level = !have_mil ? 0 : on ? 3 : n > 0 ? 2 : 1;
 
-    if (!have_mil) {
-        uv_str(&v_mil, LV_SYMBOL_WARNING " MIL\n--");
-    } else {
-        uv_strf(&v_mil, LV_SYMBOL_WARNING " MIL %s\n%d DTC%s", on ? "ON" : "off", n, n == 1 ? "" : "s");
-    }
+    uv_str(&v_mil, LV_SYMBOL_WARNING);
     if (level != s_mil_level && objects.obd_mil_bt != NULL) {
         static const uint32_t colours[] = { 0x22303f, 0x1f7a3d, 0xb7791f, 0xc0392b };
         s_mil_level = level;
         lv_obj_set_style_bg_color(objects.obd_mil_bt, lv_color_hex(colours[level]), LV_PART_MAIN);
+        if (level == 0) {
+            lv_obj_add_flag(objects.obd_mil_bt, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(objects.obd_mil_bt, LV_OBJ_FLAG_HIDDEN);
+        }
     }
 }
 

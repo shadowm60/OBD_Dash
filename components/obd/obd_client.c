@@ -89,6 +89,34 @@ void obd_client_elm_invalidate(void)
     obd_elm_invalidate();
 }
 
+esp_err_t obd_client_monitor_start(uint32_t filter, uint32_t mask)
+{
+    if (s_status == OBD_REQ_PENDING || s_elm_busy) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return obd_elm_monitor_start(filter, mask);
+}
+
+bool obd_client_monitor_poll(uint32_t wait_ms, obd_frame_cb_t cb, void *arg)
+{
+    return obd_elm_monitor_poll(wait_ms, cb, arg);
+}
+
+void obd_client_monitor_stop(void)
+{
+    obd_elm_monitor_stop();
+}
+
+bool obd_client_monitoring(void)
+{
+    return obd_elm_monitoring();
+}
+
+uint32_t obd_client_monitor_restarts(void)
+{
+    return obd_elm_monitor_restarts();
+}
+
 uint16_t obd_client_batch_bytes(void)
 {
     return s_link_kind == OBD_LINK_ELM && obd_elm_single_frame_fast() ? 7 : 0;

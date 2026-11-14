@@ -303,7 +303,16 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   line `N = <signal> | wlo=.. whi=.. alo=.. ahi=..`. Tile bg: amber warning, red blinking
   (0.8 s) alarm, 1 % of the DBC range hysteresis to leave a level; stale = no colour.
   The tile choice moved from the settings page to the tile page.
-- **Next (owner, 2026-11-14):** move the link choice from the OBD page to the CAN page as a
+- B3 tested OK by the owner (RPM limits).
+- **Car link + Dash over the adapter (built, not run yet):** dropdown "Car link (OBD, Dash)"
+  moved to the CAN page (same setting `obd_link`, var `obd_link_sel`, still handled in
+  view_obd.c). Dash via adapter: obd_elm monitor (ATCAF0, ATCF/ATCM from
+  `dash_svc_id_filter()` = smallest aligned block over the DBC's bus IDs, ATMA; '>' =
+  BUFFER FULL -> restart, counted; stop = CR + prompt, adapter re-initialised before OBD).
+  Run by the comsm task (`comsm_set_link_monitor`, the only owner of obd_client) while OBD
+  is idle; Connect pauses it, Disconnect resumes. Frames -> `dash_svc_push_frame`. Console
+  stays off the adapter while monitoring. Still board CAN only: CAN page monitor, raw log.
+- Was the plan: move the link choice from the OBD page to the CAN page as a
   general "Car link" (board CAN / BLE adapter) for OBD, Dash, logging. Dash over the adapter
   = ELM monitor mode (ATMA + ATCF/ATCM ID filter), not at the same time as OBD over the
   adapter; adapter-internal UART speed unknown (BUFFER FULL risk). CAN monitor / all-traffic

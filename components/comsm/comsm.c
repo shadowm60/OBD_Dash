@@ -33,6 +33,13 @@ static int            s_pending_idx[OBD_MAX_PIDS_PER_REQUEST]; /* catalogue inde
 static size_t         s_pending_n;          /* 0 = keepalive */
 static volatile uint8_t s_batch_cfg = 1;    /* PIDs per request wanted (UI) */
 static volatile uint8_t s_link_cfg = OBD_LINK_CAN;  /* link wanted (UI), applied at connect */
+/* broadcast monitor over the adapter (Dash), set by the UI, run in the task */
+static volatile bool     s_mon_want;
+static volatile uint32_t s_mon_filter, s_mon_mask;
+static comsm_frame_cb_t  s_mon_cb;
+static void             *s_mon_arg;
+static uint32_t          s_mon_applied_filter, s_mon_applied_mask;
+static uint32_t          s_mon_retry_ms;
 static uint8_t        s_batch_limit;        /* what this ECU accepts, <= s_batch_cfg */
 static uint8_t        s_batch_applied;      /* s_batch_cfg value s_batch_limit was set from */
 static uint8_t        s_discovery_pid;
@@ -133,8 +140,65 @@ static void go_retry_wait(void)
     set_state(COMSM_RETRY_WAIT);
 }
 
+static void st_monitoring(comsm_status_t *s, uint32_t arg) { s->monitoring = arg != 0; }
+
+static void monitor_stop(void)
+{
+    if (obd_client_monitoring()) {
+        obd_client_monitor_stop();
+        status_update(st_monitoring, 0);
+    }
+}
+
+/* Idle + adapter link + wanted: keep the monitor running, pump it.
+ * Returns true while it runs (the task then doesn't sleep on the queue). */
+static bool monitor_service(void)
+{
+    bool want = s_mon_want && s_state == COMSM_IDLE && s_link_cfg == OBD_LINK_ELM && s_mon_cb != NULL;
+    if (!want) {
+        monitor_stop();
+        return false;
+    }
+    if (obd_client_monitoring() &&
+        (s_mon_filter != s_mon_applied_filter || s_mon_mask != s_mon_applied_mask)) {
+        monitor_stop();                     /* filter changed (base ID): start again */
+    }
+    if (!obd_client_monitoring()) {
+        uint32_t now = can_if_now_ms();
+        if ((int32_t)(now - s_mon_retry_ms) < 0) {
+            return false;
+        }
+        obd_client_set_link(OBD_LINK_ELM);
+        s_mon_applied_filter = s_mon_filter;
+        s_mon_applied_mask = s_mon_mask;
+        if (obd_client_monitor_start(s_mon_applied_filter, s_mon_applied_mask) != ESP_OK) {
+            s_mon_retry_ms = now + 2000;    /* adapter not connected yet: try again later */
+            return false;
+        }
+        status_update(st_monitoring, 1);
+    }
+    if (!obd_client_monitor_poll(20, (obd_frame_cb_t)s_mon_cb, s_mon_arg)) {
+        status_update(st_monitoring, 0);
+        s_mon_retry_ms = can_if_now_ms() + 2000;
+        return false;
+    }
+    return true;
+}
+
+void comsm_set_link_monitor(bool on, uint32_t filter, uint32_t mask, comsm_frame_cb_t cb, void *arg)
+{
+    if (on) {
+        s_mon_cb = cb;
+        s_mon_arg = arg;
+        s_mon_filter = filter;
+        s_mon_mask = mask;
+    }
+    s_mon_want = on;
+}
+
 static void start_connect(void)
 {
+    monitor_stop();                         /* OBD has the adapter now */
     obd_client_abort();
     obd_client_set_link((obd_link_t)s_link_cfg);
     obd_client_set_functional();
@@ -406,6 +470,9 @@ static void comsm_task(void *arg)
     while (1) {
         /* Sleep on the command queue while there is nothing to do on the bus. */
         bool busy = (s_state != COMSM_IDLE && s_state != COMSM_RETRY_WAIT) || s_pending != REQ_NONE;
+        if (!busy && monitor_service()) {
+            busy = true;                    /* the monitor poll waits for the adapter itself */
+        }
         TickType_t wait = busy ? 0 : pdMS_TO_TICKS(50);
 
         cmd_t cmd;

@@ -66,8 +66,16 @@ void dash_svc_set_base(uint16_t base);
 /* DBC files in DASH_DBC_DIR, sorted, '\n' separated; returns the count. */
 int dash_svc_list_files(char *buf, size_t len);
 
-/* Decode while on (CAN tap + open filter), idle while off. */
-void dash_svc_set_active(bool on);
+/* Decode while on, idle while off. Board CAN: monitor tap + open filter.
+ * via_adapter: frames come from dash_svc_push_frame() (BLE adapter monitor). */
+void dash_svc_set_active(bool on, bool via_adapter);
+
+/* A received broadcast frame from elsewhere (adapter monitor), any task. */
+void dash_svc_push_frame(uint32_t id, const uint8_t *data, uint8_t dlc, void *arg);
+
+/* 11-bit ID filter / mask covering the DBC's messages on the bus (base ID
+ * applied), for an adapter's hardware filter; false if there are none. */
+bool dash_svc_id_filter(uint32_t *filter, uint32_t *mask);
 
 void dash_svc_get_status(dash_svc_status_t *out);
 

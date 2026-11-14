@@ -40,6 +40,7 @@ typedef struct {
     float    request_rate;      /* PID values received per second (last ~1 s) */
     uint8_t  pids_per_request;  /* in use; 1 if the ECU rejected multi-PID requests */
     uint32_t change_count;      /* increments on every state change */
+    bool     monitoring;        /* adapter link: broadcast monitor running (Dash) */
 } comsm_status_t;
 
 esp_err_t comsm_init(void);
@@ -57,6 +58,13 @@ void comsm_set_pids_per_request(uint8_t n);
 /* Link to the car (obd_link_t: board CAN / ELM327 adapter), used from the
  * next connect on. */
 void comsm_set_link(uint8_t link);
+
+/* Adapter link only: monitor a CAN broadcast (11-bit IDs matching filter under
+ * mask, e.g. for the Dash) while OBD is not connected; frames go to cb in the
+ * comsm task. OBD has priority: Connect pauses the monitor, Disconnect resumes
+ * it. on = false stops it. */
+typedef void (*comsm_frame_cb_t)(uint32_t id, const uint8_t *data, uint8_t dlc, void *arg);
+void comsm_set_link_monitor(bool on, uint32_t filter, uint32_t mask, comsm_frame_cb_t cb, void *arg);
 
 void comsm_get_status(comsm_status_t *out);
 

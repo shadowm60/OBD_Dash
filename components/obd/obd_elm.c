@@ -42,6 +42,7 @@ static const char *TAG = "obd_elm";
 static obd_elm_io_t s_io;
 static bool     s_inited;
 static uint32_t s_cur_tx, s_cur_rx = UINT32_MAX;   /* what the adapter is set to */
+static bool     s_mon;                      /* ATMA running (monitor, see the end) */
 static bool     s_count_ok = true;          /* adapter accepts the response count digit */
 static bool     s_count_mf_ok = true;       /* ... also for multi-frame answers */
 static uint8_t  s_req_frames;               /* count sent with this request, 0 = none */
@@ -65,6 +66,7 @@ static uint16_t s_asm_len, s_asm_total;
 static uint8_t  s_asm_sn;
 
 static esp_err_t send_payload(const uint8_t *req, uint16_t len, uint8_t frames);
+void obd_elm_monitor_stop(void);
 
 static uint32_t now_ms(void)
 {
@@ -187,6 +189,9 @@ esp_err_t obd_elm_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, ui
     }
     if (len == 0 || len > 7) {
         return ESP_ERR_INVALID_ARG;     /* single frame requests only (ELM327 limit) */
+    }
+    if (s_mon) {
+        obd_elm_monitor_stop();         /* requests and ATMA don't mix */
     }
     if (!s_inited && !init_adapter()) {
         return ESP_FAIL;
@@ -423,4 +428,150 @@ void obd_elm_abort(void)
             s_inited = false;
         }
     }
+}
+
+/* ---------------------------------------------------------------- monitor (ATMA)
+ * Raw frames of a range of IDs, for a CAN broadcast (Dash page). CAF0: all
+ * data bytes as received, no ISO-TP interpretation; ATCF / ATCM: only IDs
+ * matching filter under mask. Afterwards the adapter is set up again (ATZ)
+ * before OBD uses it, so none of this leaks into OBD requests. */
+
+static uint32_t s_mon_filter, s_mon_mask;
+static uint32_t s_mon_restarts;
+
+static bool mon_begin(void)
+{
+    char c[16];
+    if (!cmd_ok("ATCAF0")) {
+        return false;
+    }
+    snprintf(c, sizeof(c), "ATCF%03lX", (unsigned long)s_mon_filter);
+    if (!cmd_ok(c)) {
+        return false;
+    }
+    snprintf(c, sizeof(c), "ATCM%03lX", (unsigned long)s_mon_mask);
+    if (!cmd_ok(c)) {
+        return false;
+    }
+    drain();
+    s_line_len = 0;
+    return s_io.write("ATMA\r", 5) == ESP_OK;
+}
+
+esp_err_t obd_elm_monitor_start(uint32_t filter, uint32_t mask)
+{
+    if (!obd_elm_ready()) {
+        snprintf(s_error, sizeof(s_error), "adapter not connected");
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s_pending) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!s_inited && !init_adapter()) {
+        return ESP_FAIL;
+    }
+    s_mon_filter = filter & 0x7FF;
+    s_mon_mask = mask & 0x7FF;
+    s_inited = false;                   /* OBD sets the adapter up again afterwards */
+    if (!mon_begin()) {
+        snprintf(s_error, sizeof(s_error), "monitor set-up failed");
+        return ESP_FAIL;
+    }
+    s_mon = true;
+    s_error[0] = '\0';
+    ESP_LOGI(TAG, "monitoring IDs %03lX / mask %03lX", (unsigned long)s_mon_filter, (unsigned long)s_mon_mask);
+    return ESP_OK;
+}
+
+bool obd_elm_monitoring(void)
+{
+    return s_mon;
+}
+
+uint32_t obd_elm_monitor_restarts(void)
+{
+    return s_mon_restarts;
+}
+
+/* "2001122334455667788" -> id + up to 8 data bytes */
+static void mon_line(const char *l, obd_elm_frame_cb_t cb, void *arg)
+{
+    size_t n = strlen(l);
+    if (n == 0) {
+        return;
+    }
+    if (n < 3 || (n - 3) % 2 != 0 || n > 3 + 16) {
+        if (strstr(l, "BUFFER FULL") || strstr(l, "STOPPED") || strchr(l, ' ')) {
+            ESP_LOGW(TAG, "monitor: %s", l);
+            snprintf(s_error, sizeof(s_error), "%.23s", l);
+        }
+        return;
+    }
+    uint32_t id = 0;
+    uint8_t d[8];
+    for (int i = 0; i < 3; i++) {
+        int v = hexval(l[i]);
+        if (v < 0) return;
+        id = id << 4 | (uint32_t)v;
+    }
+    uint8_t dlc = 0;
+    for (size_t i = 3; i + 1 < n; i += 2) {
+        int hi = hexval(l[i]), lo = hexval(l[i + 1]);
+        if (hi < 0 || lo < 0) return;
+        d[dlc++] = (uint8_t)(hi << 4 | lo);
+    }
+    cb(id, d, dlc, arg);
+}
+
+bool obd_elm_monitor_poll(uint32_t wait_ms, obd_elm_frame_cb_t cb, void *arg)
+{
+    if (!s_mon) {
+        return false;
+    }
+    if (!obd_elm_ready()) {
+        s_mon = false;
+        snprintf(s_error, sizeof(s_error), "adapter disconnected");
+        return false;
+    }
+    char b[256];
+    size_t r = s_io.read(b, sizeof(b), wait_ms);
+    for (size_t i = 0; i < r; i++) {
+        char c = b[i];
+        if (c == '\r' || c == '\n' || c == '>') {
+            s_line[s_line_len] = '\0';
+            mon_line(s_line, cb, arg);
+            s_line_len = 0;
+            if (c == '>') {
+                /* the adapter stopped by itself (BUFFER FULL): start again */
+                s_mon_restarts++;
+                if (!mon_begin()) {
+                    s_mon = false;
+                    return false;
+                }
+            }
+        } else if (s_line_len < LINE_MAX_ - 1 && isprint((unsigned char)c)) {
+            s_line[s_line_len++] = c;
+        }
+    }
+    return true;
+}
+
+void obd_elm_monitor_stop(void)
+{
+    if (!s_mon) {
+        return;
+    }
+    s_mon = false;
+    s_io.write("\r", 1);                /* any character stops ATMA */
+    char r[64];
+    uint32_t end = now_ms() + 500;
+    while ((int32_t)(now_ms() - end) < 0) {
+        size_t n = s_io.read(r, sizeof(r), 20);
+        if (memchr(r, '>', n)) {
+            break;
+        }
+    }
+    drain();
+    s_inited = false;
+    ESP_LOGI(TAG, "monitor stopped (%lu restarts)", (unsigned long)s_mon_restarts);
 }

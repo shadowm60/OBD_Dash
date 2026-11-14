@@ -3,7 +3,8 @@
  * screens). Runs every 100 ms from ui_bridge. Inputs are two-way bound EEZ
  * variables: read back, stored in settings, applied to comsm / datalog.
  *
- *   obd_log_params, obd_read_speed, obd_link_sel (inputs)
+ *   obd_log_params, obd_read_speed (inputs)
+ *   obd_link_sel: the "Car link" dropdown, on the CAN page (OBD and Dash use it)
  *   obd_speed_text, obd_detail                                  (texts)
  *   obd_mil_text + objects.obd_mil_bt: MIL telltale (PID 01), only while connected
  *   can_log_raw, can_log_all (inputs), can_log_info             (CAN page)
@@ -127,6 +128,9 @@ static void update_texts(void)
                 obd_pid_active_count(), st.pids_per_request, st.responses, st.timeouts);
     } else if (obd_pid_active_count() == 0 && st.state == COMSM_IDLE) {
         uv_str(&v_detail, "Tick the parameters to poll in Select parameters.");
+    } else if (st.state == COMSM_IDLE) {
+        uv_str(&v_detail, cfg.obd_link == OBD_LINK_ELM ? "Car link: BLE adapter (CAN page)"
+                                                        : "Car link: board CAN (CAN page)");
     } else {
         uv_str(&v_detail, "");
     }

@@ -83,14 +83,14 @@ static bool obd_owns_adapter(void)
 {
     comsm_status_t cs;
     comsm_get_status(&cs);
-    return cs.state != COMSM_IDLE && obd_client_link() == OBD_LINK_ELM;
+    return cs.monitoring || (cs.state != COMSM_IDLE && obd_client_link() == OBD_LINK_ELM);
 }
 
 static void send(const char *cmd)
 {
     char line[LINE_LEN];
     if (obd_owns_adapter()) {
-        push_line("(OBD is using the adapter: Disconnect on the OBD page first)");
+        push_line("(OBD or the Dash is using the adapter: Disconnect OBD / leave the Dash first)");
         return;
     }
     if (!ble_svc_serial_ready()) {
@@ -156,7 +156,7 @@ void view_elm_update(bool visible)
     static ble_svc_status_t st;     /* LVGL task only, ~1.5 KB */
     ble_svc_get_status(&st);
     if (st.serial_ready && obd) {
-        uv_strf(&v_info, "%s\nin use by OBD", st.peer_name[0] ? st.peer_name : st.peer_addr);
+        uv_strf(&v_info, "%s\nin use by OBD / Dash", st.peer_name[0] ? st.peer_name : st.peer_addr);
     } else if (st.serial_ready) {
         uv_strf(&v_info, "%s\nserial: %s", st.peer_name[0] ? st.peer_name : st.peer_addr, st.serial_info);
     } else if (st.state == BLE_SVC_CONNECTED) {

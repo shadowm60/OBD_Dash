@@ -61,6 +61,17 @@ void        obd_client_elm_invalidate(void);
 /* Largest Service 01 answer (bytes, incl. 0x41) a batch should produce on
  * this link, 0 = no limit. ELM link: 7, one CAN frame, the fast path. */
 uint16_t    obd_client_batch_bytes(void);
+/* Monitor a CAN broadcast through the ELM327 adapter (ATMA): 11-bit frames
+ * with (id & mask) == (filter & mask). Only while no request runs; a request
+ * stops it. poll: pumps the adapter, frames go to cb; false = not running.
+ * Board CAN link: not needed (can_if gets every frame directly). */
+typedef void (*obd_frame_cb_t)(uint32_t id, const uint8_t *data, uint8_t dlc, void *arg);
+esp_err_t   obd_client_monitor_start(uint32_t filter, uint32_t mask);
+bool        obd_client_monitor_poll(uint32_t wait_ms, obd_frame_cb_t cb, void *arg);
+void        obd_client_monitor_stop(void);
+bool        obd_client_monitoring(void);
+uint32_t    obd_client_monitor_restarts(void);
+
 /* Last link problem, e.g. "adapter not connected", "CAN ERROR"; "" if none. */
 const char *obd_client_link_error(void);
 

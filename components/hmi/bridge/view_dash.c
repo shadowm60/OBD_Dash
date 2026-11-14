@@ -34,6 +34,8 @@
 #include "settings.h"
 #include "sd_card.h"
 #include "screens.h"
+#include "comsm.h"
+#include "obd_client.h"
 
 static const char *TAG = "view_dash";
 
@@ -516,9 +518,20 @@ void view_dash_update(bool visible)
     bool setup = nav_is("dash_setup");
     bool signals = nav_is("dash_signals");
     bool tile = nav_is("dash_tile");
-    dash_svc_set_active(visible || setup || signals || tile);
-    if ((visible || setup || signals) && !s_tried && waveshare_sd_card_mounted()) {
+    bool on = visible || setup || signals || tile;
+    app_settings_t cfg;
+    settings_get(&cfg);
+    bool adapter = cfg.obd_link == OBD_LINK_ELM;        /* CAN page: Car link */
+    dash_svc_set_active(on, adapter);
+    if (on && !s_tried && waveshare_sd_card_mounted()) {
         load_from_settings();
+    }
+    /* adapter link: the comsm task runs the adapter's monitor while OBD is idle */
+    uint32_t filter, mask;
+    if (on && adapter && dash_svc_id_filter(&filter, &mask)) {
+        comsm_set_link_monitor(true, filter, mask, dash_svc_push_frame, NULL);
+    } else {
+        comsm_set_link_monitor(false, 0, 0, NULL, NULL);
     }
     if (tile && s_edit >= 0) {
         if (!s_edit_shown) {
@@ -554,8 +567,14 @@ void view_dash_update(bool visible)
 
     dash_svc_status_t st;
     dash_svc_get_status(&st);
+    comsm_status_t cs;
+    comsm_get_status(&cs);
     if (!waveshare_sd_card_mounted()) {
         uv_str(&v_status, "No SD card: the DBC goes in /db/dbc/ on the card.");
+    } else if (st.loaded && adapter && cs.state != COMSM_IDLE) {
+        uv_strf(&v_status, "%s via BLE adapter: paused while OBD uses the adapter (Disconnect on the OBD page).", st.file);
+    } else if (st.loaded && adapter && !cs.monitoring) {
+        uv_strf(&v_status, "%s via BLE adapter: waiting for the adapter (connect it on the BLE page)...", st.file);
     } else if (!st.loaded) {
         uv_strf(&v_status, "%s - upload a .dbc on the web page, then Settings > Apply.",
                 st.error[0] ? st.error : "no DBC loaded");
@@ -563,7 +582,8 @@ void view_dash_update(bool visible)
         uv_strf(&v_status, "%s, base 0x%03X: nothing received yet. ECU broadcasting? Base ID? CAN bitrate?",
                 st.file, st.bus_base >= 0 ? st.bus_base : 0);
     } else {
-        uv_strf(&v_status, "%s, base 0x%03X - %u of %u messages seen",
-                st.file, st.bus_base >= 0 ? st.bus_base : 0, st.msgs_seen, st.nmsg);
+        uv_strf(&v_status, "%s, base 0x%03X%s - %u of %u messages seen%s",
+                st.file, st.bus_base >= 0 ? st.bus_base : 0, adapter ? " via BLE adapter" : "",
+                st.msgs_seen, st.nmsg, st.dropped ? ", frames dropped" : "");
     }
 }

@@ -28,6 +28,15 @@ esp_err_t obd_elm_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, ui
 obd_elm_result_t obd_elm_poll(uint32_t wait_ms, obd_elm_msg_cb_t cb, void *arg);
 void obd_elm_extend(uint32_t ms);
 void obd_elm_abort(void);
+/* Monitor (ATMA) for a CAN broadcast: frames whose 11-bit ID matches filter
+ * under mask. Not while a request is pending; requests need monitor_stop. */
+typedef void (*obd_elm_frame_cb_t)(uint32_t id, const uint8_t *data, uint8_t dlc, void *arg);
+esp_err_t obd_elm_monitor_start(uint32_t filter, uint32_t mask);
+bool      obd_elm_monitor_poll(uint32_t wait_ms, obd_elm_frame_cb_t cb, void *arg);   /* false: stopped */
+void      obd_elm_monitor_stop(void);
+bool      obd_elm_monitoring(void);
+uint32_t  obd_elm_monitor_restarts(void);
+
 /* true: answers that fit one CAN frame (7 bytes) return without the adapter timeout. */
 bool obd_elm_single_frame_fast(void);
 

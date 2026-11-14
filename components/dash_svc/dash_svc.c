@@ -169,19 +169,56 @@ esp_err_t dash_svc_load(const char *name)
     return n > 0 ? ESP_OK : ESP_FAIL;
 }
 
-void dash_svc_set_active(bool on)
+static bool s_via_adapter;
+
+void dash_svc_push_frame(uint32_t id, const uint8_t *data, uint8_t dlc, void *arg)
+{
+    if (s_q == NULL || !s_st.active) {
+        return;
+    }
+    can_frame_t f = { .id = id, .ts_ms = can_if_now_ms(), .dlc = dlc > 8 ? 8 : dlc };
+    memcpy(f.data, data, f.dlc);
+    if (xQueueSend(s_q, &f, 0) != pdTRUE) {
+        s_st.dropped++;
+    }
+}
+
+bool dash_svc_id_filter(uint32_t *filter, uint32_t *mask)
+{
+    if (s_lock == NULL) {
+        return false;
+    }
+    LOCK();
+    int lo = s_st.bus_base, hi = s_st.dbc_last >= 0 ? s_st.dbc_last + (s_st.bus_base - s_st.dbc_base) : -1;
+    UNLOCK();
+    if (lo < 0 || hi < lo || hi > 0x7FF) {
+        return false;
+    }
+    /* smallest aligned block containing lo..hi: drop low bits until both agree */
+    int bits = 0;
+    while (bits < 11 && ((unsigned)lo >> bits) != ((unsigned)hi >> bits)) {
+        bits++;
+    }
+    *mask = 0x7FFu & ~((1u << bits) - 1u);
+    *filter = (uint32_t)lo & *mask;
+    return true;
+}
+
+void dash_svc_set_active(bool on, bool via_adapter)
 {
     if (s_lock == NULL) {
         return;
     }
     LOCK();
     bool was = s_st.active;
+    bool was_adapter = s_via_adapter;
     s_st.active = on;
+    s_via_adapter = via_adapter;
     UNLOCK();
-    if (on == was) {
+    if (on == was && via_adapter == was_adapter) {
         return;
     }
-    if (on) {
+    if (on && !via_adapter) {
         xQueueReset(s_q);
         can_if_set_monitor(CAN_IF_MON_DASH, s_q);
         can_if_set_accept_all(CAN_IF_ALL_DASH, true);
@@ -189,7 +226,7 @@ void dash_svc_set_active(bool on)
         can_if_set_monitor(CAN_IF_MON_DASH, NULL);
         can_if_set_accept_all(CAN_IF_ALL_DASH, false);
     }
-    ESP_LOGI(TAG, "decoding %s", on ? "on" : "off");
+    ESP_LOGI(TAG, "decoding %s%s", on ? "on" : "off", on && via_adapter ? " (BLE adapter)" : "");
 }
 
 static void dash_task(void *arg)

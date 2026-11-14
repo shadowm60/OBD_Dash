@@ -403,9 +403,6 @@ def page_obd(b):
             b.label('obd_speed_text', 270, 0, iw - 270, 16, expr=True),
             b.slider('obd_read_speed', 1, 6, 278, 30, 300),
             b.checkbox('Log parameters to SD (CSV)', 'obd_log_params', 0, 62, 16),
-            b.label('Link', 300, 66, None, 16, GREY),
-            # order = obd_link_t (obd_client.h)
-            b.dropdown(None, 'obd_link_sel', 350, 54, 240, literal_options=['Board CAN', 'BLE adapter'], font=16),
         ]),
     ]
 
@@ -451,15 +448,18 @@ def page_can(b):
     rw = CW - lw - 10
     return [
         b.panel(CX, TOP, lw, CH, [
-            b.label('Bitrate', 0, 0, None, 16, GREY),
-            b.dropdown(None, 'can_bitrate_sel', 0, 22, lw - 26, literal_options=bitrates, font=16),
-            b.checkbox('Listen only', 'can_listen_only', 0, 76, 16),
-            b.button('can_run_text', 0, 112, lw - 26, 50, 'can_start_stop', ACCENT, expr=True),
-            b.button('Clear stats', 0, 172, lw - 26, 40, 'can_reset', font=16),
-            b.label('Raw log to SD', 0, 228, None, 16, GREY),
-            b.checkbox('Log raw CAN', 'can_log_raw', 0, 254, 16),
-            b.checkbox('All traffic', 'can_log_all', 0, 284, 16),
-            b.label('can_log_info', 0, 318, lw - 26, 12, GREY, expr=True, wrap=True),
+            # car link for OBD and the Dash; order = obd_link_t (obd_client.h)
+            b.label('Car link (OBD, Dash)', 0, 0, None, 16, GREY),
+            b.dropdown(None, 'obd_link_sel', 0, 20, lw - 26, literal_options=['Board CAN', 'BLE adapter'], font=16),
+            b.label('Board CAN bitrate', 0, 68, None, 16, GREY),
+            b.dropdown(None, 'can_bitrate_sel', 0, 88, lw - 26, literal_options=bitrates, font=16),
+            b.checkbox('Listen only', 'can_listen_only', 0, 136, 16),
+            b.button('can_run_text', 0, 170, lw - 26, 44, 'can_start_stop', ACCENT, expr=True),
+            b.button('Clear stats', 0, 222, lw - 26, 36, 'can_reset', font=16),
+            b.label('Raw log to SD', 0, 266, None, 16, GREY),
+            b.checkbox('Log raw CAN', 'can_log_raw', 0, 288, 16),
+            b.checkbox('All traffic', 'can_log_all', 0, 318, 16),
+            b.label('can_log_info', 0, 350, lw - 26, 12, GREY, expr=True, wrap=True),
         ]),
         b.panel(CX + lw + 10, TOP, rw, 130, [
             b.label('can_stats', 0, 0, rw - 26 - 150, 12, expr=True, wrap=True),

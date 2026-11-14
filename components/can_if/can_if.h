@@ -75,7 +75,13 @@ typedef struct {
     .listen_only = false,                           \
 }
 
-/* Monitor slots: each gets every accepted RX frame and every sent TX frame. */
+/* Monitor slots: each gets every accepted RX frame and every sent TX frame
+ * that passes the monitor filter. */
+
+/* Filter of all monitor slots (CAN monitor, raw log, Dash): only 11-bit IDs
+ * with (id & mask) == (filter & mask); mask 0 = every frame (default).
+ * OBD subscribers are not affected. */
+void can_if_set_monitor_filter(uint32_t filter, uint32_t mask);
 typedef enum {
     CAN_IF_MON_LOG = 0,         /* datalog: raw CAN log */
     CAN_IF_MON_VIEW,            /* canmon: bus monitor (CAN page) */

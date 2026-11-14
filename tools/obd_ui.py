@@ -104,6 +104,10 @@ VARIABLES = {
     'obd_detail': ('string', '""'),
     'obd_mil_text': ('string', '""'),
     'obd_link_sel': ('integer', '0'),
+    'link_status': ('string', '""'),
+    'link_filter_sel': ('integer', '0'),
+    'link_filter_id': ('string', '""'),
+    'link_filter_mask': ('string', '""'),
     'obd_log_params': ('boolean', 'false'),
     'obd_read_speed': ('integer', '6'),
     'obd_speed_text': ('string', '""'),
@@ -448,18 +452,15 @@ def page_can(b):
     rw = CW - lw - 10
     return [
         b.panel(CX, TOP, lw, CH, [
-            # car link for OBD and the Dash; order = obd_link_t (obd_client.h)
-            b.label('Car link (OBD, Dash)', 0, 0, None, 16, GREY),
-            b.dropdown(None, 'obd_link_sel', 0, 20, lw - 26, literal_options=['Board CAN', 'BLE adapter'], font=16),
-            b.label('Board CAN bitrate', 0, 68, None, 16, GREY),
-            b.dropdown(None, 'can_bitrate_sel', 0, 88, lw - 26, literal_options=bitrates, font=16),
-            b.checkbox('Listen only', 'can_listen_only', 0, 136, 16),
-            b.button('can_run_text', 0, 170, lw - 26, 44, 'can_start_stop', ACCENT, expr=True),
-            b.button('Clear stats', 0, 222, lw - 26, 36, 'can_reset', font=16),
-            b.label('Raw log to SD', 0, 266, None, 16, GREY),
-            b.checkbox('Log raw CAN', 'can_log_raw', 0, 288, 16),
-            b.checkbox('All traffic', 'can_log_all', 0, 318, 16),
-            b.label('can_log_info', 0, 350, lw - 26, 12, GREY, expr=True, wrap=True),
+            b.label('Board CAN bitrate', 0, 0, None, 16, GREY),
+            b.dropdown(None, 'can_bitrate_sel', 0, 22, lw - 26, literal_options=bitrates, font=16),
+            b.checkbox('Listen only', 'can_listen_only', 0, 76, 16),
+            b.button('can_run_text', 0, 112, lw - 26, 50, 'can_start_stop', ACCENT, expr=True),
+            b.button('Clear stats', 0, 172, lw - 26, 40, 'can_reset', font=16),
+            b.label('Raw log to SD', 0, 228, None, 16, GREY),
+            b.checkbox('Log raw CAN', 'can_log_raw', 0, 254, 16),
+            b.checkbox('All traffic', 'can_log_all', 0, 284, 16),
+            b.label('can_log_info', 0, 318, lw - 26, 12, GREY, expr=True, wrap=True),
         ]),
         b.panel(CX + lw + 10, TOP, rw, 130, [
             b.label('can_stats', 0, 0, rw - 26 - 150, 12, expr=True, wrap=True),
@@ -519,24 +520,31 @@ def page_ble(b):
 def page_io(b):
     iw = CW - 26
     w2 = (iw - 20) // 2
+    filters = ['Auto', 'Allow all', 'OBD 7E0-7EF', 'Dash DBC IDs', 'Custom']   # order = view_io.c LF_*
     return [
-        b.panel(CX, TOP, CW, 170, [
-            b.label('Digital inputs  (5-36 V between DIN0 / DIN1 and DI COM, either polarity)', 0, 0, None, 16, GREY),
-            b.label('io_di0_text', 0, 30, w2, 24, expr=True),
-            b.label('io_di1_text', w2 + 20, 30, w2, 24, expr=True),
-            b.label('io_di_info', 0, 72, iw - 200, 12, GREY, expr=True, wrap=True),
-            b.button('Reset counters', iw - 180, 100, 180, 36, 'io_reset', font=16),
+        # car interface: link for OBD and the Dash + receive filter for listening
+        # (keyboard covers the bottom 220 px: the hex fields stay above it)
+        b.panel(CX, TOP, CW, 150, [
+            b.label('Car interface (OBD, Dash)', 0, 0, None, 16, GREY),
+            b.dropdown(None, 'obd_link_sel', 0, 22, 220, literal_options=['Board CAN', 'BLE adapter'], font=16),
+            b.label('link_status', 236, 22, iw - 236, 12, expr=True, wrap=True),
+            b.label('Receive filter', 0, 86, None, 16, GREY),
+            b.dropdown(None, 'link_filter_sel', 120, 76, 210, literal_options=filters, font=16),
+            b.textarea('link_filter_id', 344, 76, 130, 'ID 7E8', maxlen=3, accepted='0123456789abcdefABCDEF'),
+            b.textarea('link_filter_mask', 484, 76, iw - 484, 'mask 7FF', maxlen=3, accepted='0123456789abcdefABCDEF'),
         ]),
-        b.panel(CX, TOP + 180, CW, 110, [
-            b.label('Outputs  (open drain to GND, 5-36 V, max 450 mA each, off at power-up)', 0, 0, None, 16, GREY),
-            b.button('io_do0_text', 0, 30, w2, 50, 'io_do0_toggle', ACCENT, expr=True),
-            b.button('io_do1_text', w2 + 20, 30, w2, 50, 'io_do1_toggle', ACCENT, expr=True),
+        b.panel(CX, TOP + 160, CW, 150, [
+            b.label('io_di0_text', 0, 0, w2, 20, expr=True),
+            b.label('io_di1_text', w2 + 20, 0, w2, 20, expr=True),
+            b.button('io_do0_text', 0, 36, w2, 44, 'io_do0_toggle', ACCENT, expr=True),
+            b.button('io_do1_text', w2 + 20, 36, w2, 44, 'io_do1_toggle', ACCENT, expr=True),
+            b.label('io_di_info', 0, 90, iw - 190, 12, GREY, expr=True, wrap=True),
+            b.button('Reset counters', iw - 170, 90, 170, 32, 'io_reset', font=12),
         ]),
-        b.panel(CX, TOP + 300, CW, CH - 300, [
+        b.panel(CX, TOP + 320, CW, CH - 320, [
             b.label('io_chip_text', 0, 0, iw, 16, expr=True),
-            b.label('I2C on the terminal (SDA / SCL, shared with touch, IO expander, RTC)', 0, 28, None, 12, GREY),
-            b.button('Scan I2C', 0, 54, 140, 44, 'i2c_scan', ACCENT, font=16),
-            b.label('i2c_text', 155, 62, iw - 155, 16, expr=True, wrap=True),
+            b.button('Scan I2C', 0, 28, 140, 44, 'i2c_scan', ACCENT, font=16),
+            b.label('i2c_text', 155, 36, iw - 155, 16, expr=True, wrap=True),
         ]),
     ]
 

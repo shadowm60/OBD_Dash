@@ -44,6 +44,9 @@ typedef struct {
     uint8_t  obd_link;              /* OBD page: 0 board CAN, 1 BLE ELM327 adapter (obd_link_t) */
     uint16_t dash_base;             /* Dash: bus ID of the DBC's lowest 11-bit message, 0 = as in the DBC */
     char     dash_dbc[32];          /* Dash: DBC file in /sdcard/db/dbc, "" = the first one */
+    uint8_t  link_filter;           /* IO page receive filter: 0 auto, 1 all, 2 OBD, 3 Dash DBC, 4 custom */
+    uint16_t link_filter_id;        /* custom filter: 11-bit ID ... */
+    uint16_t link_filter_mask;      /* ... and mask (1 = bit must match) */
 } app_settings_t;
 
 /* Initialises NVS (erasing it if the partition is corrupt/outdated) and loads

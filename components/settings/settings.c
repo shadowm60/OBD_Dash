@@ -36,6 +36,7 @@ static void set_defaults(app_settings_t *c)
     c->brightness = 100;
     c->wifi_autoconnect = true;
     c->can_bitrate_idx = 2;         /* 500 kbit/s, OBD-II on CAN */
+    c->link_filter_mask = 0x7FF;
     /* Default selection: what the current dashboard shows. */
     static const uint8_t default_pids[] = { 0x05 /* coolant */, 0x0C /* rpm */,
                                             0x0D /* speed */, 0x24 /* lambda */ };

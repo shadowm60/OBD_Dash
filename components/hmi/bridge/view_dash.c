@@ -513,6 +513,13 @@ static void update_setup(void)
 
 /* ---------------------------------------------------------------- 250 ms */
 
+static bool st_loaded(void)
+{
+    dash_svc_status_t st;
+    dash_svc_get_status(&st);
+    return st.loaded;
+}
+
 void view_dash_update(bool visible)
 {
     bool setup = nav_is("dash_setup");
@@ -528,7 +535,7 @@ void view_dash_update(bool visible)
     }
     /* adapter link: the comsm task runs the adapter's monitor while OBD is idle */
     uint32_t filter, mask;
-    if (on && adapter && dash_svc_id_filter(&filter, &mask)) {
+    if (on && adapter && st_loaded() && view_link_dash_filter(&filter, &mask)) {
         comsm_set_link_monitor(true, filter, mask, dash_svc_push_frame, NULL);
     } else {
         comsm_set_link_monitor(false, 0, 0, NULL, NULL);

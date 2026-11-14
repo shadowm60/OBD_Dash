@@ -433,16 +433,20 @@ void obd_elm_abort(void)
 /* ---------------------------------------------------------------- monitor (ATMA)
  * Raw frames of a range of IDs, for a CAN broadcast (Dash page). CAF0: all
  * data bytes as received, no ISO-TP interpretation; ATCF / ATCM: only IDs
- * matching filter under mask. Afterwards the adapter is set up again (ATZ)
+ * matching filter under mask; CSM0: the adapter ACKs while monitoring (an
+ * ELM327 monitors silently by default: alone on the bus with the sender,
+ * the sender then sees only ACK errors). The first lines and a statistic
+ * every 5 s are logged. Afterwards the adapter is set up again (ATZ)
  * before OBD uses it, so none of this leaks into OBD requests. */
 
 static uint32_t s_mon_filter, s_mon_mask;
 static uint32_t s_mon_restarts;
+static uint32_t s_mon_lines, s_mon_frames, s_mon_rejected, s_mon_logged, s_mon_stat_ms;
 
 static bool mon_begin(void)
 {
     char c[16];
-    if (!cmd_ok("ATCAF0")) {
+    if (!cmd_ok("ATCAF0") || !cmd_ok("ATCSM0")) {
         return false;
     }
     snprintf(c, sizeof(c), "ATCF%03lX", (unsigned long)s_mon_filter);
@@ -479,6 +483,8 @@ esp_err_t obd_elm_monitor_start(uint32_t filter, uint32_t mask)
     }
     s_mon = true;
     s_error[0] = '\0';
+    s_mon_lines = s_mon_frames = s_mon_rejected = s_mon_logged = 0;
+    s_mon_stat_ms = now_ms() + 5000;
     ESP_LOGI(TAG, "monitoring IDs %03lX / mask %03lX", (unsigned long)s_mon_filter, (unsigned long)s_mon_mask);
     return ESP_OK;
 }
@@ -500,7 +506,13 @@ static void mon_line(const char *l, obd_elm_frame_cb_t cb, void *arg)
     if (n == 0) {
         return;
     }
+    s_mon_lines++;
+    if (s_mon_logged < 8) {
+        s_mon_logged++;
+        ESP_LOGI(TAG, "monitor line: '%s'", l);
+    }
     if (n < 3 || (n - 3) % 2 != 0 || n > 3 + 16) {
+        s_mon_rejected++;
         if (strstr(l, "BUFFER FULL") || strstr(l, "STOPPED") || strchr(l, ' ')) {
             ESP_LOGW(TAG, "monitor: %s", l);
             snprintf(s_error, sizeof(s_error), "%.23s", l);
@@ -520,6 +532,7 @@ static void mon_line(const char *l, obd_elm_frame_cb_t cb, void *arg)
         if (hi < 0 || lo < 0) return;
         d[dlc++] = (uint8_t)(hi << 4 | lo);
     }
+    s_mon_frames++;
     cb(id, d, dlc, arg);
 }
 
@@ -532,6 +545,13 @@ bool obd_elm_monitor_poll(uint32_t wait_ms, obd_elm_frame_cb_t cb, void *arg)
         s_mon = false;
         snprintf(s_error, sizeof(s_error), "adapter disconnected");
         return false;
+    }
+    if ((int32_t)(now_ms() - s_mon_stat_ms) >= 0) {
+        ESP_LOGI(TAG, "monitor: %lu lines, %lu frames, %lu not understood, %lu restarts (5 s)",
+                 (unsigned long)s_mon_lines, (unsigned long)s_mon_frames, (unsigned long)s_mon_rejected,
+                 (unsigned long)s_mon_restarts);
+        s_mon_lines = s_mon_frames = s_mon_rejected = 0;
+        s_mon_stat_ms = now_ms() + 5000;
     }
     char b[256];
     size_t r = s_io.read(b, sizeof(b), wait_ms);

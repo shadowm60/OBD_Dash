@@ -59,8 +59,30 @@ uint32_t can_if_now_ms(void)
 
 /* ---------------------------------------------------------------- ISR callbacks */
 
+/* Receive filter of the monitor taps (IO page), mask 0 = everything. */
+static volatile uint32_t s_mon_fid, s_mon_fmask;
+
+static inline bool mon_pass(const can_frame_t *f)
+{
+    uint32_t m = s_mon_fmask;
+    if (m == 0) {
+        return true;
+    }
+    return !f->ext && ((f->id ^ s_mon_fid) & m) == 0;
+}
+
+void can_if_set_monitor_filter(uint32_t id, uint32_t mask)
+{
+    s_mon_fmask = 0;
+    s_mon_fid = id & 0x7FF;
+    s_mon_fmask = mask & 0x7FF;
+}
+
 static void monitor_push_from_isr(const can_frame_t *f, BaseType_t *woken)
 {
+    if (!mon_pass(f)) {
+        return;
+    }
     for (int i = 0; i < CAN_IF_MON_COUNT; i++) {
         QueueHandle_t q = s_monitor[i];
         if (q != NULL && xQueueSendFromISR(q, f, woken) != pdTRUE) {
@@ -238,7 +260,7 @@ static void can_tx_task(void *arg)
         if (ok) {
             cur.ts_ms = can_if_now_ms();
             cur.tx = true;
-            for (int i = 0; i < CAN_IF_MON_COUNT; i++) {
+            for (int i = 0; i < CAN_IF_MON_COUNT && mon_pass(&cur); i++) {
                 QueueHandle_t mon = s_monitor[i];
                 if (mon != NULL && xQueueSend(mon, &cur, 0) != pdTRUE) {
                     portENTER_CRITICAL(&s_stats_lock);

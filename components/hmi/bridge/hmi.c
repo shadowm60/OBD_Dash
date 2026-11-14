@@ -42,6 +42,7 @@ static void fast_cb(lv_timer_t *t)
     view_dash_update(nav_is("dash"));
     view_can_update(nav_is("can"));
     view_io_update(nav_is("io"));
+    view_link_update(nav_is("io"));
     view_display_update(nav_is("display"));
     screen_poll();
     apply_vars(false);      /* draw in this same lv_timer_handler() pass */
@@ -74,6 +75,7 @@ void hmi_init(void)
     view_obd_init();
     view_can_init();
     view_dash_init();
+    view_link_init();
     obd_bridge_init();
     nav_init(cfg.page);
 

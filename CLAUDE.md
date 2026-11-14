@@ -312,6 +312,15 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   Run by the comsm task (`comsm_set_link_monitor`, the only owner of obd_client) while OBD
   is idle; Connect pauses it, Disconnect resumes. Frames -> `dash_svc_push_frame`. Console
   stays off the adapter while monitoring. Still board CAN only: CAN page monitor, raw log.
+- First adapter Dash test: only 2 of 12 messages, sender saw TX errors. Cause (most
+  likely): ELM327 monitors silently (CSM1, no ACK) and nothing else ACKed. Now ATCSM0 in
+  the monitor set-up; first 8 monitor lines + a 5 s statistic logged (`obd_elm: monitor`).
+- **Car interface on the IO page (owner's wish, built, not run yet):** link dropdown moved
+  CAN page -> IO page (top panel, `view_link.c`, status line). Receive filter presets
+  (setting `link_filter` + `link_filter_id` / `link_filter_mask`): Auto (Dash: DBC IDs,
+  rest: all), Allow all, OBD 7E0-7EF, Dash DBC IDs, Custom hex ID / mask. Never filters
+  OBD: board CAN = `can_if_set_monitor_filter()` on the monitor taps (CAN monitor, raw log,
+  Dash), adapter = ATCF / ATCM of the Dash monitor. IO page DI / DO / I2C compacted.
 - Was the plan: move the link choice from the OBD page to the CAN page as a
   general "Car link" (board CAN / BLE adapter) for OBD, Dash, logging. Dash over the adapter
   = ELM monitor mode (ATMA + ATCF/ATCM ID filter), not at the same time as OBD over the

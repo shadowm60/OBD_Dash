@@ -105,6 +105,10 @@ void     view_can_start_stop(void);
 void     view_can_reset(void);
 void     view_can_prepare_obd(void);        /* before OBD connects: leave listen-only */
 uint32_t view_can_bitrate(uint8_t idx);     /* can_bitrate_idx -> bit/s */
+/* IO page: car interface panel (view_link.c) */
+void view_link_init(void);
+void view_link_update(bool visible);
+bool view_link_dash_filter(uint32_t *id, uint32_t *mask);   /* adapter filter for the Dash */
 /* IO page (view_io.c) */
 void view_io_update(bool visible);
 void view_io_toggle_do0(void);

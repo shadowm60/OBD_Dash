@@ -126,6 +126,20 @@ void diag_reject(diag_job_t job, const char *reason)
     finish(COMSM_DIAG_FAILED, reason);
 }
 
+void diag_wait(diag_job_t job)
+{
+    if (s_active) {
+        return;
+    }
+    if (job == DIAG_JOB_FREEZE_FRAME) {
+        memset(&s_ff_work, 0, sizeof(s_ff_work));
+        publish_ff(COMSM_DIAG_BUSY);
+    } else {
+        memset(&s_dtc_work, 0, sizeof(s_dtc_work));
+        publish_dtc(COMSM_DIAG_BUSY);
+    }
+}
+
 void diag_abort(const char *reason)
 {
     if (s_active) {

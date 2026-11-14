@@ -41,6 +41,7 @@ static uint32_t       s_retry_at_ms;
 static uint32_t       s_rate_window_start;
 static uint32_t       s_rate_window_count;
 static uint32_t       s_last_tx_ms;
+static int            s_deferred_job = -1;  /* diag_job_t asked while not connected, run once RUNNING */
 
 const char *comsm_state_name(comsm_state_t st)
 {
@@ -100,8 +101,18 @@ static void send_request(req_kind_t kind, uint8_t sid, uint8_t pid)
     send_raw(kind, req, sizeof(req));
 }
 
+/* A diag job that waits for the connection gives up. */
+static void deferred_fail(const char *why)
+{
+    if (s_deferred_job >= 0) {
+        diag_reject((diag_job_t)s_deferred_job, why);
+        s_deferred_job = -1;
+    }
+}
+
 static void go_idle(void)
 {
+    deferred_fail("Disconnected");
     diag_abort("Disconnected");
     obd_client_abort();
     s_pending = REQ_NONE;
@@ -112,6 +123,7 @@ static void go_idle(void)
 
 static void go_retry_wait(void)
 {
+    deferred_fail("No answer from the ECU (ignition on?)");
     diag_abort("Connection lost");
     obd_client_abort();
     s_pending = REQ_NONE;
@@ -142,6 +154,10 @@ static void start_running(void)
     s_rate_window_start = can_if_now_ms();
     s_rate_window_count = 0;
     set_state(COMSM_RUNNING);
+    if (s_deferred_job >= 0) {
+        diag_start((diag_job_t)s_deferred_job);    /* Read pressed while not connected */
+        s_deferred_job = -1;
+    }
 }
 
 /* Response to 01 00/20/40...: apply bitmap, continue with next range or finish. */
@@ -356,7 +372,12 @@ static void handle_cmd(cmd_t cmd)
         if (s_state == COMSM_RUNNING) {
             diag_start(job);
         } else {
-            diag_reject(job, "Not connected");
+            /* Not connected: connect first, the job runs once the ECU is found. */
+            if (s_state == COMSM_IDLE) {
+                start_connect();
+            }
+            s_deferred_job = job;
+            diag_wait(job);
         }
         break;
     }

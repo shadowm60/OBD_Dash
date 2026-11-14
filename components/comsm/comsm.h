@@ -102,6 +102,7 @@ typedef struct {
     char     error[64];
 } comsm_freeze_frame_t;
 
+/* Diagnostic jobs connect first when OBD is not connected (and stay connected). */
 void comsm_read_dtcs(void);
 /* Service 04: clears stored/pending DTCs and freeze frame, turns the MIL off and
  * resets readiness monitors. Re-reads the DTCs afterwards. Confirm with the user first! */

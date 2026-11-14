@@ -131,6 +131,9 @@ void obd_pid_set_enabled(size_t idx, bool enabled)
     if (idx >= obd_pid_count()) {
         return;
     }
+    if (g_obd_pids[idx].pid == OBD_PID_ALWAYS) {
+        enabled = true;         /* MIL + DTC count for the OBD page */
+    }
     portENTER_CRITICAL(&s_lock);
     s_enabled[idx] = enabled;
     portEXIT_CRITICAL(&s_lock);

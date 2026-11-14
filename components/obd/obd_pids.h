@@ -53,6 +53,10 @@ uint16_t obd_pid_supported_count(void);         /* catalogue entries supported *
 void obd_pid_get_supported_bitmap(uint8_t out[256 / 8]);
 
 /* User selection, default off. Only enabled AND supported PIDs are polled. */
+/* PID 01 (MIL, stored DTC count) is always polled when the ECU supports it,
+ * whatever the selection: obd_pid_set_enabled() can't switch it off. */
+#define OBD_PID_ALWAYS 0x01
+
 bool obd_pid_is_enabled(size_t idx);
 void obd_pid_set_enabled(size_t idx, bool enabled);
 uint16_t obd_pid_active_count(void);            /* enabled and supported */

@@ -80,8 +80,8 @@ the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on eve
 | Page | What it does |
 |---|---|
 | **Home** | Board and firmware, uptime, clock, free RAM; one line per service (OBD, CAN, Wi-Fi, BLE, SD, logging) |
-| **OBD** | Connect / disconnect, ECU status, the three live views, Select parameters, log parameters, read speed, connection type |
-| **DTC** | Read / clear / save the trouble codes, freeze frame |
+| **OBD** | Connect / disconnect, ECU status, MIL + stored DTC count (red = MIL on, amber = codes without MIL, green = none, grey = unknown; tap = DTC page), the three live views, Select parameters, log parameters, read speed, connection type |
+| **DTC** | Read / clear / save the trouble codes, freeze frame. Read (and Clear, freeze frame) connect to the ECU first when OBD is not connected; it stays connected afterwards |
 | **CAN** | Bus monitor: every ID on the bus (DLC, last data, count, period; our own OBD requests too), frames/s, peak, bus load, error counters. Bitrate and listen-only (only while OBD is disconnected; Connect switches listen-only off). Raw log options |
 | **Wi-Fi** | Scan, connect, forget, auto connect; IP, RSSI, SNTP time (stored in the RTC), address of the log file web page |
 | **BLE** | 10 s scan, connect + pair, GATT services, forget bonds |
@@ -168,7 +168,9 @@ logging is on.
 ### Shared rules
 
 - **MIL:** `CHECK ENGINE` appears top right on all three screens when PID 01 reports the
-  MIL on; `(n)` is the stored DTC count from the same PID.
+  MIL on; `(n)` is the stored DTC count from the same PID. PID 01 is always polled when the ECU supports
+  it (shown checked and locked in Select parameters), so the MIL works without selecting
+  it; it costs one request every ~2 s.
 - **Boost** = (MAP - BARO) / 100 bar, from PID 0B minus PID 33. If 33 is not polled,
   101.3 kPa is used.
 - **AFR** assumes gasoline (stoichiometric 14.7). PID 24 (O2 sensor 1, wide range,

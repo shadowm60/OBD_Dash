@@ -89,6 +89,7 @@ typedef struct _objects_t {
     lv_obj_t *obj45;
     lv_obj_t *obj46;
     lv_obj_t *obj47;
+    lv_obj_t *obd_mil_bt;
     lv_obj_t *obj48;
     lv_obj_t *obj49;
     lv_obj_t *obj50;
@@ -131,12 +132,12 @@ typedef struct _objects_t {
     lv_obj_t *obj87;
     lv_obj_t *obj88;
     lv_obj_t *obj89;
-    lv_obj_t *read_dtc_bt;
     lv_obj_t *obj90;
-    lv_obj_t *clear_dtc_bt;
+    lv_obj_t *read_dtc_bt;
     lv_obj_t *obj91;
-    lv_obj_t *save_dtc_bt;
+    lv_obj_t *clear_dtc_bt;
     lv_obj_t *obj92;
+    lv_obj_t *save_dtc_bt;
     lv_obj_t *obj93;
     lv_obj_t *obj94;
     lv_obj_t *obj95;
@@ -158,8 +159,8 @@ typedef struct _objects_t {
     lv_obj_t *obj111;
     lv_obj_t *obj112;
     lv_obj_t *obj113;
-    lv_obj_t *obd_srv_table;
     lv_obj_t *obj114;
+    lv_obj_t *obd_srv_table;
     lv_obj_t *obj115;
     lv_obj_t *obj116;
     lv_obj_t *obj117;
@@ -182,15 +183,15 @@ typedef struct _objects_t {
     lv_obj_t *obj134;
     lv_obj_t *obj135;
     lv_obj_t *obj136;
-    lv_obj_t *ff_panel;
     lv_obj_t *obj137;
+    lv_obj_t *ff_panel;
     lv_obj_t *obj138;
     lv_obj_t *obj139;
     lv_obj_t *obj140;
-    lv_obj_t *drive_mil;
     lv_obj_t *obj141;
-    lv_obj_t *drive_rpm_gauge;
+    lv_obj_t *drive_mil;
     lv_obj_t *obj142;
+    lv_obj_t *drive_rpm_gauge;
     lv_obj_t *obj143;
     lv_obj_t *obj144;
     lv_obj_t *obj145;
@@ -207,14 +208,14 @@ typedef struct _objects_t {
     lv_obj_t *obj156;
     lv_obj_t *obj157;
     lv_obj_t *obj158;
+    lv_obj_t *obj159;
     lv_obj_t *rpm_gauge;
     lv_obj_t *afr_gauge;
     lv_obj_t *afr_sweet;
-    lv_obj_t *obj159;
     lv_obj_t *obj160;
     lv_obj_t *obj161;
-    lv_obj_t *race_mil;
     lv_obj_t *obj162;
+    lv_obj_t *race_mil;
     lv_obj_t *obj163;
     lv_obj_t *obj164;
     lv_obj_t *obj165;
@@ -233,8 +234,8 @@ typedef struct _objects_t {
     lv_obj_t *obj178;
     lv_obj_t *obj179;
     lv_obj_t *obj180;
-    lv_obj_t *tune_mil;
     lv_obj_t *obj181;
+    lv_obj_t *tune_mil;
     lv_obj_t *obj182;
     lv_obj_t *obj183;
     lv_obj_t *obj184;
@@ -319,8 +320,8 @@ typedef struct _objects_t {
     lv_obj_t *obj263;
     lv_obj_t *obj264;
     lv_obj_t *obj265;
-    lv_obj_t *can_id_table;
     lv_obj_t *obj266;
+    lv_obj_t *can_id_table;
     lv_obj_t *obj267;
     lv_obj_t *obj268;
     lv_obj_t *obj269;
@@ -467,6 +468,7 @@ typedef struct _objects_t {
     lv_obj_t *obj410;
     lv_obj_t *obj411;
     lv_obj_t *obj412;
+    lv_obj_t *obj413;
 } objects_t;
 
 extern objects_t objects;

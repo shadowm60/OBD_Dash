@@ -69,7 +69,10 @@ static void add_entry(lv_obj_t *list, size_t idx, bool supported)
     lv_checkbox_set_text(cb, txt);
     lv_obj_set_style_text_font(cb, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    if (supported) {
+    if (supported && d->pid == OBD_PID_ALWAYS) {
+        lv_checkbox_set_text(cb, "01  MIL and DTC count  (always read)");
+        lv_obj_add_state(cb, LV_STATE_CHECKED | LV_STATE_DISABLED);
+    } else if (supported) {
         if (obd_pid_is_enabled(idx)) {
             lv_obj_add_state(cb, LV_STATE_CHECKED);
         }

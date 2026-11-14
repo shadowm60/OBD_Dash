@@ -63,9 +63,12 @@ static void format_dtc_report(const comsm_dtc_report_t *r, char *buf, size_t cap
     case COMSM_DIAG_IDLE:
         appendf(buf, cap, 0, "Press Read to read trouble codes.");
         return;
-    case COMSM_DIAG_BUSY:
-        appendf(buf, cap, 0, "Reading...");
+    case COMSM_DIAG_BUSY: {
+        comsm_status_t cs;
+        comsm_get_status(&cs);
+        appendf(buf, cap, 0, cs.state == COMSM_RUNNING ? "Reading..." : "Connecting to the ECU...");
         return;
+    }
     case COMSM_DIAG_FAILED:
         appendf(buf, cap, 0, "Error: %s", r->error);
         return;
@@ -144,12 +147,15 @@ void view_show_message(const char *title, const char *text)
     lv_obj_center(mbox);
 }
 
+static void prepare_connect(void);
+
 static void clear_confirm_cb(lv_event_t *e)
 {
     lv_obj_t *mbox = lv_event_get_current_target(e);
     const char *btn = lv_msgbox_get_active_btn_text(mbox);
     if (btn && strcmp(btn, "Clear") == 0) {
         ESP_LOGI(TAG, "user confirmed DTC clear");
+        prepare_connect();
         comsm_clear_dtcs();
     }
     lv_msgbox_close_async(mbox);   /* deleting inside its own event is unsafe */
@@ -157,8 +163,19 @@ static void clear_confirm_cb(lv_event_t *e)
 
 /* ---------------------------------------------------------------- button handlers */
 
+/* Not connected: comsm connects first; leave CAN listen-only for that. */
+static void prepare_connect(void)
+{
+    comsm_status_t cs;
+    comsm_get_status(&cs);
+    if (cs.state == COMSM_IDLE) {
+        view_can_prepare_obd();
+    }
+}
+
 static void read_btn_cb(lv_event_t *e)
 {
+    prepare_connect();
     comsm_read_dtcs();
 }
 
@@ -237,6 +254,7 @@ static void dtc_screen_loaded_cb(lv_event_t *e)
 
 static void ff_screen_loaded_cb(lv_event_t *e)
 {
+    prepare_connect();
     comsm_read_freeze_frame();
 }
 

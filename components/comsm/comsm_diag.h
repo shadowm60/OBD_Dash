@@ -16,6 +16,8 @@ void diag_start(diag_job_t job);
 /* Fail a requested job immediately (e.g. not connected). */
 void diag_reject(diag_job_t job, const char *reason);
 void diag_abort(const char *reason);
+/* Show the job's report as busy while comsm connects first (not started yet). */
+void diag_wait(diag_job_t job);
 bool diag_active(void);
 
 /* Next request of the running job. Returns false if the job just finished. */

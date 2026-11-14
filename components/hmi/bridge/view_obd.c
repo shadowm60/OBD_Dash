@@ -5,6 +5,7 @@
  *
  *   obd_conn_sel, obd_rusefi_id, obd_log_params, obd_read_speed (inputs)
  *   obd_speed_text, obd_detail                                  (texts)
+ *   obd_mil_text + objects.obd_mil_bt colour: MIL and stored DTC count (PID 01)
  *   can_log_raw, can_log_all (inputs), can_log_info             (CAN page)
  *
  * conn_status / conn_button_text (connection line and button) come from
@@ -19,6 +20,8 @@
 #include "comsm.h"
 #include "obd_pids.h"
 #include "datalog.h"
+#include "vehicle_data.h"
+#include "screens.h"
 
 static uivar_t v_conn = UIVAR("obd_conn_sel");
 static uivar_t v_rusefi = UIVAR("obd_rusefi_id");
@@ -30,7 +33,35 @@ static uivar_t v_log_raw = UIVAR("can_log_raw");
 static uivar_t v_log_all = UIVAR("can_log_all");
 static uivar_t v_log_info = UIVAR("can_log_info");
 
+static uivar_t v_mil = UIVAR("obd_mil_text");
+
 static uint32_t s_log_errors;
+static int      s_mil_level = -1;      /* colour shown: 0 unknown, 1 ok, 2 DTCs, 3 MIL on */
+
+#define MIL_STALE_MS 6000              /* PID 01 is polled at ~0.5 Hz */
+
+/* MIL button: red = MIL on, amber = stored DTCs without MIL, green = none,
+ * grey = not known (not connected / ECU doesn't support PID 01). */
+static void update_mil(void)
+{
+    vd_sample_t mil, cnt;
+    bool have_mil = vd_get(VD_MIL, MIL_STALE_MS, &mil);
+    bool have_cnt = vd_get(VD_DTC_COUNT, MIL_STALE_MS, &cnt);
+    int n = have_cnt ? (int)cnt.value : 0;
+    bool on = have_mil && mil.value >= 0.5f;
+    int level = !have_mil ? 0 : on ? 3 : n > 0 ? 2 : 1;
+
+    if (!have_mil) {
+        uv_str(&v_mil, LV_SYMBOL_WARNING " MIL\n--");
+    } else {
+        uv_strf(&v_mil, LV_SYMBOL_WARNING " MIL %s\n%d DTC%s", on ? "ON" : "off", n, n == 1 ? "" : "s");
+    }
+    if (level != s_mil_level && objects.obd_mil_bt != NULL) {
+        static const uint32_t colours[] = { 0x22303f, 0x1f7a3d, 0xb7791f, 0xc0392b };
+        s_mil_level = level;
+        lv_obj_set_style_bg_color(objects.obd_mil_bt, lv_color_hex(colours[level]), LV_PART_MAIN);
+    }
+}
 
 void view_obd_init(void)
 {
@@ -82,6 +113,7 @@ static void read_inputs(const app_settings_t *cfg)
 
 static void update_texts(void)
 {
+    update_mil();
     app_settings_t cfg;
     settings_get(&cfg);
     comsm_status_t st;

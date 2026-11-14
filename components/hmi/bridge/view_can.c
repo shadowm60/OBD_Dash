@@ -17,6 +17,7 @@
 #include "settings.h"
 #include "comsm.h"
 #include "canmon.h"
+#include "datalog.h"
 
 /* index = can_bitrate_sel, same order as the dropdown (tools/obd_ui.py) */
 static const uint32_t BITRATES[] = { 125000, 250000, 500000, 1000000 };
@@ -95,6 +96,7 @@ void view_can_update(bool visible)
 
     canmon_stats_t st;
     canmon_get_stats(&st);
+    datalog_set_monitor_active(st.running);     /* raw log session */
     if (s_pending_us && (st.running == s_pending_run || esp_timer_get_time() - s_pending_us > 2000000)) {
         if (st.running != s_pending_run) {
             ESP_LOGW(TAG, "monitor did not %s within 2 s", s_pending_run ? "start" : "stop");

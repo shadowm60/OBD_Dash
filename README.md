@@ -204,7 +204,10 @@ cached image; values placed on a meter must sit inside a panel, like the tiles d
 ## Logging
 
 Switched on the CAN page (Log raw CAN, All traffic) and the OBD page (Log parameters);
-the choice is saved. Files go to the
+the choice is saved. A ticked box arms the log; files are only written during a session:
+the raw log while OBD is connected or the CAN page monitor runs (Start monitor), the
+parameter log while OBD is connected. Disconnect / Stop monitor closes the file, the next
+session starts a new one; a short ECU dropout (reconnect) keeps the file. Files go to the
 SD card root. Once the clock is set they are named by date and time
 (`can_20261114_095436.log`) and stamped in Unix time; the CSV also gets a `local_time`
 column. Before that (clock never set) they are numbered (`can_003.log`) and stamped in

@@ -111,7 +111,7 @@ static void update_texts(void)
         snprintf(raw, sizeof(raw), "Raw: %s, %" PRIu32 " frames%s", ls.raw_file, ls.raw_frames,
                  ls.raw_dropped ? " (some dropped)" : "");
     } else {
-        snprintf(raw, sizeof(raw), "Raw: off");
+        snprintf(raw, sizeof(raw), "Raw: %s", cfg.log_raw ? "starts with the monitor or OBD" : "off");
     }
     if (ls.params_active) {
         snprintf(par, sizeof(par), "Parameters: %s, %" PRIu32 " rows", ls.params_file, ls.params_rows);

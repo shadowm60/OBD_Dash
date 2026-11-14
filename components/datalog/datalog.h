@@ -4,7 +4,8 @@
  *   raw     every CAN frame seen / sent, candump log format
  *           /sdcard/can_NNN.log   "(12.345000) can0 7E8#0441<...>"
  *           (only OBD responses, or every frame on the bus with
- *           datalog_set_all_traffic(true))
+ *           datalog_set_all_traffic(true)); only while OBD is connected
+ *           or the CAN page monitor runs
  *   events  with the raw log: connection state, timeouts, CAN error counters
  *           /sdcard/evt_NNN.txt
  *   params  one CSV row per CONFIG_DATALOG_PARAM_PERIOD_MS with the latest value
@@ -46,8 +47,11 @@ typedef struct {
 /* dir: mount point of the SD card, e.g. "/sdcard". Logging starts disabled. */
 esp_err_t datalog_init(const char *dir);
 
-/* Idempotent; safe to call from any task. */
+/* Idempotent; safe to call from any task.
+ * Raw log: written only while OBD is connected or the bus monitor runs
+ * (datalog_set_monitor_active); one file per such session. */
 void datalog_enable_raw(bool on);
+void datalog_set_monitor_active(bool on);
 void datalog_enable_params(bool on);
 /* Raw log: capture every frame on the bus instead of the OBD conversation only.
  * Opens the CAN hardware filter while a raw log is being written. */

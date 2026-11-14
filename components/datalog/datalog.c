@@ -42,6 +42,7 @@ typedef struct {
 static char          s_dir[16];
 static QueueHandle_t s_raw_queue;
 static volatile bool s_want_raw;
+static volatile bool s_monitor_on;          /* CAN page bus monitor running */
 static volatile bool s_want_params;
 static volatile bool s_want_all_traffic;
 
@@ -324,7 +325,12 @@ static void raw_write(const can_frame_t *fr)
 
 static void raw_service(void)
 {
-    if (s_want_raw && s_raw.f == NULL) {
+    /* A raw log is one session: while the bus monitor runs or OBD is
+     * connected (a short ECU dropout / retry keeps the file). */
+    comsm_status_t cs;
+    comsm_get_status(&cs);
+    bool want = s_want_raw && (s_monitor_on || cs.state != COMSM_IDLE);
+    if (want && s_raw.f == NULL) {
         char name[32];
         if (open_next(&s_raw, "can", "log", name, sizeof(name))) {
             xQueueReset(s_raw_queue);
@@ -335,7 +341,7 @@ static void raw_service(void)
             s_status.raw_active = true;
             portEXIT_CRITICAL(&s_lock);
         }
-    } else if (!s_want_raw && s_raw.f != NULL) {
+    } else if (!want && s_raw.f != NULL) {
         can_if_set_monitor(CAN_IF_MON_LOG, NULL);
         close_file(&s_raw);
         ESP_LOGI(TAG, "raw log closed (%" PRIu32 " frames)", s_status.raw_frames);
@@ -521,6 +527,11 @@ esp_err_t datalog_init(const char *dir)
 void datalog_enable_raw(bool on)
 {
     s_want_raw = on;
+}
+
+void datalog_set_monitor_active(bool on)
+{
+    s_monitor_on = on;
 }
 
 void datalog_enable_params(bool on)

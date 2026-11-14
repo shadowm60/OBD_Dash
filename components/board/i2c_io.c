@@ -2,6 +2,8 @@
 #include "waveshare_rgb_lcd_port.h"
 #include "driver/i2c_master.h"
 #include "esp_check.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "CH422G";
 
@@ -26,6 +28,10 @@ static i2c_master_dev_handle_t s_dev_input;
 
 static ch422g_config_t g_cfg;
 static uint8_t g_output_state = 0;   // cached output register
+
+/* The output register is read-modify-write: the LVGL task (backlight), the SD
+ * card (CS) and later the IO page change single pins from different tasks. */
+static SemaphoreHandle_t s_lock;
 
 static esp_err_t add_device(uint8_t addr, i2c_master_dev_handle_t *out)
 {
@@ -55,6 +61,12 @@ static esp_err_t ch422g_read_reg(uint8_t *value)
 esp_err_t ch422g_init(const ch422g_config_t *cfg)
 {
     g_cfg = *cfg;
+    if (s_lock == NULL) {
+        s_lock = xSemaphoreCreateMutex();
+        if (s_lock == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+    }
 
     ESP_RETURN_ON_ERROR(add_device(CH422G_ADDR_SYSTEM, &s_dev_system), TAG, "add sys dev");
     ESP_RETURN_ON_ERROR(add_device(CH422G_ADDR_OUTPUT, &s_dev_output), TAG, "add out dev");
@@ -73,12 +85,15 @@ esp_err_t ch422g_write_pin(uint8_t pin, uint8_t level)
     if (pin >= CH422G_MAX_PINS) return ESP_ERR_INVALID_ARG;
     if (g_cfg.pin_dir[pin] != CH422G_OUT) return ESP_ERR_INVALID_STATE;
 
+    xSemaphoreTake(s_lock, portMAX_DELAY);
     if (level)
         g_output_state |= (1 << pin);
     else
         g_output_state &= ~(1 << pin);
 
-    return ch422g_write_reg(g_output_state);
+    esp_err_t ret = ch422g_write_reg(g_output_state);
+    xSemaphoreGive(s_lock);
+    return ret;
 }
 
 esp_err_t ch422g_read_pin(uint8_t pin, uint8_t *level)
@@ -92,6 +107,11 @@ esp_err_t ch422g_read_pin(uint8_t pin, uint8_t *level)
 
     *level = (val >> pin) & 0x01;
     return ESP_OK;
+}
+
+i2c_master_bus_handle_t board_i2c_bus(void)
+{
+    return s_bus;
 }
 
 /**

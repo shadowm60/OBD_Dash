@@ -1,0 +1,481 @@
+#include "ble_svc.h"
+
+#include <string.h>
+#include <stdio.h>
+#include "esp_attr.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "nimble/nimble_port.h"
+#include "nimble/nimble_port_freertos.h"
+#include "host/ble_hs.h"
+#include "host/util/util.h"
+#include "services/gap/ble_svc_gap.h"
+
+static const char *TAG = "ble_svc";
+
+/* Provided by NimBLE's store/config (NVS backed with BT_NIMBLE_NVS_PERSIST). */
+void ble_store_config_init(void);
+
+static SemaphoreHandle_t s_lock;
+static ble_svc_status_t  s_st;
+EXT_RAM_BSS_ATTR static ble_svc_dev_t s_devs[BLE_SVC_MAX_DEVS];
+static uint8_t           s_own_addr_type;
+static uint16_t          s_conn = BLE_HS_CONN_HANDLE_NONE;
+
+#define LOCK()   xSemaphoreTake(s_lock, portMAX_DELAY)
+#define UNLOCK() xSemaphoreGive(s_lock)
+
+static int gap_event(struct ble_gap_event *event, void *arg);
+
+static void set_event(const char *fmt, int v)
+{
+    LOCK();
+    snprintf(s_st.last_event, sizeof(s_st.last_event), fmt, v);
+    UNLOCK();
+}
+
+static void addr_to_str(const uint8_t a[6], char *out)
+{
+    sprintf(out, "%02X:%02X:%02X:%02X:%02X:%02X", a[5], a[4], a[3], a[2], a[1], a[0]);
+}
+
+static int count_bonds(void)
+{
+    int n = 0;
+    ble_store_util_count(BLE_STORE_OBJ_TYPE_PEER_SEC, &n);
+    return n;
+}
+
+/* Short names for the common 16-bit services. */
+static const char *svc16_name(uint16_t u)
+{
+    switch (u) {
+    case 0x1800: return "Generic Access";
+    case 0x1801: return "Generic Attribute";
+    case 0x180A: return "Device Information";
+    case 0x180D: return "Heart Rate";
+    case 0x180F: return "Battery";
+    case 0x1805: return "Current Time";
+    case 0x1809: return "Health Thermometer";
+    case 0x1810: return "Blood Pressure";
+    case 0x1812: return "HID";
+    case 0x1816: return "Cycling Speed/Cadence";
+    case 0x1818: return "Cycling Power";
+    case 0x1819: return "Location/Navigation";
+    case 0x181A: return "Environmental Sensing";
+    case 0x181C: return "User Data";
+    case 0x1826: return "Fitness Machine";
+    case 0xFE59: return "Nordic DFU";
+    default:     return "";
+    }
+}
+
+/* ---------------------------------------------------------------- scanning */
+
+static void on_disc(const struct ble_gap_disc_desc *d)
+{
+    struct ble_hs_adv_fields f;
+    char name[32] = "";
+    if (ble_hs_adv_parse_fields(&f, d->data, d->length_data) == 0 && f.name != NULL && f.name_len > 0) {
+        int n = f.name_len < (int)sizeof(name) - 1 ? f.name_len : (int)sizeof(name) - 1;
+        memcpy(name, f.name, n);
+        name[n] = '\0';
+    }
+    bool connectable = d->event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND ||
+                       d->event_type == BLE_HCI_ADV_RPT_EVTYPE_DIR_IND;
+
+    LOCK();
+    ble_svc_dev_t *e = NULL;
+    for (int i = 0; i < s_st.ndev; i++) {
+        if (memcmp(s_devs[i].addr, d->addr.val, 6) == 0 && s_devs[i].addr_type == d->addr.type) {
+            e = &s_devs[i];
+            break;
+        }
+    }
+    if (e == NULL && s_st.ndev < BLE_SVC_MAX_DEVS) {
+        e = &s_devs[s_st.ndev++];
+        memset(e, 0, sizeof(*e));
+        memcpy(e->addr, d->addr.val, 6);
+        e->addr_type = d->addr.type;
+        addr_to_str(d->addr.val, e->addr_str);
+    }
+    if (e != NULL) {
+        e->rssi = d->rssi;
+        if (name[0] != '\0') {
+            snprintf(e->name, sizeof(e->name), "%s", name);   /* scan response may bring it later */
+        }
+        e->connectable |= connectable;
+    }
+    UNLOCK();
+}
+
+esp_err_t ble_svc_scan(int seconds)
+{
+    if (s_lock == NULL) {
+        return ESP_ERR_INVALID_STATE;     /* not initialised yet */
+    }
+    LOCK();
+    ble_svc_state_t st = s_st.state;
+    UNLOCK();
+    if (st != BLE_SVC_READY) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    struct ble_gap_disc_params p = {
+        .filter_duplicates = 0,     /* keep RSSI and late scan responses coming */
+        .passive = 0,               /* active: ask for scan responses (names) */
+    };
+    LOCK();
+    s_st.ndev = 0;
+    UNLOCK();
+    int rc = ble_gap_disc(s_own_addr_type, seconds * 1000, &p, gap_event, NULL);
+    if (rc != 0) {
+        set_event("scan failed (%d)", rc);
+        return ESP_FAIL;
+    }
+    LOCK();
+    s_st.state = BLE_SVC_SCANNING;
+    s_st.last_event[0] = '\0';
+    UNLOCK();
+    return ESP_OK;
+}
+
+esp_err_t ble_svc_scan_stop(void)
+{
+    if (s_lock == NULL) {
+        return ESP_ERR_INVALID_STATE;     /* not initialised yet */
+    }
+    int rc = ble_gap_disc_cancel();
+    LOCK();
+    if (s_st.state == BLE_SVC_SCANNING) {
+        s_st.state = BLE_SVC_READY;
+        s_st.scan_count++;
+    }
+    UNLOCK();
+    return rc == 0 ? ESP_OK : ESP_ERR_INVALID_STATE;
+}
+
+/* ---------------------------------------------------------------- GATT discovery */
+
+static int on_svc(uint16_t conn, const struct ble_gatt_error *err, const struct ble_gatt_svc *svc, void *arg)
+{
+    if (err->status == BLE_HS_EDONE) {
+        LOCK();
+        s_st.svc_done = true;
+        UNLOCK();
+        return 0;
+    }
+    if (err->status != 0) {
+        set_event("service discovery failed (%d)", err->status);
+        LOCK();
+        s_st.svc_done = true;
+        UNLOCK();
+        return 0;
+    }
+    char line[40];
+    if (svc->uuid.u.type == BLE_UUID_TYPE_16) {
+        uint16_t u = svc->uuid.u16.value;
+        snprintf(line, sizeof(line), "%04X %s", u, svc16_name(u));
+    } else {
+        char buf[BLE_UUID_STR_LEN];
+        ble_uuid_to_str(&svc->uuid.u, buf);
+        snprintf(line, sizeof(line), "%.36s", buf);
+    }
+    LOCK();
+    if (s_st.nsvc < BLE_SVC_MAX_SVCS) {
+        snprintf(s_st.svcs[s_st.nsvc++], sizeof(s_st.svcs[0]), "%s", line);
+    }
+    UNLOCK();
+    return 0;
+}
+
+/* ---------------------------------------------------------------- connection */
+
+static void update_sec(uint16_t conn)
+{
+    struct ble_gap_conn_desc desc;
+    if (ble_gap_conn_find(conn, &desc) != 0) {
+        return;
+    }
+    LOCK();
+    s_st.encrypted = desc.sec_state.encrypted;
+    s_st.bonded = desc.sec_state.bonded;
+    s_st.authenticated = desc.sec_state.authenticated;
+    UNLOCK();
+}
+
+esp_err_t ble_svc_connect(int index)
+{
+    if (s_lock == NULL) {
+        return ESP_ERR_INVALID_STATE;     /* not initialised yet */
+    }
+    LOCK();
+    if (index < 0 || index >= s_st.ndev ||
+        (s_st.state != BLE_SVC_READY && s_st.state != BLE_SVC_SCANNING)) {
+        UNLOCK();
+        return ESP_ERR_INVALID_ARG;
+    }
+    ble_svc_dev_t d = s_devs[index];
+    bool scanning = s_st.state == BLE_SVC_SCANNING;
+    UNLOCK();
+
+    if (scanning) {
+        ble_svc_scan_stop();
+    }
+    ble_addr_t addr = { .type = d.addr_type };
+    memcpy(addr.val, d.addr, 6);
+    int rc = ble_gap_connect(s_own_addr_type, &addr, 15000, NULL, gap_event, NULL);
+    if (rc != 0) {
+        set_event("connect failed (%d)", rc);
+        return ESP_FAIL;
+    }
+    LOCK();
+    s_st.state = BLE_SVC_CONNECTING;
+    snprintf(s_st.peer_addr, sizeof(s_st.peer_addr), "%s", d.addr_str);
+    snprintf(s_st.peer_name, sizeof(s_st.peer_name), "%s", d.name);
+    s_st.peer_rssi = d.rssi;
+    s_st.nsvc = 0;
+    s_st.svc_done = false;
+    s_st.passkey = 0;
+    s_st.encrypted = s_st.bonded = s_st.authenticated = false;
+    snprintf(s_st.last_event, sizeof(s_st.last_event), "connecting...");
+    UNLOCK();
+    ESP_LOGI(TAG, "connecting to %s %s", d.addr_str, d.name);
+    return ESP_OK;
+}
+
+esp_err_t ble_svc_disconnect(void)
+{
+    if (s_lock == NULL) {
+        return ESP_ERR_INVALID_STATE;     /* not initialised yet */
+    }
+    LOCK();
+    uint16_t c = s_conn;
+    bool connecting = s_st.state == BLE_SVC_CONNECTING;
+    UNLOCK();
+    if (connecting) {
+        ble_gap_conn_cancel();
+        LOCK();
+        s_st.state = BLE_SVC_READY;
+        UNLOCK();
+        return ESP_OK;
+    }
+    if (c == BLE_HS_CONN_HANDLE_NONE) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return ble_gap_terminate(c, BLE_ERR_REM_USER_CONN_TERM) == 0 ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t ble_svc_forget_all(void)
+{
+    if (s_lock == NULL) {
+        return ESP_ERR_INVALID_STATE;     /* not initialised yet */
+    }
+    ble_svc_disconnect();
+    int rc = ble_store_clear();
+    LOCK();
+    s_st.nbonds = count_bonds();
+    snprintf(s_st.last_event, sizeof(s_st.last_event), rc == 0 ? "bonds deleted" : "delete failed");
+    UNLOCK();
+    return rc == 0 ? ESP_OK : ESP_FAIL;
+}
+
+/* ---------------------------------------------------------------- GAP events */
+
+static int gap_event(struct ble_gap_event *event, void *arg)
+{
+    switch (event->type) {
+    case BLE_GAP_EVENT_DISC:
+        on_disc(&event->disc);
+        return 0;
+
+    case BLE_GAP_EVENT_DISC_COMPLETE:
+        LOCK();
+        if (s_st.state == BLE_SVC_SCANNING) {
+            s_st.state = BLE_SVC_READY;
+        }
+        s_st.scan_count++;
+        UNLOCK();
+        ESP_LOGI(TAG, "scan done: %d devices", s_st.ndev);
+        return 0;
+
+    case BLE_GAP_EVENT_CONNECT:
+        if (event->connect.status != 0) {
+            LOCK();
+            s_st.state = BLE_SVC_READY;
+            snprintf(s_st.last_event, sizeof(s_st.last_event), "connect failed (%d)", event->connect.status);
+            UNLOCK();
+            return 0;
+        }
+        LOCK();
+        s_conn = event->connect.conn_handle;
+        s_st.state = BLE_SVC_CONNECTED;
+        snprintf(s_st.last_event, sizeof(s_st.last_event), "connected, pairing...");
+        UNLOCK();
+        ESP_LOGI(TAG, "connected, handle %d", event->connect.conn_handle);
+        /* Pair (or restore encryption with an existing bond), then list services. */
+        if (ble_gap_security_initiate(event->connect.conn_handle) != 0) {
+            set_event("connected (no pairing)", 0);
+        }
+        ble_gattc_disc_all_svcs(event->connect.conn_handle, on_svc, NULL);
+        return 0;
+
+    case BLE_GAP_EVENT_DISCONNECT:
+        LOCK();
+        s_conn = BLE_HS_CONN_HANDLE_NONE;
+        s_st.state = BLE_SVC_READY;
+        s_st.encrypted = s_st.authenticated = false;
+        s_st.passkey = 0;
+        snprintf(s_st.last_event, sizeof(s_st.last_event), "disconnected (0x%X)", event->disconnect.reason);
+        s_st.nbonds = count_bonds();
+        UNLOCK();
+        ESP_LOGI(TAG, "disconnected, reason 0x%X", event->disconnect.reason);
+        return 0;
+
+    case BLE_GAP_EVENT_ENC_CHANGE:
+        update_sec(event->enc_change.conn_handle);
+        LOCK();
+        if (event->enc_change.status == 0) {
+            snprintf(s_st.last_event, sizeof(s_st.last_event), "%s", s_st.bonded ? "paired + bonded" : "encrypted");
+        } else {
+            snprintf(s_st.last_event, sizeof(s_st.last_event), "pairing failed (%d)", event->enc_change.status);
+        }
+        s_st.nbonds = count_bonds();
+        UNLOCK();
+        ESP_LOGI(TAG, "encryption change, status %d", event->enc_change.status);
+        return 0;
+
+    case BLE_GAP_EVENT_PASSKEY_ACTION: {
+        struct ble_sm_io io = { .action = event->passkey.params.action };
+        if (io.action == BLE_SM_IOACT_NUMCMP) {
+            /* No way to confirm on both sides yet: accept, show the number. */
+            LOCK();
+            s_st.passkey = event->passkey.params.numcmp;
+            UNLOCK();
+            io.numcmp_accept = 1;
+            ble_sm_inject_io(event->passkey.conn_handle, &io);
+        } else if (io.action == BLE_SM_IOACT_DISP) {
+            io.passkey = 123456;
+            LOCK();
+            s_st.passkey = io.passkey;
+            UNLOCK();
+            ble_sm_inject_io(event->passkey.conn_handle, &io);
+        } else {
+            set_event("device wants a passkey typed in (unsupported)", 0);
+        }
+        return 0;
+    }
+
+    case BLE_GAP_EVENT_REPEAT_PAIRING: {
+        /* The peer lost its bond: forget ours and pair again. */
+        struct ble_gap_conn_desc desc;
+        if (ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc) == 0) {
+            ble_store_util_delete_peer(&desc.peer_id_addr);
+        }
+        return BLE_GAP_REPEAT_PAIRING_RETRY;
+    }
+
+    default:
+        return 0;
+    }
+}
+
+/* ---------------------------------------------------------------- host */
+
+static void on_sync(void)
+{
+    if (ble_hs_util_ensure_addr(0) != 0 || ble_hs_id_infer_auto(0, &s_own_addr_type) != 0) {
+        ESP_LOGE(TAG, "no usable address");
+        return;
+    }
+    uint8_t a[6] = { 0 };
+    ble_hs_id_copy_addr(s_own_addr_type, a, NULL);
+    char buf[18];
+    addr_to_str(a, buf);
+    LOCK();
+    s_st.state = BLE_SVC_READY;
+    s_st.nbonds = count_bonds();
+    UNLOCK();
+    ESP_LOGI(TAG, "ready, address %s, %d bonds", buf, s_st.nbonds);
+}
+
+static void on_reset(int reason)
+{
+    LOCK();
+    s_st.state = BLE_SVC_OFF;
+    s_conn = BLE_HS_CONN_HANDLE_NONE;
+    UNLOCK();
+    ESP_LOGW(TAG, "host reset, reason %d", reason);
+}
+
+static void host_task(void *param)
+{
+    nimble_port_run();
+    nimble_port_freertos_deinit();
+}
+
+esp_err_t ble_svc_init(void)
+{
+    s_lock = xSemaphoreCreateMutex();
+    if (s_lock == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    esp_err_t err = nimble_port_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nimble init: %s", esp_err_to_name(err));
+        return err;
+    }
+    ble_hs_cfg.reset_cb = on_reset;
+    ble_hs_cfg.sync_cb = on_sync;
+    ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+
+    /* We have a display but no keyboard on the peer side of the dialogue:
+     * DisplayYesNo gives numeric comparison with phones, just works otherwise. */
+    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_DISP_YES_NO;
+    ble_hs_cfg.sm_bonding = 1;
+    ble_hs_cfg.sm_mitm = 0;
+    ble_hs_cfg.sm_sc = 1;
+    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+
+    ble_svc_gap_init();
+    ble_svc_gap_device_name_set("OBD-Dash");
+    ble_store_config_init();
+    nimble_port_freertos_init(host_task);
+    return ESP_OK;
+}
+
+void ble_svc_get_status(ble_svc_status_t *out)
+{
+    if (s_lock == NULL) {
+        memset(out, 0, sizeof(*out));
+        return;
+    }
+    uint16_t c;
+    LOCK();
+    c = s_conn;
+    UNLOCK();
+    if (c != BLE_HS_CONN_HANDLE_NONE) {
+        int8_t rssi;
+        if (ble_gap_conn_rssi(c, &rssi) == 0) {
+            LOCK();
+            s_st.peer_rssi = rssi;
+            UNLOCK();
+        }
+    }
+    LOCK();
+    *out = s_st;
+    UNLOCK();
+}
+
+int ble_svc_get_devices(ble_svc_dev_t *out, int max)
+{
+    if (s_lock == NULL) {
+        return 0;
+    }
+    LOCK();
+    int n = s_st.ndev < max ? s_st.ndev : max;
+    memcpy(out, s_devs, n * sizeof(*out));
+    UNLOCK();
+    return n;
+}

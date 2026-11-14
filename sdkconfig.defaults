@@ -22,6 +22,31 @@ CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
 
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
+# Wi-Fi + Bluetooth LE next to the display (settings from Esp32_monitor).
+# Internal RAM is the tight resource: RGB bounce buffers, Wi-Fi and the BT
+# controller all need it.
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# Statics tagged EXT_RAM_BSS_ATTR live in PSRAM.
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+# Plain malloc() prefers PSRAM for every size (default: < 16 KB internal
+# first). LVGL objects and EEZ Flow values are thousands of small mallocs and
+# would use up internal RAM next to Wi-Fi + BT. Code that needs internal RAM
+# (DMA, ISR, FreeRTOS objects, Wi-Fi/BT internals) asks for it explicitly.
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=0
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
+CONFIG_ESP_WIFI_RX_BA_WIN=6
+# Bluetooth LE only (the S3 has no classic BT), NimBLE host, central role
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
+# SD card: long file names (YYYYMMDD_HHMMSS logs once the clock is known)
+CONFIG_FATFS_LFN_HEAP=y
+
 # BSW Display Configuration
 CONFIG_BSW_LVGL_PORT_TASK_CORE=1
 CONFIG_BSW_LVGL_PORT_AVOID_TEAR_ENABLE=y

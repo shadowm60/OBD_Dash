@@ -26,9 +26,11 @@ obd             obd_client (one request in flight, timeout, NRC, addressing)
 isotp           ISO 15765-2 transport (isotp-c) + glue to can_if
 can_if          esp_twai driver: TX queue, RX dispatch by ID range, bus stats
 datalog         SD logging task: raw CAN (candump .log) + polled parameters (.csv)
+wifi_svc        Wi-Fi station: scan, connect, stored network, SNTP clock (from Esp32_monitor)
+ble_svc         Bluetooth LE central (NimBLE): scan, connect, pair (from Esp32_monitor)
 vehicle_data    latest value + timestamp of every signal (producers -> consumers)
 settings        persistent user config in NVS (one versioned blob, saved 2 s after last change)
-board           LCD, touch, IO expander, SD card, LVGL port (no app knowledge)
+board           LCD, touch, IO expander, SD card, LVGL port, PCF85063 RTC (no app knowledge)
 ```
 
 ### Common changes
@@ -164,7 +166,9 @@ cached image; values placed on a meter must sit inside a panel, like the tiles d
 ## Logging
 
 Switched with the two checkboxes on the Settings screen (state is saved). Files go to the
-SD card root, numbered so nothing is overwritten. Times are seconds since boot (no RTC).
+SD card root, numbered so nothing is overwritten. Times in the files are still seconds
+since boot. The board has an RTC (PCF85063, backup cell): it is set over Wi-Fi (SNTP) and
+sets the clock at power-up, so real timestamps are coming.
 
 | Checkbox | File | Content |
 |---|---|---|

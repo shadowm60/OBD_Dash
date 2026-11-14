@@ -144,6 +144,37 @@ Producers never call LVGL.
 - **Testing:** the owner tests on hardware. Say clearly what was only built and not run.
   Ask them for the status line (`values/s`) or logs instead of guessing.
 
+## Porting Esp32_monitor features (started 2026-11-14)
+
+The owner wants Esp32_monitor's design and features (`~/git/Esp32_monitor`, its
+`CLAUDE.md` and `README.md` explain them) in this project. Decided with the owner:
+- **UI:** Esp32_monitor's dark sidebar layout + status line for ALL pages: Home, OBD,
+  CAN, Wi-Fi, BLE, IO, Display. Today's Settings / System / Read DTCs / Select Params
+  move into those pages. Drive / Race / Tune stay full-screen (opened from OBD).
+- **IO page:** the 5" board has no free ADC pin (GPIO6 = RTC interrupt). Only DI0/DI1
+  (CH422G EXIO0 / EXIO5, isolated 5-36 V), DO0/DO1 (CH422G OC0 / OC1, open drain),
+  I2C scan of the terminal's SDA/SCL, chip temperature.
+- **CAN monitor** alongside OBD: ID table, rates, bus load, log; listen-only only while
+  OBD is disconnected.
+- No GPS / route / ride / web file manager ("this is it for now").
+
+Steps, each built, committed and tested on the board by the owner before the next:
+1. **Done, not run yet:** memory settings + `wifi_svc` + `ble_svc` + PCF85063 RTC
+   (`board/rtc_pcf85063.c`), init order from Esp32_monitor, `log_heap` after every step.
+   Static internal RAM headroom 135 KB (was 179). Ask for the boot log lines
+   `after <step> internal free ...`, and whether FPS dropped (LVGL mallocs now go to
+   PSRAM: `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=0`).
+2. UI frame: port the bridge infrastructure (`uivar.c` by-name variables, `nav.c`,
+   eez_scaffold-style page generation) and build the sidebar pages; migrate the
+   existing screens' functions.
+3. Wi-Fi + BLE pages; SNTP -> RTC; real timestamps / YYYYMMDD names for log files.
+4. CAN monitor (Esp32_monitor `canmon`) merged with `datalog`'s raw log.
+5. IO page. Research first: CH422G sets ALL IO0-7 in or out together (system register
+   bit IO_OE), but EXIO1-4 must stay outputs (touch reset, backlight, LCD reset, SD CS).
+   Find how Waveshare reads DI0/DI1 on this board (their DI/DO example).
+
+`sdkconfig` (local) got the step 1 options by hand; the previous copy is not kept.
+
 ## Status (last session ended 2026-11-12)
 
 Done:

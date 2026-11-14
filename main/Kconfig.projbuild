@@ -245,6 +245,22 @@ menu "BSW Configuration"
                 don't use.
     endmenu
 
+    menu "Clock and network"
+        config APP_TZ
+            string "Time zone (POSIX TZ string)"
+            default "EET-2EEST,M3.5.0/3,M10.5.0/4"
+            help
+                Local time for the clock and the log file names. The RTC and
+                SNTP keep UTC. Examples:
+                  "EET-2EEST,M3.5.0/3,M10.5.0/4" Eastern Europe (Romania)
+                  "CET-1CEST,M3.5.0,M10.5.0/3"  Central Europe
+                  "UTC0"                          UTC
+
+        config APP_NTP_SERVER
+            string "SNTP server"
+            default "pool.ntp.org"
+    endmenu
+
     menu "OBD"
         config OBD_RESPONSE_TIMEOUT_MS
             int "ECU response timeout (ms)"

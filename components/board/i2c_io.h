@@ -5,6 +5,7 @@
 #include "esp_err.h"
 #include "driver/gpio.h"
 #include "hal/i2c_types.h"
+#include "driver/i2c_master.h"
 
 #define I2C_MASTER_SCL_IO           CONFIG_I2C_MASTER_SCL //9       /*!< GPIO number used for I2C master clock */
 #define I2C_MASTER_SDA_IO           CONFIG_I2C_MASTER_SDA //8       /*!< GPIO number used for I2C master data  */
@@ -31,6 +32,10 @@ esp_err_t ch422g_read_pin(uint8_t pin, uint8_t *level);
 
 
 void i2c_io_init(void);
+
+/* The shared I2C bus (CH422G, GT911 touch, PCF85063 RTC and the terminal's
+ * SDA/SCL), NULL before i2c_io_init(). Thread safe for transactions. */
+i2c_master_bus_handle_t board_i2c_bus(void);
 void waveshare_esp32_s3_touch_reset(void);
 esp_err_t wavesahre_rgb_lcd_bl_on(void);
 esp_err_t wavesahre_rgb_lcd_bl_off(void);

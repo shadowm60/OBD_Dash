@@ -34,6 +34,7 @@ static void set_defaults(app_settings_t *c)
     c->gauge_anim = true;
     c->pids_per_request = 6;        /* falls back to 1 if the ECU can't */
     c->brightness = 100;
+    c->wifi_autoconnect = true;
     /* Default selection: what the current dashboard shows. */
     static const uint8_t default_pids[] = { 0x05 /* coolant */, 0x0C /* rpm */,
                                             0x0D /* speed */, 0x24 /* lambda */ };
@@ -173,6 +174,7 @@ void settings_set_gauge_anim(bool on)           { SETTINGS_SETTER(gauge_anim, on
 void settings_set_pids_per_request(uint8_t n)   { SETTINGS_SETTER(pids_per_request, n); }
 void settings_set_brightness(uint8_t percent)   { SETTINGS_SETTER(brightness, percent); }
 void settings_set_log_all_traffic(bool on)      { SETTINGS_SETTER(log_all_traffic, on); }
+void settings_set_wifi_autoconnect(bool on)     { SETTINGS_SETTER(wifi_autoconnect, on); }
 
 void settings_set_pid_selected(uint8_t pid, bool selected)
 {

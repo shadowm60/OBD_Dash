@@ -84,12 +84,13 @@ SUB_PAGES = [
     ('dash_setup', 'dash', 'Dash settings'),
     ('dash_signals', 'dash', 'Dash signals'),
     ('dash_tile', 'dash', 'Dash tile'),
+    ('diag_ecu', 'diag', 'Diagnostics: ECU'),
 ]
 # replaced by the pages above
 OLD_PAGES = ['startup', 'clearDTC', 'settings', 'system']
 # screen order in the project (= ScreensEnum); the first one is shown at the first boot
 ORDER = ['home', 'obd', 'readDTC', 'select_params', 'freezFrame', 'drive', 'liveData', 'tune',
-         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag', 'ble_console', 'dash_setup', 'dash_signals', 'dash_tile']
+         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag', 'ble_console', 'dash_setup', 'dash_signals', 'dash_tile', 'diag_ecu']
 
 # name -> (type, default expression). Existing variables are kept as they are.
 VARIABLES = {
@@ -152,6 +153,8 @@ VARIABLES = {
     'diag_scan_text': ('string', '"Scan ECUs"'),
     'diag_status': ('string', '""'),
     'diag_ecus': ('string', '""'),
+    'diag_ecu_title': ('string', '""'),
+    'diag_ecu_text': ('string', '""'),
     'dash_signals': ('string', '""'),
     'dash_files': ('string', '""'),
     'dash_file_sel': ('integer', '0'),
@@ -213,7 +216,7 @@ ACTIONS = [
     'io_do0_toggle', 'io_do1_toggle', 'io_reset', 'i2c_scan',
     'wifi_scan', 'wifi_connect', 'wifi_disconnect', 'wifi_forget',
     'ble_scan', 'ble_connect', 'ble_disconnect', 'ble_forget',
-    'diag_scan',
+    'diag_scan', 'diag_read_info', 'diag_read_dtc', 'diag_clear_dtc', 'diag_save',
     'dash_reload', 'nav_dash_setup', 'dash_apply', 'nav_dash_signals', 'dash_tile_save', 'dash_tile_clear',
     'nav_ble_console', 'elm_atz', 'elm_ati', 'elm_atrv', 'elm_0100', 'elm_send', 'elm_clear',
     'sd_remount', 'screen_off', 'restart',
@@ -668,8 +671,25 @@ def page_diag(b):
             b.button('diag_scan_text', 344, 20, 170, 44, 'diag_scan', ACCENT, font=16, expr=True),
             b.label('diag_status', 0, 72, iw, 12, GREY, expr=True, wrap=True),
         ]),
-        b.panel(CX, TOP + 120, CW, CH - 120, [
-            b.label('diag_ecus', 0, 0, iw, 16, expr=True, wrap=True)], scroll=True),
+        # rows built by view_diag.c (tap = ECU page)
+        ident(b.panel(CX, TOP + 120, CW, CH - 120, scroll=True, pad=8), 'diag_ecu_list'),
+    ]
+
+
+def page_diag_ecu(b):
+    rw = 190
+    bw = rw - 26
+    return [
+        b.panel(CX, TOP, CW - rw - 10, CH, [
+            b.label('diag_ecu_title', 0, 0, CW - rw - 36, 20, expr=True),
+            b.label('diag_ecu_text', 0, 34, CW - rw - 36, 16, expr=True, wrap=True)], scroll=True),
+        b.panel(CX + CW - rw, TOP, rw, CH, [
+            b.button('Identification', 0, 0, bw, 50, 'diag_read_info', ACCENT, font=16),
+            b.button('Read DTCs', 0, 60, bw, 50, 'diag_read_dtc', ACCENT, font=16),
+            b.button('Clear DTCs', 0, 120, bw, 50, 'diag_clear_dtc', DANGER, font=16),
+            b.button('Save to SD', 0, 180, bw, 50, 'diag_save', font=16),
+            b.button('Back to\nECU list', 0, CH - 26 - 60, bw, 60, 'nav_diag', font=16),
+        ]),
     ]
 
 
@@ -698,7 +718,7 @@ def page_display(b):
 BUILDERS = {
     'home': page_home, 'obd': page_obd, 'readDTC': page_dtc, 'can': page_can, 'wifi': page_wifi,
     'ble': page_ble, 'io': page_io, 'display': page_display,
-    'dash': page_dash, 'diag': page_diag, 'ble_console': page_ble_console, 'dash_setup': page_dash_setup, 'dash_signals': page_dash_signals, 'dash_tile': page_dash_tile,
+    'dash': page_dash, 'diag': page_diag, 'ble_console': page_ble_console, 'dash_setup': page_dash_setup, 'dash_signals': page_dash_signals, 'dash_tile': page_dash_tile, 'diag_ecu': page_diag_ecu,
     'select_params': page_params, 'freezFrame': page_freeze,
 }
 

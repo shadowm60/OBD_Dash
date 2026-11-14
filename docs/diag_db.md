@@ -56,6 +56,9 @@ Engine   | P0301 | Cylinder 1 misfire detected | 2F
 
 An ECU-specific line wins over a `*` line with the same DID.
 
+The dash's **Identification** button reads every DID in F180..F1FF that applies to the
+ECU (its own lines and `*` lines), in file order.
+
 Types (multi-byte numbers are big-endian, as UDS sends them):
 
 | type | data bytes | decoded as | sim value |

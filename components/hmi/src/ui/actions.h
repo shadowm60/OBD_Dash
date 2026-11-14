@@ -54,6 +54,10 @@ extern void action_nav_dash_signals(lv_event_t * e);
 extern void action_dash_tile_save(lv_event_t * e);
 extern void action_dash_tile_clear(lv_event_t * e);
 extern void action_diag_scan(lv_event_t * e);
+extern void action_diag_read_info(lv_event_t * e);
+extern void action_diag_read_dtc(lv_event_t * e);
+extern void action_diag_clear_dtc(lv_event_t * e);
+extern void action_diag_save(lv_event_t * e);
 
 #ifdef __cplusplus
 }

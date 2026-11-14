@@ -30,7 +30,8 @@ enum ScreensEnum {
     SCREEN_ID_DASH_SETUP = 17,
     SCREEN_ID_DASH_SIGNALS = 18,
     SCREEN_ID_DASH_TILE = 19,
-    _SCREEN_ID_LAST = 19
+    SCREEN_ID_DIAG_ECU = 20,
+    _SCREEN_ID_LAST = 20
 };
 
 typedef struct _objects_t {
@@ -53,6 +54,7 @@ typedef struct _objects_t {
     lv_obj_t *dash_setup;
     lv_obj_t *dash_signals;
     lv_obj_t *dash_tile;
+    lv_obj_t *diag_ecu;
     lv_obj_t *obj0;
     lv_obj_t *obj1;
     lv_obj_t *obj2;
@@ -618,6 +620,7 @@ typedef struct _objects_t {
     lv_obj_t *obj536;
     lv_obj_t *obj537;
     lv_obj_t *obj538;
+    lv_obj_t *diag_ecu_list;
     lv_obj_t *obj539;
     lv_obj_t *obj540;
     lv_obj_t *obj541;
@@ -720,9 +723,9 @@ typedef struct _objects_t {
     lv_obj_t *obj638;
     lv_obj_t *obj639;
     lv_obj_t *obj640;
+    lv_obj_t *dash_signal_table;
     lv_obj_t *obj641;
     lv_obj_t *obj642;
-    lv_obj_t *dash_signal_table;
     lv_obj_t *obj643;
     lv_obj_t *obj644;
     lv_obj_t *obj645;
@@ -769,6 +772,41 @@ typedef struct _objects_t {
     lv_obj_t *obj686;
     lv_obj_t *obj687;
     lv_obj_t *obj688;
+    lv_obj_t *obj689;
+    lv_obj_t *obj690;
+    lv_obj_t *obj691;
+    lv_obj_t *obj692;
+    lv_obj_t *obj693;
+    lv_obj_t *obj694;
+    lv_obj_t *obj695;
+    lv_obj_t *obj696;
+    lv_obj_t *obj697;
+    lv_obj_t *obj698;
+    lv_obj_t *obj699;
+    lv_obj_t *obj700;
+    lv_obj_t *obj701;
+    lv_obj_t *obj702;
+    lv_obj_t *obj703;
+    lv_obj_t *obj704;
+    lv_obj_t *obj705;
+    lv_obj_t *obj706;
+    lv_obj_t *obj707;
+    lv_obj_t *obj708;
+    lv_obj_t *obj709;
+    lv_obj_t *obj710;
+    lv_obj_t *obj711;
+    lv_obj_t *obj712;
+    lv_obj_t *obj713;
+    lv_obj_t *obj714;
+    lv_obj_t *obj715;
+    lv_obj_t *obj716;
+    lv_obj_t *obj717;
+    lv_obj_t *obj718;
+    lv_obj_t *obj719;
+    lv_obj_t *obj720;
+    lv_obj_t *obj721;
+    lv_obj_t *obj722;
+    lv_obj_t *obj723;
 } objects_t;
 
 extern objects_t objects;
@@ -844,6 +882,9 @@ void tick_screen_dash_signals();
 
 void create_screen_dash_tile();
 void tick_screen_dash_tile();
+
+void create_screen_diag_ecu();
+void tick_screen_diag_ecu();
 
 void tick_screen_by_id(enum ScreensEnum screenId);
 void tick_screen(int screen_index);

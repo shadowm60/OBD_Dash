@@ -512,7 +512,16 @@ esp_err_t ble_svc_connect(int index)
     }
     ble_addr_t addr = { .type = d.addr_type };
     memcpy(addr.val, d.addr, 6);
-    int rc = ble_gap_connect(s_own_addr_type, &addr, 15000, NULL, gap_event, NULL);
+    /* Short connection interval: every adapter request costs two connection
+     * events (write, notify), so this sets the OBD rate over BLE. 7.5-20 ms;
+     * the peripheral may ask for a longer one (logged). */
+    const struct ble_gap_conn_params cp = {
+        .scan_itvl = 0x0010, .scan_window = 0x0010,
+        .itvl_min = 6, .itvl_max = 16,              /* x 1.25 ms */
+        .latency = 0, .supervision_timeout = 400,   /* x 10 ms = 4 s */
+        .min_ce_len = 0, .max_ce_len = 0,
+    };
+    int rc = ble_gap_connect(s_own_addr_type, &addr, 15000, &cp, gap_event, NULL);
     if (rc != 0) {
         ESP_LOGW(TAG, "ble_gap_connect: %d", rc);
         set_event("connect failed (%d)", rc);
@@ -602,7 +611,13 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         s_st.state = BLE_SVC_CONNECTED;
         snprintf(s_st.last_event, sizeof(s_st.last_event), "connected, pairing...");
         UNLOCK();
-        ESP_LOGI(TAG, "connected, handle %d", event->connect.conn_handle);
+        {
+            struct ble_gap_conn_desc cd;
+            if (ble_gap_conn_find(event->connect.conn_handle, &cd) == 0) {
+                ESP_LOGI(TAG, "connected, handle %d, interval %.2f ms", event->connect.conn_handle,
+                         cd.conn_itvl * 1.25);
+            }
+        }
         ble_gattc_exchange_mtu(event->connect.conn_handle, NULL, NULL);    /* bigger packets */
         /* Pair (or restore encryption with an existing bond), then list services. */
         if (ble_gap_security_initiate(event->connect.conn_handle) != 0) {
@@ -610,6 +625,14 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         }
         disc_start(event->connect.conn_handle);
         return 0;
+
+    case BLE_GAP_EVENT_CONN_UPDATE: {
+        struct ble_gap_conn_desc cd;
+        if (event->conn_update.status == 0 && ble_gap_conn_find(event->conn_update.conn_handle, &cd) == 0) {
+            ESP_LOGI(TAG, "connection interval now %.2f ms", cd.conn_itvl * 1.25);
+        }
+        return 0;
+    }
 
     case BLE_GAP_EVENT_NOTIFY_RX:
         if (s_ser_ready && event->notify_rx.attr_handle == s_ser_rx) {

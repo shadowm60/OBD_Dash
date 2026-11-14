@@ -8,6 +8,7 @@
 #include "isotp.h"
 #include "sdkconfig.h"
 #include "obd_elm.h"
+#include "obd_pids.h"
 
 static const char *TAG = "obd_client";
 
@@ -34,6 +35,35 @@ static uint8_t       s_nrc;
 
 static obd_link_t    s_link_kind = OBD_LINK_CAN;
 static bool          s_elm_busy;        /* adapter still working on the request (no prompt yet) */
+
+/* CAN frames of the answer to a Service 01 request, from the PID table;
+ * 0 = unknown (other services, unknown PIDs: DTC lists can be any length). */
+static uint8_t expected_frames(const uint8_t *req, uint16_t len)
+{
+    if (req[0] != 0x01 || len < 2) {
+        return 0;
+    }
+    unsigned total = 1;                         /* 0x41 */
+    for (uint16_t i = 1; i < len; i++) {
+        unsigned plen = 0;
+        if ((req[i] & 0x1F) == 0) {
+            plen = 4;                           /* support bitmaps 00, 20, 40, ... */
+        } else {
+            for (size_t k = 0; k < obd_pid_count(); k++) {
+                if (obd_pid_desc(k)->pid == req[i]) {
+                    plen = obd_pid_desc(k)->len;
+                    break;
+                }
+            }
+            if (plen == 0) {
+                return 0;
+            }
+        }
+        total += 1 + plen;
+    }
+    /* single frame: 7 data bytes; first frame 6, consecutive frames 7 each */
+    return total <= 7 ? 1 : (uint8_t)(1 + (total - 6 + 6) / 7);
+}
 
 void obd_client_set_link(obd_link_t link)
 {
@@ -110,7 +140,7 @@ esp_err_t obd_client_request(const uint8_t *req, uint16_t len)
         s_nrc = 0;
         s_locked_rx_id = s_phys_rx_id;
         s_status = OBD_REQ_PENDING;
-        if (obd_elm_request(s_tx_id, s_phys_rx_id, req, len) != ESP_OK) {
+        if (obd_elm_request(s_tx_id, s_phys_rx_id, req, len, expected_frames(req, len)) != ESP_OK) {
             finish(OBD_REQ_ERROR);
             return ESP_FAIL;
         }

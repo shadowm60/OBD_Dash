@@ -22,8 +22,9 @@ void obd_elm_invalidate(void);
 bool obd_elm_ready(void);
 const char *obd_elm_error(void);
 
-/* rx_id 0 = functional (any responder). */
-esp_err_t obd_elm_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, uint16_t len);
+/* rx_id 0 = functional (any responder). frames = CAN frames the answer will
+ * take (1..15), 0 = unknown: the adapter then waits its timeout for more. */
+esp_err_t obd_elm_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, uint16_t len, uint8_t frames);
 obd_elm_result_t obd_elm_poll(uint32_t wait_ms, obd_elm_msg_cb_t cb, void *arg);
 void obd_elm_extend(uint32_t ms);
 void obd_elm_abort(void);

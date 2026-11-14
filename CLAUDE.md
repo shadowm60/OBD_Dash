@@ -254,8 +254,13 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   and waits for the prompt). obd stays BLE-free: main passes `obd_elm_io_t` (ble_svc_serial_*).
   comsm applies `comsm_set_link()` at every connect; setting `obd_link`; OBD page "Link"
   dropdown. Console stays off the adapter while OBD runs on it and makes OBD re-init after
-  any console command. Not yet: raw CAN log of the ELM conversation (A3), speed tuning
-  (response-count digit / ATST), auto-connect of the adapter (A4).
+  any console command. Not yet: raw CAN log of the ELM conversation (A3), auto-connect of
+  the adapter (A4).
+- **Speed tuning, built, not run yet:** response-count digit for Service 01 (frames from
+  the PID table, `expected_frames()` in obd_client.c; dropped if the adapter answers '?',
+  only single frame if a multi-frame answer comes back short), BLE connection interval
+  7.5-20 ms requested (actual one logged). `obd_elm: requests: avg / max` every 100.
+  Before: ~165-240 ms per request.
 - Steps: A1 GATT client in ble_svc (find serial char, notify on, write, RX buffer) + a raw
   ELM test on the BLE page (ATZ, ATI, 0100); A2 `car_link` interface (request/response with
   tx/rx IDs, timeouts) with two backends, board CAN (obd_client / isotp) and ELM327; comsm

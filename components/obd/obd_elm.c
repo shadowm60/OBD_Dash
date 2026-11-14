@@ -11,6 +11,13 @@
  * adapter): ATZ ATE0 ATL0 ATS0 ATH1 ATSP6 (CAN 11-bit 500 kbit/s, no protocol
  * search). Per request only what changed: ATSH <tx id>, ATCRA <rx id> / ATCRA
  * (functional: any 7E8..7EF). A command runs until the '>' prompt.
+ *
+ * Speed: when the caller knows how many CAN frames the answer takes, that
+ * count is appended as one hex digit ("010C0D1"): the adapter returns as soon
+ * as they are in instead of waiting its timeout for more ECUs. If the adapter
+ * rejects the digit ('?') it is not used again; if a multi-frame answer comes
+ * back cut short, counts are only used for single frame answers from then on.
+ * The average request time is logged every 100 requests.
  */
 #include "obd_elm.h"
 
@@ -32,6 +39,11 @@ static const char *TAG = "obd_elm";
 static obd_elm_io_t s_io;
 static bool     s_inited;
 static uint32_t s_cur_tx, s_cur_rx = UINT32_MAX;   /* what the adapter is set to */
+static bool     s_count_ok = true;          /* adapter accepts the response count digit */
+static bool     s_count_mf_ok = true;       /* ... also for multi-frame answers */
+static uint8_t  s_req_frames;               /* count sent with this request, 0 = none */
+static uint32_t s_req_start;
+static uint32_t s_stat_n, s_stat_sum_ms, s_stat_max_ms;
 
 /* request in progress */
 static bool     s_pending;
@@ -160,7 +172,7 @@ static bool init_adapter(void)
 
 /* ---------------------------------------------------------------- request */
 
-esp_err_t obd_elm_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, uint16_t len)
+esp_err_t obd_elm_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, uint16_t len, uint8_t frames)
 {
     if (!obd_elm_ready()) {
         snprintf(s_error, sizeof(s_error), "adapter not connected");
@@ -194,9 +206,17 @@ esp_err_t obd_elm_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, ui
         s_cur_rx = rx_id;
     }
 
-    char hex[2 * 7 + 2];
+    char hex[2 * 7 + 3];
     for (uint16_t i = 0; i < len; i++) {
         snprintf(hex + 2 * i, 3, "%02X", req[i]);
+    }
+    if (frames > 15 || !s_count_ok || (frames > 1 && !s_count_mf_ok)) {
+        frames = 0;
+    }
+    s_req_frames = frames;
+    if (frames) {
+        char d[2] = { "0123456789ABCDEF"[frames], '\0' };
+        strcat(hex, d);
     }
     strcat(hex, "\r");
     drain();
@@ -210,7 +230,8 @@ esp_err_t obd_elm_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, ui
         return ESP_FAIL;
     }
     s_pending = true;
-    s_deadline = now_ms() + REQ_TIMEOUT_MS;
+    s_req_start = now_ms();
+    s_deadline = s_req_start + REQ_TIMEOUT_MS;
     return ESP_OK;
 }
 
@@ -290,6 +311,10 @@ static void on_line(const char *l, obd_elm_msg_cb_t cb, void *arg)
         on_frame_line(l, cb, arg);
         return;
     }
+    if (strcmp(l, "?") == 0 && s_req_frames) {
+        s_count_ok = false;             /* this adapter doesn't take the count digit */
+        ESP_LOGW(TAG, "adapter rejects the response count: not used any more");
+    }
     /* CAN ERROR, BUS INIT..., UNABLE TO CONNECT, BUFFER FULL, STOPPED, ?, <RX ERROR, ... */
     s_saw_error = true;
     snprintf(s_error, sizeof(s_error), "%.23s", l);
@@ -317,6 +342,19 @@ obd_elm_result_t obd_elm_poll(uint32_t wait_ms, obd_elm_msg_cb_t cb, void *arg)
             s_line_len = 0;
             if (c == '>') {                     /* adapter finished this request */
                 s_pending = false;
+                if (s_req_frames > 1 && s_asm_total && s_asm_len < s_asm_total) {
+                    s_count_mf_ok = false;      /* the count cut a multi-frame answer short */
+                    ESP_LOGW(TAG, "multi-frame answer cut short: count only for single frames now");
+                }
+                uint32_t dt = now_ms() - s_req_start;
+                s_stat_n++;
+                s_stat_sum_ms += dt;
+                s_stat_max_ms = dt > s_stat_max_ms ? dt : s_stat_max_ms;
+                if (s_stat_n == 100) {
+                    ESP_LOGI(TAG, "requests: avg %lu ms, max %lu ms (last 100)",
+                             (unsigned long)(s_stat_sum_ms / s_stat_n), (unsigned long)s_stat_max_ms);
+                    s_stat_n = s_stat_sum_ms = s_stat_max_ms = 0;
+                }
                 if (s_saw_error && !s_saw_data) {
                     return OBD_ELM_ERROR;
                 }

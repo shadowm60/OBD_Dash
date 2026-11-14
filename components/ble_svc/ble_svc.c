@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/stream_buffer.h"
+#include "esp_heap_caps.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "host/ble_hs.h"
@@ -166,6 +168,29 @@ static struct { uint16_t start, end; } s_rng[MAX_DISC_SVCS];
 static int  s_nrng, s_rng_idx;
 static bool s_disc_busy, s_disc_again;
 
+/* ---- serial port: chosen during characteristic discovery */
+#define SER_VGATE_UUID  "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f"
+#define SER_RX_BUF      4096
+static int      s_ser_rank;                 /* 0 none, 1 FFE1, 2 18F0, 3 Vgate */
+static uint16_t s_ser_tx, s_ser_rx, s_ser_rx_end, s_ser_rx2;   /* rx2: 2AF0 notify (18F0 layout) */
+static bool     s_ser_wnr;                  /* write without response */
+static volatile bool s_ser_ready;
+static StreamBufferHandle_t s_ser_buf;
+static const char *s_ser_name = "";
+
+static void serial_reset(void)
+{
+    s_ser_rank = 0;
+    s_ser_tx = s_ser_rx = s_ser_rx_end = s_ser_rx2 = 0;
+    s_ser_ready = false;
+    LOCK();
+    s_st.serial_ready = false;
+    s_st.serial_info[0] = '\0';
+    UNLOCK();
+}
+
+static void serial_setup(uint16_t conn);
+
 static int  on_svc(uint16_t conn, const struct ble_gatt_error *err, const struct ble_gatt_svc *svc, void *arg);
 
 static void add_line(const char *line)
@@ -198,6 +223,7 @@ static void disc_start(uint16_t conn)
     s_disc_busy = true;
     s_disc_again = false;
     s_nrng = s_rng_idx = 0;
+    serial_reset();
     LOCK();
     s_st.nsvc = 0;
     s_st.svc_done = false;
@@ -221,6 +247,7 @@ static void disc_finished(uint16_t conn)
     s_st.svc_done = true;
     UNLOCK();
     ESP_LOGI(TAG, "GATT discovery done");
+    serial_setup(conn);
 }
 
 static int on_chr(uint16_t conn, const struct ble_gatt_error *err, const struct ble_gatt_chr *chr, void *arg);
@@ -256,6 +283,41 @@ static int on_chr(uint16_t conn, const struct ble_gatt_error *err, const struct 
              p & BLE_GATT_CHR_PROP_INDICATE ? "I" : "");
     snprintf(line, sizeof(line), "  %s %s", u, props);
     add_line(line);
+
+    /* serial port candidates, best one wins */
+    uint16_t end = s_rng[s_rng_idx - 1].end;            /* service of this characteristic */
+    bool can_w = p & (BLE_GATT_CHR_PROP_WRITE | BLE_GATT_CHR_PROP_WRITE_NO_RSP);
+    bool can_n = p & BLE_GATT_CHR_PROP_NOTIFY;
+    uint16_t u16 = chr->uuid.u.type == BLE_UUID_TYPE_16 ? chr->uuid.u16.value : 0;
+    if (strcmp(full, SER_VGATE_UUID) == 0 && can_w && can_n && s_ser_rank < 3) {
+        s_ser_rank = 3;
+        s_ser_tx = s_ser_rx = chr->val_handle;
+        s_ser_rx_end = end;
+        s_ser_wnr = p & BLE_GATT_CHR_PROP_WRITE_NO_RSP;
+        s_ser_name = "bef8d6c9 (Vgate)";
+    } else if (u16 == 0x2AF1 && can_w && s_ser_rank < 2) {
+        s_ser_tx = chr->val_handle;
+        s_ser_wnr = p & BLE_GATT_CHR_PROP_WRITE_NO_RSP;
+        if (s_ser_rx2) {
+            s_ser_rank = 2;
+            s_ser_rx = s_ser_rx2;
+            s_ser_name = "2AF1 / 2AF0";
+        }
+    } else if (u16 == 0x2AF0 && can_n && s_ser_rank < 2) {
+        s_ser_rx2 = chr->val_handle;
+        s_ser_rx_end = end;
+        if (s_ser_tx) {
+            s_ser_rank = 2;
+            s_ser_rx = s_ser_rx2;
+            s_ser_name = "2AF1 / 2AF0";
+        }
+    } else if (u16 == 0xFFE1 && can_w && can_n && s_ser_rank < 1) {
+        s_ser_rank = 1;
+        s_ser_tx = s_ser_rx = chr->val_handle;
+        s_ser_rx_end = end;
+        s_ser_wnr = p & BLE_GATT_CHR_PROP_WRITE_NO_RSP;
+        s_ser_name = "FFE1 (HM-10 style)";
+    }
     ESP_LOGI(TAG, "  characteristic %s handle %u props 0x%02X (%s)", full, chr->val_handle, p, props);
     return 0;
 }
@@ -291,6 +353,128 @@ static int on_svc(uint16_t conn, const struct ble_gatt_error *err, const struct 
     }
     add_line(line);
     return 0;
+}
+
+/* ---------------------------------------------------------------- serial port */
+
+static int on_cccd_written(uint16_t conn, const struct ble_gatt_error *err, struct ble_gatt_attr *attr, void *arg)
+{
+    if (err->status != 0) {
+        ESP_LOGW(TAG, "serial: enabling notifications failed (%d)", err->status);
+        set_event("serial: notify on failed (%d)", err->status);
+        return 0;
+    }
+    xStreamBufferReset(s_ser_buf);
+    s_ser_ready = true;
+    LOCK();
+    s_st.serial_ready = true;
+    snprintf(s_st.serial_info, sizeof(s_st.serial_info), "%s, MTU %u", s_ser_name, ble_att_mtu(conn));
+    UNLOCK();
+    ESP_LOGI(TAG, "serial port ready: %s, tx %u rx %u, MTU %u", s_ser_name, s_ser_tx, s_ser_rx, ble_att_mtu(conn));
+    return 0;
+}
+
+static void write_cccd(uint16_t conn, uint16_t handle)
+{
+    static const uint8_t on[2] = { 0x01, 0x00 };    /* notifications */
+    if (ble_gattc_write_flat(conn, handle, on, sizeof(on), on_cccd_written, NULL) != 0) {
+        ESP_LOGW(TAG, "serial: CCCD write not possible");
+    }
+}
+
+/* Find the CCCD (0x2902) after the notify characteristic's value. */
+static int on_dsc(uint16_t conn, const struct ble_gatt_error *err, uint16_t chr_val_handle,
+                  const struct ble_gatt_dsc *dsc, void *arg)
+{
+    static uint16_t found;
+    if (err->status == 0) {
+        if (found == 0 && dsc->uuid.u.type == BLE_UUID_TYPE_16 && dsc->uuid.u16.value == 0x2902) {
+            found = dsc->handle;
+        }
+        return 0;
+    }
+    /* done (or failed): use what was found, else the usual place right after the value */
+    uint16_t h = found ? found : (uint16_t)(s_ser_rx + 1);
+    found = 0;
+    ESP_LOGI(TAG, "serial: CCCD at handle %u", h);
+    write_cccd(conn, h);
+    return 0;
+}
+
+static void serial_setup(uint16_t conn)
+{
+    if (s_ser_rank == 0) {
+        ESP_LOGI(TAG, "no serial port on this device");
+        return;
+    }
+    if (ble_gattc_disc_all_dscs(conn, s_ser_rx, s_ser_rx_end, on_dsc, NULL) != 0) {
+        write_cccd(conn, s_ser_rx + 1);
+    }
+}
+
+static void serial_rx(const struct os_mbuf *om)
+{
+    uint8_t buf[256];
+    uint16_t len = OS_MBUF_PKTLEN(om);
+    for (uint16_t off = 0; off < len;) {
+        uint16_t n = len - off > sizeof(buf) ? sizeof(buf) : len - off;
+        if (os_mbuf_copydata(om, off, n, buf) != 0) {
+            return;
+        }
+        if (xStreamBufferSend(s_ser_buf, buf, n, 0) != n) {
+            ESP_LOGW(TAG, "serial: receive buffer full, data lost");
+        }
+        off += n;
+    }
+}
+
+bool ble_svc_serial_ready(void)
+{
+    return s_ser_ready;
+}
+
+esp_err_t ble_svc_serial_write(const void *data, size_t len)
+{
+    uint16_t conn = s_conn;
+    if (!s_ser_ready || conn == BLE_HS_CONN_HANDLE_NONE) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    size_t chunk = ble_att_mtu(conn) > 3 ? ble_att_mtu(conn) - 3 : 20;
+    const uint8_t *p = data;
+    while (len > 0) {
+        size_t n = len < chunk ? len : chunk;
+        int rc;
+        int tries = 0;
+        do {
+            rc = s_ser_wnr ? ble_gattc_write_no_rsp_flat(conn, s_ser_tx, p, n)
+                           : ble_gattc_write_flat(conn, s_ser_tx, p, n, NULL, NULL);
+            if (rc == BLE_HS_ENOMEM || rc == BLE_HS_EBUSY) {
+                vTaskDelay(pdMS_TO_TICKS(5));       /* host buffers full: wait */
+            }
+        } while ((rc == BLE_HS_ENOMEM || rc == BLE_HS_EBUSY) && ++tries < 40);
+        if (rc != 0) {
+            ESP_LOGW(TAG, "serial write failed (%d)", rc);
+            return ESP_FAIL;
+        }
+        p += n;
+        len -= n;
+    }
+    return ESP_OK;
+}
+
+size_t ble_svc_serial_read(void *buf, size_t max, uint32_t wait_ms)
+{
+    if (s_ser_buf == NULL) {
+        return 0;
+    }
+    return xStreamBufferReceive(s_ser_buf, buf, max, pdMS_TO_TICKS(wait_ms));
+}
+
+void ble_svc_serial_flush(void)
+{
+    if (s_ser_buf) {
+        xStreamBufferReset(s_ser_buf);
+    }
 }
 
 /* ---------------------------------------------------------------- connection */
@@ -419,6 +603,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         snprintf(s_st.last_event, sizeof(s_st.last_event), "connected, pairing...");
         UNLOCK();
         ESP_LOGI(TAG, "connected, handle %d", event->connect.conn_handle);
+        ble_gattc_exchange_mtu(event->connect.conn_handle, NULL, NULL);    /* bigger packets */
         /* Pair (or restore encryption with an existing bond), then list services. */
         if (ble_gap_security_initiate(event->connect.conn_handle) != 0) {
             set_event("connected (no pairing)", 0);
@@ -426,8 +611,15 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         disc_start(event->connect.conn_handle);
         return 0;
 
+    case BLE_GAP_EVENT_NOTIFY_RX:
+        if (s_ser_ready && event->notify_rx.attr_handle == s_ser_rx) {
+            serial_rx(event->notify_rx.om);
+        }
+        return 0;
+
     case BLE_GAP_EVENT_DISCONNECT:
         s_disc_busy = s_disc_again = false;
+        serial_reset();
         LOCK();
         s_conn = BLE_HS_CONN_HANDLE_NONE;
         s_st.state = BLE_SVC_READY;
@@ -527,7 +719,8 @@ static void host_task(void *param)
 esp_err_t ble_svc_init(void)
 {
     s_lock = xSemaphoreCreateMutex();
-    if (s_lock == NULL) {
+    s_ser_buf = xStreamBufferCreateWithCaps(SER_RX_BUF, 1, MALLOC_CAP_SPIRAM);
+    if (s_lock == NULL || s_ser_buf == NULL) {
         return ESP_ERR_NO_MEM;
     }
     esp_err_t err = nimble_port_init();

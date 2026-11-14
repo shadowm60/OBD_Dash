@@ -80,12 +80,13 @@ MENU_PAGES = [
 SUB_PAGES = [
     ('select_params', 'obd', 'Select parameters'),
     ('freezFrame', 'readDTC', 'Freeze frame'),
+    ('ble_console', 'ble', 'BLE adapter console'),
 ]
 # replaced by the pages above
 OLD_PAGES = ['startup', 'clearDTC', 'settings', 'system']
 # screen order in the project (= ScreensEnum); the first one is shown at the first boot
 ORDER = ['home', 'obd', 'readDTC', 'select_params', 'freezFrame', 'drive', 'liveData', 'tune',
-         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag']
+         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag', 'ble_console']
 
 # name -> (type, default expression). Existing variables are kept as they are.
 VARIABLES = {
@@ -136,6 +137,9 @@ VARIABLES = {
     'ble_scan_text': ('string', '""'),
     'ble_status': ('string', '"..."'),
     'ble_services': ('string', '""'),
+    'elm_log': ('string', '""'),
+    'elm_info': ('string', '""'),
+    'elm_cmd': ('string', '""'),
     # display
     'disp_brightness': ('integer', '100'),
     'disp_brightness_text': ('string', '"Brightness 100 %"'),
@@ -153,6 +157,7 @@ ACTIONS = [
     'io_do0_toggle', 'io_do1_toggle', 'io_reset', 'i2c_scan',
     'wifi_scan', 'wifi_connect', 'wifi_disconnect', 'wifi_forget',
     'ble_scan', 'ble_connect', 'ble_disconnect', 'ble_forget',
+    'nav_ble_console', 'elm_atz', 'elm_ati', 'elm_atrv', 'elm_0100', 'elm_send', 'elm_clear',
     'sd_remount', 'screen_off', 'restart',
 ]
 # actions of the old pages, removed when nothing uses them any more
@@ -451,7 +456,8 @@ def page_ble(b):
         b.panel(CX + 310, TOP + 140, 160, CH - 140, [
             b.button('Connect\n+ pair', 0, 0, 134, 70, 'ble_connect', ACCENT, font=16),
             b.button('Disconnect', 0, 80, 134, 50, 'ble_disconnect', font=16),
-            b.button('Forget\nbonds', 0, 140, 134, 70, 'ble_forget', DANGER, font=16),
+            b.button('Forget\nbonds', 0, 140, 134, 56, 'ble_forget', DANGER, font=16),
+            b.button('Adapter\nconsole', 0, 206, 134, 52, 'nav_ble_console', font=16),
         ]),
         b.panel(CX + 480, TOP + 140, CW - 480, CH - 140, [
             b.label('GATT services', 0, 0, None, 16, GREY),
@@ -480,6 +486,26 @@ def page_io(b):
             b.label('I2C on the terminal (SDA / SCL, shared with touch, IO expander, RTC)', 0, 28, None, 12, GREY),
             b.button('Scan I2C', 0, 54, 140, 44, 'i2c_scan', ACCENT, font=16),
             b.label('i2c_text', 155, 62, iw - 155, 16, expr=True, wrap=True),
+        ]),
+    ]
+
+
+def page_ble_console(b):
+    rw = 190
+    hw = (rw - 26 - 10) // 2
+    return [
+        b.panel(CX, TOP, CW - rw - 10, CH, [
+            b.label('elm_log', 0, 0, CW - rw - 36, 16, expr=True, wrap=True)]),
+        b.panel(CX + CW - rw, TOP, rw, CH, [
+            b.label('elm_info', 0, 0, rw - 26, 12, GREY, expr=True, wrap=True),
+            b.button('ATZ', 0, 56, hw, 44, 'elm_atz', ACCENT, font=16),
+            b.button('ATI', hw + 10, 56, hw, 44, 'elm_ati', font=16),
+            b.button('ATRV', 0, 106, hw, 44, 'elm_atrv', font=16),
+            b.button('0100', hw + 10, 106, hw, 44, 'elm_0100', font=16),
+            b.textarea('elm_cmd', 0, 160, rw - 26, 'command', maxlen=40),
+            b.button('Send', 0, 212, hw, 44, 'elm_send', ACCENT, font=16),
+            b.button('Clear', hw + 10, 212, hw, 44, 'elm_clear', font=16),
+            b.button('Back to\nBLE', 0, CH - 26 - 60, rw - 26, 60, 'nav_ble', font=16),
         ]),
     ]
 
@@ -538,7 +564,7 @@ def page_display(b):
 BUILDERS = {
     'home': page_home, 'obd': page_obd, 'readDTC': page_dtc, 'can': page_can, 'wifi': page_wifi,
     'ble': page_ble, 'io': page_io, 'display': page_display,
-    'dash': page_dash, 'diag': page_diag,
+    'dash': page_dash, 'diag': page_diag, 'ble_console': page_ble_console,
     'select_params': page_params, 'freezFrame': page_freeze,
 }
 

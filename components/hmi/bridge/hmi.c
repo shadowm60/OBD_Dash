@@ -38,6 +38,7 @@ static void fast_cb(lv_timer_t *t)
     view_status_update();
     view_wifi_update(nav_is("wifi"));
     view_ble_update(nav_is("ble"));
+    view_elm_update(nav_is("ble_console"));
     view_can_update(nav_is("can"));
     view_io_update(nav_is("io"));
     view_display_update(nav_is("display"));

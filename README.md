@@ -86,7 +86,7 @@ the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on eve
 | **Diag** | placeholder: UDS diagnostics (VW group, Mercedes), see CLAUDE.md roadmap |
 | **CAN** | Bus monitor: every ID on the bus (DLC, last data, count, period; our own OBD requests too), frames/s, peak, bus load, error counters. Bitrate and listen-only (only while OBD is disconnected; Connect switches listen-only off). Raw log options |
 | **Wi-Fi** | Scan, connect, forget, auto connect; IP, RSSI, SNTP time (stored in the RTC), address of the log file web page |
-| **BLE** | 10 s scan, connect + pair, GATT services, forget bonds |
+| **BLE** | 10 s scan, connect + pair, GATT services, forget bonds; Adapter console: raw commands to a BLE ELM327 adapter (ATZ, ATI, ATRV, 0100, custom) |
 | **IO** | Isolated inputs DI0 / DI1 (state, change counters; read only while the page is open), outputs DO0 / DO1 (tap to switch; off at power-up), I2C scan of the terminal's SDA / SCL, chip temperature |
 | **Display** | Brightness, screen timeout, gauge animation, SD card (remount), restart |
 

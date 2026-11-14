@@ -85,6 +85,11 @@ void view_ble_scan(void);
 void view_ble_connect(void);
 void view_ble_disconnect(void);
 void view_ble_forget(void);
+/* BLE adapter console (view_elm.c) */
+void view_elm_update(bool visible);
+void view_elm_send(const char *cmd);
+void view_elm_send_input(void);
+void view_elm_clear(void);
 /* CAN page: bus monitor and bus settings (view_can.c) */
 void     view_can_init(void);
 void     view_can_update(bool visible);

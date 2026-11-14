@@ -26,7 +26,8 @@ enum ScreensEnum {
     SCREEN_ID_DISPLAY = 13,
     SCREEN_ID_DASH = 14,
     SCREEN_ID_DIAG = 15,
-    _SCREEN_ID_LAST = 15
+    SCREEN_ID_BLE_CONSOLE = 16,
+    _SCREEN_ID_LAST = 16
 };
 
 typedef struct _objects_t {
@@ -45,6 +46,7 @@ typedef struct _objects_t {
     lv_obj_t *display;
     lv_obj_t *dash;
     lv_obj_t *diag;
+    lv_obj_t *ble_console;
     lv_obj_t *obj0;
     lv_obj_t *obj1;
     lv_obj_t *obj2;
@@ -565,6 +567,50 @@ typedef struct _objects_t {
     lv_obj_t *obj500;
     lv_obj_t *obj501;
     lv_obj_t *obj502;
+    lv_obj_t *obj503;
+    lv_obj_t *obj504;
+    lv_obj_t *obj505;
+    lv_obj_t *obj506;
+    lv_obj_t *obj507;
+    lv_obj_t *obj508;
+    lv_obj_t *obj509;
+    lv_obj_t *obj510;
+    lv_obj_t *obj511;
+    lv_obj_t *obj512;
+    lv_obj_t *obj513;
+    lv_obj_t *obj514;
+    lv_obj_t *obj515;
+    lv_obj_t *obj516;
+    lv_obj_t *obj517;
+    lv_obj_t *obj518;
+    lv_obj_t *obj519;
+    lv_obj_t *obj520;
+    lv_obj_t *obj521;
+    lv_obj_t *obj522;
+    lv_obj_t *obj523;
+    lv_obj_t *obj524;
+    lv_obj_t *obj525;
+    lv_obj_t *obj526;
+    lv_obj_t *obj527;
+    lv_obj_t *obj528;
+    lv_obj_t *obj529;
+    lv_obj_t *obj530;
+    lv_obj_t *obj531;
+    lv_obj_t *obj532;
+    lv_obj_t *obj533;
+    lv_obj_t *obj534;
+    lv_obj_t *obj535;
+    lv_obj_t *obj536;
+    lv_obj_t *obj537;
+    lv_obj_t *obj538;
+    lv_obj_t *obj539;
+    lv_obj_t *obj540;
+    lv_obj_t *obj541;
+    lv_obj_t *obj542;
+    lv_obj_t *obj543;
+    lv_obj_t *obj544;
+    lv_obj_t *obj545;
+    lv_obj_t *obj546;
 } objects_t;
 
 extern objects_t objects;
@@ -628,6 +674,9 @@ void tick_screen_dash();
 
 void create_screen_diag();
 void tick_screen_diag();
+
+void create_screen_ble_console();
+void tick_screen_ble_console();
 
 void tick_screen_by_id(enum ScreensEnum screenId);
 void tick_screen(int screen_index);

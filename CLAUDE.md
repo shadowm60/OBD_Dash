@@ -240,6 +240,11 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   and "CAN logging over BLE" can only log our own requests and replies; VW TP2.0 only with
   raw frames (tight timing); KWP1281 not possible with ELM327.
 - Adds K-line (ISO 9141 / KWP2000) and J1850 for older cars.
+- **A1 done, built, not run yet:** `ble_svc_serial_*()` (ble_svc.c "serial port": picks
+  Vgate bef8d6c9 > 18F0 (2AF1 write / 2AF0 notify) > FFE1, finds the CCCD, notify on, RX in
+  a 4 KB PSRAM stream buffer, writes split to MTU-3, MTU exchange at connect). Console:
+  sub-page `ble_console` (BLE page button "Adapter console"), view_elm.c, ATZ / ATI / ATRV /
+  0100 / custom command, last 19 lines.
 - Steps: A1 GATT client in ble_svc (find serial char, notify on, write, RX buffer) + a raw
   ELM test on the BLE page (ATZ, ATI, 0100); A2 `car_link` interface (request/response with
   tx/rx IDs, timeouts) with two backends, board CAN (obd_client / isotp) and ELM327; comsm

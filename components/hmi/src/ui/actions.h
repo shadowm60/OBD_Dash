@@ -40,6 +40,13 @@ extern void action_io_reset(lv_event_t * e);
 extern void action_i2c_scan(lv_event_t * e);
 extern void action_nav_dash(lv_event_t * e);
 extern void action_nav_diag(lv_event_t * e);
+extern void action_nav_ble_console(lv_event_t * e);
+extern void action_elm_atz(lv_event_t * e);
+extern void action_elm_ati(lv_event_t * e);
+extern void action_elm_atrv(lv_event_t * e);
+extern void action_elm_0100(lv_event_t * e);
+extern void action_elm_send(lv_event_t * e);
+extern void action_elm_clear(lv_event_t * e);
 
 #ifdef __cplusplus
 }

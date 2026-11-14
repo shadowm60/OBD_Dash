@@ -9,6 +9,11 @@
  * shown in the status), bonding on; bonds are kept in NVS by NimBLE. A device
  * that requires a passkey to be typed in is not supported yet.
  *
+ * Serial port (BLE ELM327 OBD adapters): after discovery the service looks
+ * for a write + notify pair - Vgate's bef8d6c9-... characteristic first, then
+ * the 0x18F0 layout (write 0x2AF1, notify 0x2AF0), then HM-10 style 0xFFE1 -
+ * switches notifications on and buffers what arrives. ble_svc_serial_*().
+ *
  * All calls are non-blocking and thread safe; poll ble_svc_get_status().
  */
 #ifndef BLE_SVC_H
@@ -61,6 +66,8 @@ typedef struct {
     bool     svc_done;          /* service + characteristic discovery finished */
     int      nbonds;
     char     last_event[48];    /* human readable, e.g. "pairing failed (13)" */
+    bool     serial_ready;      /* serial port found, notifications on */
+    char     serial_info[40];   /* "bef8d6c9 (Vgate), MTU 247", "" = none found */
 } ble_svc_status_t;
 
 esp_err_t ble_svc_init(void);
@@ -77,6 +84,14 @@ esp_err_t ble_svc_disconnect(void);
 esp_err_t ble_svc_forget_all(void);
 
 void ble_svc_get_status(ble_svc_status_t *out);
+
+/* Serial port of the connected device (see the top). write: split into
+ * MTU-sized packets; read: what arrived since the last call, waits up to
+ * `wait_ms` for the first byte (0 = don't wait). */
+bool      ble_svc_serial_ready(void);
+esp_err_t ble_svc_serial_write(const void *data, size_t len);
+size_t    ble_svc_serial_read(void *buf, size_t max, uint32_t wait_ms);
+void      ble_svc_serial_flush(void);
 
 /* Copies up to `max` devices of the current / last scan, in discovery order
  * (the index is what ble_svc_connect() takes). */

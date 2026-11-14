@@ -16,6 +16,13 @@ void action_nav_wifi(lv_event_t *e)        { nav_go("wifi"); }
 void action_nav_ble(lv_event_t *e)         { nav_go("ble"); }
 void action_nav_io(lv_event_t *e)          { nav_go("io"); }
 void action_nav_display(lv_event_t *e)     { nav_go("display"); }
+void action_nav_ble_console(lv_event_t *e) { nav_go("ble_console"); }
+void action_elm_atz(lv_event_t *e)         { view_elm_send("ATZ"); }
+void action_elm_ati(lv_event_t *e)         { view_elm_send("ATI"); }
+void action_elm_atrv(lv_event_t *e)        { view_elm_send("ATRV"); }
+void action_elm_0100(lv_event_t *e)        { view_elm_send("0100"); }
+void action_elm_send(lv_event_t *e)        { view_elm_send_input(); }
+void action_elm_clear(lv_event_t *e)       { view_elm_clear(); }
 void action_nav_dash(lv_event_t *e)        { nav_go("dash"); }
 void action_nav_diag(lv_event_t *e)        { nav_go("diag"); }
 

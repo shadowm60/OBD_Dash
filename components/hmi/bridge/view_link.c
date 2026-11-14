@@ -5,6 +5,10 @@
  *   link_filter_sel  LF_* preset, link_filter_id / link_filter_mask (hex, custom)
  *   link_status      what the link is doing
  *
+ * BLE adapter: the last connected device with a serial port is remembered
+ * (settings ble_adapter_*); with the BLE adapter chosen, ble_svc reconnects
+ * to it by itself (every 5 s while nothing is connected).
+ *
  * The filter never touches OBD: board CAN = software filter of the monitor
  * taps (can_if_set_monitor_filter), BLE adapter = the adapter's ATCF / ATCM
  * while it monitors for the Dash (view_link_dash_filter).
@@ -149,8 +153,14 @@ static void status_text(void)
         if (b.serial_ready) {
             uv_strf(&v_status, "BLE adapter %s: %s.\nFilter: %s", b.peer_name[0] ? b.peer_name : b.peer_addr,
                     use, filt);
+        } else if (c.ble_adapter_valid && !ble_svc_autoconnect_paused()) {
+            uv_strf(&v_status, "BLE adapter %s: not connected, reconnecting by itself...\nFilter: %s",
+                    c.ble_adapter_name[0] ? c.ble_adapter_name : "(remembered)", filt);
+        } else if (c.ble_adapter_valid) {
+            uv_strf(&v_status, "BLE adapter %s: Disconnect pressed, connect it again on the BLE page.\nFilter: %s",
+                    c.ble_adapter_name[0] ? c.ble_adapter_name : "", filt);
         } else {
-            uv_strf(&v_status, "BLE adapter not connected: connect it on the BLE page.\nFilter: %s", filt);
+            uv_strf(&v_status, "BLE adapter not connected: connect it once on the BLE page.\nFilter: %s", filt);
         }
     } else {
         can_if_config_t cc;
@@ -160,8 +170,28 @@ static void status_text(void)
     }
 }
 
+/* remember the adapter, keep auto-connect in step with the interface choice */
+static void adapter_auto(void)
+{
+    static ble_svc_status_t b;          /* LVGL task only */
+    ble_svc_get_status(&b);
+    app_settings_t c;
+    settings_get(&c);
+    if (b.serial_ready && (!c.ble_adapter_valid || memcmp(c.ble_adapter_addr, b.peer_addr_raw, 6) != 0 ||
+                           strncmp(c.ble_adapter_name, b.peer_name, sizeof(c.ble_adapter_name) - 1) != 0)) {
+        c.ble_adapter_valid = true;
+        memcpy(c.ble_adapter_addr, b.peer_addr_raw, 6);
+        c.ble_adapter_type = b.peer_addr_type;
+        strlcpy(c.ble_adapter_name, b.peer_name, sizeof(c.ble_adapter_name));
+        settings_put(&c);
+    }
+    bool on = c.obd_link == OBD_LINK_ELM && c.ble_adapter_valid;
+    ble_svc_set_autoconnect(on, on ? c.ble_adapter_addr : NULL, c.ble_adapter_type, c.ble_adapter_name);
+}
+
 void view_link_update(bool visible)
 {
+    adapter_auto();
     read_inputs();
     if (visible) {
         status_text();

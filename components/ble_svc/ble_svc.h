@@ -53,6 +53,8 @@ typedef struct {
     int      ndev;
     /* connected peer */
     char     peer_addr[18];
+    uint8_t  peer_addr_raw[6];  /* little endian, as NimBLE */
+    uint8_t  peer_addr_type;
     char     peer_name[32];
     int8_t   peer_rssi;
     bool     encrypted;
@@ -88,6 +90,12 @@ void ble_svc_get_status(ble_svc_status_t *out);
 /* Serial port of the connected device (see the top). write: split into
  * MTU-sized packets; read: what arrived since the last call, waits up to
  * `wait_ms` for the first byte (0 = don't wait). */
+/* Reconnect to this device whenever nothing is connected (every 5 s, never
+ * during a scan). ble_svc_disconnect() pauses it until the next manual
+ * ble_svc_connect(). */
+void      ble_svc_set_autoconnect(bool on, const uint8_t addr[6], uint8_t addr_type, const char *name);
+bool      ble_svc_autoconnect_paused(void);
+
 bool      ble_svc_serial_ready(void);
 esp_err_t ble_svc_serial_write(const void *data, size_t len);
 size_t    ble_svc_serial_read(void *buf, size_t max, uint32_t wait_ms);

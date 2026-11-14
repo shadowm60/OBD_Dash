@@ -8,6 +8,7 @@
 #include "freertos/semphr.h"
 #include "freertos/stream_buffer.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "host/ble_hs.h"
@@ -492,6 +493,46 @@ static void update_sec(uint16_t conn)
     UNLOCK();
 }
 
+/* ---- auto-connect (a remembered device, e.g. the OBD adapter) */
+static esp_timer_handle_t s_auto_timer;
+static volatile bool      s_auto_on, s_auto_paused;
+static ble_svc_dev_t      s_auto_dev;
+#define AUTO_PERIOD_MS    5000
+#define AUTO_TIMEOUT_MS   4000
+
+static esp_err_t connect_dev(const ble_svc_dev_t *dp, int32_t timeout_ms);
+
+static void auto_cb(void *arg)
+{
+    if (!s_auto_on || s_auto_paused) {
+        return;
+    }
+    LOCK();
+    bool ready = s_st.state == BLE_SVC_READY;
+    UNLOCK();
+    if (ready) {                        /* not scanning, not connected / connecting */
+        ESP_LOGI(TAG, "auto-connect: %s %s", s_auto_dev.addr_str, s_auto_dev.name);
+        connect_dev(&s_auto_dev, AUTO_TIMEOUT_MS);
+    }
+}
+
+void ble_svc_set_autoconnect(bool on, const uint8_t addr[6], uint8_t addr_type, const char *name)
+{
+    if (on && addr) {
+        memset(&s_auto_dev, 0, sizeof(s_auto_dev));
+        memcpy(s_auto_dev.addr, addr, 6);
+        s_auto_dev.addr_type = addr_type;
+        addr_to_str(addr, s_auto_dev.addr_str);
+        snprintf(s_auto_dev.name, sizeof(s_auto_dev.name), "%s", name ? name : "");
+    }
+    s_auto_on = on && addr;
+}
+
+bool ble_svc_autoconnect_paused(void)
+{
+    return s_auto_paused;
+}
+
 esp_err_t ble_svc_connect(int index)
 {
     if (s_lock == NULL) {
@@ -510,6 +551,13 @@ esp_err_t ble_svc_connect(int index)
     if (scanning) {
         ble_svc_scan_stop();
     }
+    s_auto_paused = false;              /* a manual connect re-enables auto-connect */
+    return connect_dev(&d, 15000);
+}
+
+static esp_err_t connect_dev(const ble_svc_dev_t *dp, int32_t timeout_ms)
+{
+    ble_svc_dev_t d = *dp;
     ble_addr_t addr = { .type = d.addr_type };
     memcpy(addr.val, d.addr, 6);
     /* Short connection interval: every adapter request costs two connection
@@ -521,7 +569,7 @@ esp_err_t ble_svc_connect(int index)
         .latency = 0, .supervision_timeout = 400,   /* x 10 ms = 4 s */
         .min_ce_len = 0, .max_ce_len = 0,
     };
-    int rc = ble_gap_connect(s_own_addr_type, &addr, 15000, &cp, gap_event, NULL);
+    int rc = ble_gap_connect(s_own_addr_type, &addr, timeout_ms, &cp, gap_event, NULL);
     if (rc != 0) {
         ESP_LOGW(TAG, "ble_gap_connect: %d", rc);
         set_event("connect failed (%d)", rc);
@@ -530,6 +578,8 @@ esp_err_t ble_svc_connect(int index)
     LOCK();
     s_st.state = BLE_SVC_CONNECTING;
     snprintf(s_st.peer_addr, sizeof(s_st.peer_addr), "%s", d.addr_str);
+    memcpy(s_st.peer_addr_raw, d.addr, 6);
+    s_st.peer_addr_type = d.addr_type;
     snprintf(s_st.peer_name, sizeof(s_st.peer_name), "%s", d.name);
     s_st.peer_rssi = d.rssi;
     s_st.nsvc = 0;
@@ -547,6 +597,7 @@ esp_err_t ble_svc_disconnect(void)
     if (s_lock == NULL) {
         return ESP_ERR_INVALID_STATE;     /* not initialised yet */
     }
+    s_auto_paused = true;               /* until the next manual connect */
     LOCK();
     uint16_t c = s_conn;
     bool connecting = s_st.state == BLE_SVC_CONNECTING;
@@ -743,9 +794,11 @@ esp_err_t ble_svc_init(void)
 {
     s_lock = xSemaphoreCreateMutex();
     s_ser_buf = xStreamBufferCreateWithCaps(SER_RX_BUF, 1, MALLOC_CAP_SPIRAM);
-    if (s_lock == NULL || s_ser_buf == NULL) {
+    const esp_timer_create_args_t ta = { .callback = auto_cb, .name = "ble_auto" };
+    if (s_lock == NULL || s_ser_buf == NULL || esp_timer_create(&ta, &s_auto_timer) != ESP_OK) {
         return ESP_ERR_NO_MEM;
     }
+    esp_timer_start_periodic(s_auto_timer, AUTO_PERIOD_MS * 1000);
     esp_err_t err = nimble_port_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "nimble init: %s", esp_err_to_name(err));

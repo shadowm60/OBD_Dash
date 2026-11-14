@@ -47,6 +47,10 @@ typedef struct {
     uint8_t  link_filter;           /* IO page receive filter: 0 auto, 1 all, 2 OBD, 3 Dash DBC, 4 custom */
     uint16_t link_filter_id;        /* custom filter: 11-bit ID ... */
     uint16_t link_filter_mask;      /* ... and mask (1 = bit must match) */
+    bool     ble_adapter_valid;     /* BLE adapter remembered (last device with a serial port) */
+    uint8_t  ble_adapter_addr[6];   /* little endian, as NimBLE */
+    uint8_t  ble_adapter_type;
+    char     ble_adapter_name[20];
 } app_settings_t;
 
 /* Initialises NVS (erasing it if the partition is corrupt/outdated) and loads

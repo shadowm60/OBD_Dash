@@ -315,7 +315,14 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
 - First adapter Dash test: only 2 of 12 messages, sender saw TX errors. Cause (most
   likely): ELM327 monitors silently (CSM1, no ACK) and nothing else ACKed. Now ATCSM0 in
   the monitor set-up; first 8 monitor lines + a 5 s statistic logged (`obd_elm: monitor`).
-- **Car interface on the IO page (owner's wish, built, not run yet):** link dropdown moved
+- **Tested OK (2026-11-14):** with ATCSM0 and the Dash DBC filter all 12 rusEFI messages
+  arrive over the 2S, ~140 frames/s, 0 not understood, 0 restarts.
+- **A4 auto-connect (built, not run yet):** the last device whose serial port worked is
+  remembered (settings `ble_adapter_valid/addr/type/name`, view_link.c); with the BLE
+  adapter as car interface, `ble_svc_set_autoconnect()` reconnects every 5 s (4 s connect
+  timeout) while the state is READY (never during a scan). BLE page Disconnect pauses it
+  until the next manual Connect. IO status line says reconnecting / paused.
+- **Car interface on the IO page (owner's wish, tested OK):** link dropdown moved
   CAN page -> IO page (top panel, `view_link.c`, status line). Receive filter presets
   (setting `link_filter` + `link_filter_id` / `link_filter_mask`): Auto (Dash: DBC IDs,
   rest: all), Allow all, OBD 7E0-7EF, Dash DBC IDs, Custom hex ID / mask. Never filters

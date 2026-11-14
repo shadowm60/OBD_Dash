@@ -159,11 +159,13 @@ The owner wants Esp32_monitor's design and features (`~/git/Esp32_monitor`, its
 - No GPS / route / ride / web file manager ("this is it for now").
 
 Steps, each built, committed and tested on the board by the owner before the next:
-1. **Done, not run yet:** memory settings + `wifi_svc` + `ble_svc` + PCF85063 RTC
-   (`board/rtc_pcf85063.c`), init order from Esp32_monitor, `log_heap` after every step.
-   Static internal RAM headroom 135 KB (was 179). Ask for the boot log lines
-   `after <step> internal free ...`, and whether FPS dropped (LVGL mallocs now go to
-   PSRAM: `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=0`).
+1. **Done, boots on the board (2026-11-14):** memory settings + `wifi_svc` + `ble_svc` +
+   PCF85063 RTC (`board/rtc_pcf85063.c`), init order from Esp32_monitor, `log_heap`
+   after every step. Internal free / largest block: board 195/128 KB, display 156/112,
+   obd 132/92, wifi 75/36, ble **38/27 KB**. Then moved the datalog queue (~12 KB) and
+   the comsm stack (4 KB) to PSRAM (not run yet). Still to hear: FPS (LVGL mallocs now
+   go to PSRAM: `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=0`). Watch internal RAM in every
+   later step; Wi-Fi scan/connect and the SD mount also take some at runtime.
 2. UI frame: port the bridge infrastructure (`uivar.c` by-name variables, `nav.c`,
    eez_scaffold-style page generation) and build the sidebar pages; migrate the
    existing screens' functions.

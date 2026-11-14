@@ -1,6 +1,7 @@
 #include "comsm.h"
 
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -427,7 +428,10 @@ esp_err_t comsm_init(void)
     s_state = COMSM_IDLE;
     s_status.state = COMSM_IDLE;
 
-    if (xTaskCreate(comsm_task, "comsm", TASK_STACK, NULL, TASK_PRIO, NULL) != pdPASS) {
+    /* Stack in PSRAM (internal RAM is needed by Wi-Fi / BLE). Allowed because
+     * this task never writes flash; it only pauses while someone else does. */
+    if (xTaskCreatePinnedToCoreWithCaps(comsm_task, "comsm", TASK_STACK, NULL, TASK_PRIO, NULL,
+                                        tskNO_AFFINITY, MALLOC_CAP_SPIRAM) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;

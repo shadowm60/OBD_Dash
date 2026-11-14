@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -415,7 +416,8 @@ static void datalog_task(void *arg)
 esp_err_t datalog_init(const char *dir)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", dir);
-    s_raw_queue = xQueueCreate(RAW_QUEUE_LEN, sizeof(can_frame_t));
+    /* ~12 KB: in PSRAM, internal RAM is needed by Wi-Fi / BLE */
+    s_raw_queue = xQueueCreateWithCaps(RAW_QUEUE_LEN, sizeof(can_frame_t), MALLOC_CAP_SPIRAM);
     if (s_raw_queue == NULL) {
         return ESP_ERR_NO_MEM;
     }

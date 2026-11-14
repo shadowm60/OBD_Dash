@@ -234,10 +234,9 @@ void diag_view_init(void)
     lv_obj_add_event_cb(objects.save_dtc_bt, save_btn_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(objects.read_dtc, dtc_screen_loaded_cb, LV_EVENT_SCREEN_LOADED, NULL);
 
-    /* Freeze frame screen is empty in the EEZ project: add a text label. */
-    s_ff_label = lv_label_create(objects.freez_frame);
-    lv_obj_set_width(s_ff_label, lv_pct(95));
-    lv_obj_align(s_ff_label, LV_ALIGN_TOP_LEFT, 20, 20);
+    /* The freeze frame page has an empty panel for the text. */
+    s_ff_label = lv_label_create(objects.ff_panel);
+    lv_obj_set_width(s_ff_label, lv_pct(100));
     lv_label_set_long_mode(s_ff_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(s_ff_label, &lv_font_montserrat_20, LV_PART_MAIN);
     lv_obj_add_event_cb(objects.freez_frame, ff_screen_loaded_cb, LV_EVENT_SCREEN_LOADED, NULL);

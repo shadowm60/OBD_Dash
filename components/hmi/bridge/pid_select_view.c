@@ -87,6 +87,8 @@ void pid_select_view_build(void)
 
     lv_obj_t *list = objects.obd_srv_table;
     lv_obj_clean(list);
+    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(list, 6, LV_PART_MAIN);
 
     if (!s_shown_valid) {
         lv_obj_t *t = lv_list_add_text(list, "Connect to the ECU once to see which parameters it supports.");

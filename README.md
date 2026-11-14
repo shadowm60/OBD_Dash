@@ -13,10 +13,14 @@ side never blocks the UI.
 ```
 main            init order / wiring only
 hmi             EEZ Studio UI (src/ui, generated) + bridge/ (hand written)
-  bridge/         ui_bridge.c  lv_timer: comsm + vehicle_data -> EEZ variables
+  bridge/         hmi.c        ui_init, bridge timers, EEZ tick only when a variable changed
+                  uivar.c / nav.c  menu pages: EEZ variables and screens by name (from Esp32_monitor)
+                  view_sys.c   status line, Home, Display;  view_obd.c  OBD + CAN page options, logging
+                  view_wifi.c / view_ble.c  Wi-Fi and BLE pages;  screen.c  keyboard, screen timeout
+                  ui_bridge.c  lv_timer: comsm + vehicle_data -> EEZ variables (connection, needles)
                   actions.c    EEZ actions -> comsm / obd calls
                   eez_vars.cpp typed EEZ variable setters (strings are copied)
-                  settings_view.c / diag_view.c / pid_select_view.c  per-screen controllers
+                  diag_view.c / pid_select_view.c  trouble codes, freeze frame, parameter list
                   live_view.c   live screens: gauge scaling, cached gauge backgrounds, swipe navigation
                   live_values.c signals -> v_* text variables of the live screens ("--" when stale)
 comsm           connection state machine task, owns the OBD client
@@ -40,10 +44,11 @@ board           LCD, touch, IO expander, SD card, LVGL port, PCF85063 RTC (no ap
 | add a Service 01 PID               | `obd/obd_pid_table.c` (+ `vehicle_data/vehicle_signals.def`) |
 | show a value on a live screen      | EEZ Studio: string variable + tile (copy one), `tools/eez-build.sh`, row in `s_values[]` (`hmi/bridge/live_values.c`) |
 | drive a gauge needle               | EEZ variable on the meter, row in `s_bindings[]` (`hmi/bridge/ui_bridge.c`), scale fix in `live_view.c` |
+| change a menu page (sidebar pages)  | edit its builder in `tools/obd_ui.py`, run it, then `tools/eez-build.sh`. EEZ Studio edits to these pages are overwritten by the next run; the live views are only edited in EEZ Studio |
 | regenerate the UI code             | `tools/eez-build.sh` (headless EEZ Studio build, same as Build in the GUI) |
 | handle a new EEZ action            | `hmi/bridge/actions.c`                                       |
 | change bitrate / timeouts          | `idf.py menuconfig` -> BSW Configuration -> CAN / OBD        |
-| persist a new setting              | field in `settings.h` + setter, bump `SETTINGS_VER`, sync in `settings_view.c` |
+| persist a new setting              | field at the END of `app_settings_t` (no version bump), read / write it in the page's view (`settings_get` / `settings_put`) |
 | add a diagnostic job               | new steps in `comsm/comsm_diag.c`, command in `comsm.c`      |
 | log row rate / full bus capture    | `idf.py menuconfig` -> BSW Configuration -> Data logging / CAN |
 
@@ -51,27 +56,45 @@ board           LCD, touch, IO expander, SD card, LVGL port, PCF85063 RTC (no ap
 
 1. `Connect` -> `01 00` functional on `0x7DF`; first responder in `0x7E8..0x7EF` is used.
 2. Switch to physical addressing (`0x7E0` -> `0x7E8`), read `01 20`, `01 40`, ... while supported.
-3. Poll the PIDs selected in Settings > Select Params (only ECU-supported ones can be
+3. Poll the PIDs selected in OBD > Select parameters (only ECU-supported ones can be
    selected): fast group continuously, medium every 500 ms, slow every 2 s, up to 6 PIDs
-   per request (System > Read speed). With nothing
+   per request (OBD > Read speed). With nothing
    selected the bus stays quiet (optional keepalive: `CONFIG_OBD_KEEPALIVE_MS`).
 4. `CONFIG_OBD_MAX_CONSECUTIVE_TIMEOUTS` timeouts in a row -> reconnect after `CONFIG_OBD_RECONNECT_DELAY_MS`.
 
 CAN: 11-bit IDs, `CONFIG_CAN_BITRATE` (default 500 kbit/s), hardware filter `0x7E8/0x7F8`
-(opened for a full bus capture with Settings > All traffic), ISO-TP frames padded to 8
+(opened for a full bus capture with CAN > All traffic), ISO-TP frames padded to 8
 bytes, flow control sent to the physical request ID. A send that loses arbitration to the
 car's traffic is retried (up to 16 attempts within 20 ms): the ESP32-S3's CAN controller
 would otherwise try each frame only once.
 
+## Pages
+
+The look comes from Esp32_monitor (`~/git/Esp32_monitor`): dark theme, a sidebar with
+the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on every page.
+
+| Page | What it does |
+|---|---|
+| **Home** | Board and firmware, uptime, clock, free RAM; one line per service (OBD, CAN, Wi-Fi, BLE, SD, logging) |
+| **OBD** | Connect / disconnect, ECU status, the three live views, Select parameters, log parameters, read speed, connection type |
+| **DTC** | Read / clear / save the trouble codes, freeze frame |
+| **CAN** | Raw CAN log options (bus monitor: next step) |
+| **Wi-Fi** | Scan, connect, forget, connect at boot; IP, RSSI, SNTP time (stored in the RTC) |
+| **BLE** | 10 s scan, connect + pair, GATT services, forget bonds |
+| **IO** | Placeholder (DI / DO, I2C scan: later step) |
+| **Display** | Brightness, screen timeout, gauge animation, SD card (remount), restart |
+
+Text fields open an on-screen keyboard.
+
 ## Live data screens
 
-Start screen buttons: **Driving View**, **Race View**, **Tuning View**, **Read DTCs**,
-Settings, System. On a live screen, swipe left/right to cycle Drive -> Race -> Tune; swipe
-up/down or long press to return to the start screen. A tile shows `--` when its PID is not
-selected in Settings > Select Params, not supported, or no reply for 10 s.
+The **OBD** page opens them: **Drive**, **Race**, **Tune**. On a live screen, swipe
+left/right to cycle Drive -> Race -> Tune; swipe up/down or long press to return to the OBD
+page. The last page (live view or menu page) is shown again at power-up. A tile shows `--` when its PID is not
+selected in OBD > Select parameters, not supported, or no reply for 10 s.
 
 Every field is fed by one Mode 01 PID (or two for derived values). Select the PIDs you
-want in Settings > Select Params; only selected and supported PIDs are polled.
+want in OBD > Select parameters; only selected and supported PIDs are polled.
 
 ### Drive
 
@@ -135,19 +158,19 @@ logging is on.
   101.3 kPa is used.
 - **AFR** assumes gasoline (stoichiometric 14.7). PID 24 (O2 sensor 1, wide range,
   voltage) and PID 34 (same, current) both feed it; select whichever your ECU supports.
-- **Needle animation** (System > Gauge animation, on by default): each new sample moves
+- **Needle animation** (Display > Gauge animation, on by default): each new sample moves
   the needle linearly to the new value over about the time between samples, so it keeps
   moving instead of jumping. The needle lags by up to one sample interval; untick it to
   show each sample as it arrives. Text tiles are never animated.
-- **Read speed** (System > Read speed, x1..x6, default x6): how many PIDs are asked for in
+- **Read speed** (OBD > Read speed slider, x1..x6, default x6): how many PIDs are asked for in
   one Service 01 request (ISO 15765-4 allows 6). The ECU's answer time, not the bus or
   the CPU, limits the rate, so asking for 6 at once gives up to 6x the values per second.
   If the ECU rejects or half-answers a multi-PID request, the dash drops to 1 PID per
-  request by itself (the System screen then says "ECU accepts 1 PID per request");
+  request by itself (the OBD page then says "ECU accepts 1 PID");
   moving the slider tries again. The status line shows the result as `values/s`.
   Due slow/medium PIDs (temperatures, trims) get at most half of each request; the
   rest goes to the fast ones (rpm, speed, load, ...).
-- **Brightness** (System > slider, 10..100 %). The board's backlight driver (AP3032) is
+- **Brightness** (Display > slider, 10..100 %). The board's backlight driver (AP3032) is
   only switched on/off by the CH422G (EXIO2), so by default dimming is done in software:
   a black semi-transparent layer over the UI (the backlight keeps full power).
   Real dimming needs a wire: connect a GPIO whose function you don't use to the dimming
@@ -165,7 +188,8 @@ cached image; values placed on a meter must sit inside a panel, like the tiles d
 
 ## Logging
 
-Switched with the two checkboxes on the Settings screen (state is saved). Files go to the
+Switched on the CAN page (Log raw CAN, All traffic) and the OBD page (Log parameters);
+the choice is saved. Files go to the
 SD card root, numbered so nothing is overwritten. Times in the files are still seconds
 since boot. The board has an RTC (PCF85063, backup cell): it is set over Wi-Fi (SNTP) and
 sets the clock at power-up, so real timestamps are coming.

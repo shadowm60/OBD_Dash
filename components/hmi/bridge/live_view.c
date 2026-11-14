@@ -20,7 +20,8 @@
  * do) - a bare label there would be frozen.
  *
  * Navigation: swipe left / right cycles Drive -> Race -> Tune; swipe up / down
- * or a long press returns to the start screen. All children are made
+ * or a long press returns to the OBD page. Pages go through nav.c, so the last
+ * live view is restored at power-up. All children are made
  * non-clickable so touches reach the screen.
  */
 #include "lvgl.h"
@@ -35,8 +36,8 @@ extern objects_t objects;
 
 #define NAV_ANIM_MS     200
 
-/* Swipe order. */
-static const int16_t s_pages[] = { SCREEN_ID_DRIVE, SCREEN_ID_LIVE_DATA, SCREEN_ID_TUNE };
+/* Swipe order (EEZ screen names, see nav.c). */
+static const char *const s_pages[] = { "drive", "liveData", "tune" };
 #define PAGE_COUNT  (sizeof(s_pages) / sizeof(s_pages[0]))
 
 /* ---------------------------------------------------------------- gauge scaling */
@@ -171,16 +172,14 @@ static void bake_background(lv_obj_t *scr)
 
 static void go_to_page(int dir)
 {
-    int16_t cur = eez_flow_get_current_screen();
     int idx = 0;
     for (int i = 0; i < (int)PAGE_COUNT; i++) {
-        if (s_pages[i] == cur) {
+        if (nav_is(s_pages[i])) {
             idx = i;
         }
     }
     idx = (idx + dir + PAGE_COUNT) % PAGE_COUNT;
-    eez_flow_set_screen(s_pages[idx], dir > 0 ? LV_SCR_LOAD_ANIM_MOVE_LEFT : LV_SCR_LOAD_ANIM_MOVE_RIGHT,
-                        NAV_ANIM_MS, 0);
+    nav_go_anim(s_pages[idx], dir > 0 ? LV_SCR_LOAD_ANIM_MOVE_LEFT : LV_SCR_LOAD_ANIM_MOVE_RIGHT, NAV_ANIM_MS);
 }
 
 static void nav_cb(lv_event_t *e)
@@ -201,7 +200,7 @@ static void nav_cb(lv_event_t *e)
             return;
         }
     }
-    eez_flow_set_screen(SCREEN_ID_STARTUP, LV_SCR_LOAD_ANIM_FADE_IN, NAV_ANIM_MS, 0);
+    nav_go_anim("obd", LV_SCR_LOAD_ANIM_FADE_IN, NAV_ANIM_MS);
 }
 
 static void make_passive(lv_obj_t *o)

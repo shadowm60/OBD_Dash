@@ -92,8 +92,6 @@ static uint8_t s_applied;
 void brightness_init(uint8_t percent)
 {
     hw_init();
-    lv_slider_set_value(objects.sys_man_brightness, percent, LV_ANIM_OFF);
-    lv_obj_add_state(objects.sys_auto_brightness, LV_STATE_DISABLED);   /* no light sensor */
     brightness_set(percent);
 }
 

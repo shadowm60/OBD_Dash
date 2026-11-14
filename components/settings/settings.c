@@ -151,6 +151,21 @@ void settings_get(app_settings_t *out)
     portEXIT_CRITICAL(&s_lock);
 }
 
+void settings_put(const app_settings_t *in)
+{
+    bool changed;
+    portENTER_CRITICAL(&s_lock);
+    changed = memcmp(&s_cfg, in, sizeof(s_cfg)) != 0;
+    if (changed) {
+        s_cfg = *in;
+        s_dirty = true;
+    }
+    portEXIT_CRITICAL(&s_lock);
+    if (changed) {
+        mark_dirty();
+    }
+}
+
 /* Assign a field and schedule a save only if the value actually changed. */
 #define SETTINGS_SETTER(field, value)               \
     do {                                            \

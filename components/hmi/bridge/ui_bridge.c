@@ -14,7 +14,6 @@
 #include "esp_log.h"
 #include "ui.h"
 #include "vars.h"
-#include "hmi.h"
 #include "eez_vars.h"
 #include "comsm.h"
 #include "obd_pids.h"
@@ -208,7 +207,7 @@ static void bridge_timer_cb(lv_timer_t *t)
 {
     uint32_t now = lv_tick_get();
     refresh_connection(now);
-    settings_view_refresh();
+    view_obd_update();
     diag_view_refresh();
     pid_select_view_refresh();
     live_values_refresh();
@@ -219,18 +218,12 @@ static void signal_timer_cb(lv_timer_t *t)
     refresh_signals();
 }
 
-void hmi_init(void)
+/* After ui_init(), from hmi_init(). */
+void obd_bridge_init(void)
 {
-    ui_init();
-    settings_view_init();
     live_view_init();
     diag_view_init();
     lv_timer_create(bridge_timer_cb, REFRESH_PERIOD_MS, NULL);
     lv_timer_create(signal_timer_cb, SIGNAL_PERIOD_MS, NULL);
-    ESP_LOGI(TAG, "UI bridge started (%u ms refresh)", REFRESH_PERIOD_MS);
-}
-
-void hmi_tick(void)
-{
-    ui_tick();
+    ESP_LOGI(TAG, "OBD bridge started (%u ms refresh)", REFRESH_PERIOD_MS);
 }

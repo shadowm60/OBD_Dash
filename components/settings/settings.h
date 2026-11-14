@@ -21,6 +21,8 @@ typedef enum {
     SETTINGS_CONN_RUSEFI = 1,
 } settings_conn_method_t;
 
+#define SETTINGS_PAGE_LEN   24
+
 typedef struct {
     uint8_t  conn_method;           /* settings_conn_method_t */
     uint16_t rusefi_base_id;
@@ -36,6 +38,8 @@ typedef struct {
     uint8_t  brightness;            /* display brightness, 10..100 % */
     bool     log_all_traffic;       /* raw log: every bus frame, not only OBD */
     bool     wifi_autoconnect;      /* connect to the stored Wi-Fi network at boot */
+    char     page[SETTINGS_PAGE_LEN];   /* EEZ screen name of the last page, restored at boot */
+    uint8_t  screen_timeout_idx;    /* Display page list index, 0 = never */
 } app_settings_t;
 
 /* Initialises NVS (erasing it if the partition is corrupt/outdated) and loads
@@ -43,6 +47,10 @@ typedef struct {
 esp_err_t settings_init(void);
 
 void settings_get(app_settings_t *out);
+
+/* Copy, change, store (saved later if anything differs):
+ *   app_settings_t s; settings_get(&s); s.x = 1; settings_put(&s); */
+void settings_put(const app_settings_t *in);
 
 void settings_set_conn_method(uint8_t method);
 void settings_set_rusefi_base_id(uint16_t id);

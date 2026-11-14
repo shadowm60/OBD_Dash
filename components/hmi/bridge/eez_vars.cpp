@@ -1,31 +1,55 @@
 #include "eez_vars.h"
 #include "eez-flow.h"
+#include <stdio.h>
 
 using namespace eez;
+
+/* Set by every setter: the bridge runs the EEZ tick (variables -> widgets)
+ * only when something changed, see hmi_tick(). */
+extern "C" { bool eez_vars_dirty; }
 
 extern "C" void eez_var_set_string(uint32_t idx, const char *value)
 {
     /* StringValue() copies into EEZ-managed memory, so the caller's buffer
      * may be reused right away. */
     flow::setGlobalVariable(idx, StringValue(value ? value : ""));
+    eez_vars_dirty = true;
 }
 
 extern "C" void eez_var_set_int(uint32_t idx, int32_t value)
 {
     flow::setGlobalVariable(idx, IntegerValue(value));
+    eez_vars_dirty = true;
 }
 
 extern "C" void eez_var_set_float(uint32_t idx, float value)
 {
     flow::setGlobalVariable(idx, FloatValue(value));
+    eez_vars_dirty = true;
 }
 
 extern "C" void eez_var_set_bool(uint32_t idx, bool value)
 {
     flow::setGlobalVariable(idx, BooleanValue(value));
+    eez_vars_dirty = true;
 }
 
 extern "C" int32_t eez_var_get_int(uint32_t idx)
 {
-    return flow::getGlobalVariable(idx).getInt();
+    return flow::getGlobalVariable(idx).toInt32();
+}
+
+extern "C" bool eez_var_get_bool(uint32_t idx)
+{
+    return flow::getGlobalVariable(idx).toBool();
+}
+
+extern "C" void eez_var_get_string(uint32_t idx, char *buf, size_t len)
+{
+    if (len == 0) {
+        return;
+    }
+    Value v = flow::getGlobalVariable(idx);
+    const char *s = v.isString() ? v.getString() : nullptr;
+    snprintf(buf, len, "%s", s ? s : "");
 }

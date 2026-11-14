@@ -78,8 +78,10 @@ void view_ble_update(bool visible)
         o += snprintf(buf + o, sizeof(buf) - o, "\nPeer:  %s\n%s\nRSSI:  %d dBm\n",
                       st.peer_name[0] ? st.peer_name : "(no name)", st.peer_addr, st.peer_rssi);
         if (st.state == BLE_SVC_CONNECTED) {
+            /* ELM327 adapters encrypt without storing keys: that is fine. */
             o += snprintf(buf + o, sizeof(buf) - o, "Encrypted:  %s\nBonded:  %s\n",
-                          st.encrypted ? "yes" : "no", st.bonded ? "yes" : "no");
+                          st.encrypted ? "yes" : "no",
+                          st.bonded ? "yes" : st.encrypted ? "no (device keeps no bond, not needed)" : "no");
         }
         if (st.passkey) {
             o += snprintf(buf + o, sizeof(buf) - o, "Code:  %06u\n", (unsigned)st.passkey);
@@ -127,8 +129,13 @@ void view_ble_connect(void)
     int sel = uv_get_int(&v_sel, 0);
     if (st.ndev == 0) {
         snprintf(s_msg, sizeof(s_msg), "Scan and pick a device first");
+    } else if (st.state == BLE_SVC_CONNECTED || st.state == BLE_SVC_CONNECTING) {
+        snprintf(s_msg, sizeof(s_msg), "Already %s: Disconnect first",
+                 st.state == BLE_SVC_CONNECTED ? "connected" : "connecting");
+    } else if (st.state == BLE_SVC_OFF) {
+        snprintf(s_msg, sizeof(s_msg), "Bluetooth is still starting");
     } else if (ble_svc_connect(sel) != ESP_OK) {
-        snprintf(s_msg, sizeof(s_msg), "Can't connect now");
+        snprintf(s_msg, sizeof(s_msg), "Connect failed, see the log (scan again?)");
     }
 }
 

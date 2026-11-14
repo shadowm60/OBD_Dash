@@ -330,6 +330,7 @@ esp_err_t ble_svc_connect(int index)
     memcpy(addr.val, d.addr, 6);
     int rc = ble_gap_connect(s_own_addr_type, &addr, 15000, NULL, gap_event, NULL);
     if (rc != 0) {
+        ESP_LOGW(TAG, "ble_gap_connect: %d", rc);
         set_event("connect failed (%d)", rc);
         return ESP_FAIL;
     }
@@ -409,6 +410,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             s_st.state = BLE_SVC_READY;
             snprintf(s_st.last_event, sizeof(s_st.last_event), "connect failed (%d)", event->connect.status);
             UNLOCK();
+            ESP_LOGW(TAG, "connect failed, status %d", event->connect.status);
             return 0;
         }
         LOCK();

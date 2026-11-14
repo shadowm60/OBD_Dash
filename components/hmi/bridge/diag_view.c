@@ -6,6 +6,7 @@
  * these can become regular EEZ actions calling the same functions.
  */
 #include <stdio.h>
+#include <time.h>
 #include <stdarg.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -184,11 +185,25 @@ static void save_btn_cb(lv_event_t *e)
         return;
     }
 
-    char path[40];
+    /* dtc_YYYYMMDD_HHMMSS.txt once the clock is set, else dtc_NNN.txt */
+    char path[48], stamp[20] = "", when[32] = "clock not set";
+    time_t now = time(NULL);
+    if (now > 1700000000) {
+        struct tm tm;
+        localtime_r(&now, &tm);
+        strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &tm);
+        strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S", &tm);
+    }
     struct stat st;
     int n;
     for (n = 1; n < 1000; n++) {
-        snprintf(path, sizeof(path), SD_MOUNT_POINT "/dtc_%03d.txt", n);
+        if (stamp[0] == '\0') {
+            snprintf(path, sizeof(path), SD_MOUNT_POINT "/dtc_%03d.txt", n);
+        } else if (n == 1) {
+            snprintf(path, sizeof(path), SD_MOUNT_POINT "/dtc_%s.txt", stamp);
+        } else {
+            snprintf(path, sizeof(path), SD_MOUNT_POINT "/dtc_%s_%d.txt", stamp, n);
+        }
         if (stat(path, &st) != 0) {
             break;
         }
@@ -201,8 +216,8 @@ static void save_btn_cb(lv_event_t *e)
     }
     comsm_status_t cs;
     comsm_get_status(&cs);
-    fprintf(f, "OBD_Dash DTC report\nECU: 0x%03lX\nUptime: %llu s\n\n%s\n",
-            (unsigned long)cs.ecu_id, esp_timer_get_time() / 1000000ULL, s_dtc_text);
+    fprintf(f, "OBD_Dash DTC report\nDate: %s\nECU: 0x%03lX\nUptime: %llu s\n\n%s\n",
+            when, (unsigned long)cs.ecu_id, esp_timer_get_time() / 1000000ULL, s_dtc_text);
     fclose(f);
 
     char msg[64];

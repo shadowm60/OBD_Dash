@@ -6,6 +6,8 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
@@ -26,12 +28,15 @@ static const char *TAG = "datalog";
 #define STALE_AFTER_MS      2500
 #define MAX_COLUMNS         VD_COUNT
 #define MAX_FILES           999
+#define EPOCH_VALID         1700000000  /* clock set (SNTP / RTC) */
 
 typedef struct {
     FILE     *f;
     char      buf[FILE_BUF_SIZE];       /* stdio buffer: one SD write per 8 KB */
     uint32_t  retry_at_ms;
     bool      failed;                   /* last open failed (log once) */
+    bool      real_time;                /* clock was set when the file was opened */
+    int64_t   epoch_off_ms;             /* real time = boot ms + this (real_time only) */
 } log_file_t;
 
 static char          s_dir[16];
@@ -72,7 +77,28 @@ void datalog_get_status(datalog_status_t *out)
 
 /* ---------------------------------------------------------------- files */
 
-/* Opens <dir>/<prefix>_NNN.<ext> with the first free number. */
+/* Time base of a file, fixed when it is opened: real time if the clock is set
+ * (SNTP / RTC), else ms since boot. Fixed per file so an SNTP sync during a
+ * log can't make its timestamps jump. */
+static void set_time_base(log_file_t *lf)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    lf->real_time = tv.tv_sec > EPOCH_VALID;
+    lf->epoch_off_ms = lf->real_time
+        ? (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000 - (int64_t)can_if_now_ms() : 0;
+}
+
+/* boot ms -> the file's time base, as seconds + milliseconds */
+static void file_time(const log_file_t *lf, uint32_t ms, int64_t *sec, uint32_t *msec)
+{
+    int64_t t = (int64_t)ms + lf->epoch_off_ms;
+    *sec = t / 1000;
+    *msec = (uint32_t)(t % 1000);
+}
+
+/* Opens <dir>/<prefix>_YYYYMMDD_HHMMSS.<ext> (local time) when the clock is set,
+ * else <dir>/<prefix>_NNN.<ext> with the first free number. */
 static bool open_next(log_file_t *lf, const char *prefix, const char *ext, char *name_out, size_t name_len)
 {
     uint32_t now = can_if_now_ms();
@@ -80,10 +106,26 @@ static bool open_next(log_file_t *lf, const char *prefix, const char *ext, char 
         return false;
     }
 
-    char path[48];
+    set_time_base(lf);
+    char stamp[20] = "";
+    if (lf->real_time) {
+        time_t t = time(NULL);
+        struct tm tm;
+        localtime_r(&t, &tm);
+        strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &tm);
+    }
+
+    char path[64], name[40];
     struct stat st;
     for (int n = 1; n <= MAX_FILES; n++) {
-        snprintf(path, sizeof(path), "%s/%s_%03d.%s", s_dir, prefix, n, ext);
+        if (stamp[0] == '\0') {
+            snprintf(name, sizeof(name), "%s_%03d.%s", prefix, n, ext);
+        } else if (n == 1) {
+            snprintf(name, sizeof(name), "%s_%s.%s", prefix, stamp, ext);
+        } else {
+            snprintf(name, sizeof(name), "%s_%s_%d.%s", prefix, stamp, n, ext);   /* same second */
+        }
+        snprintf(path, sizeof(path), "%s/%s", s_dir, name);
         if (stat(path, &st) == 0) {
             continue;
         }
@@ -93,7 +135,7 @@ static bool open_next(log_file_t *lf, const char *prefix, const char *ext, char 
         }
         setvbuf(lf->f, lf->buf, _IOFBF, sizeof(lf->buf));
         lf->failed = false;
-        snprintf(name_out, name_len, "%s_%03d.%s", prefix, n, ext);
+        strlcpy(name_out, name, name_len);      /* names are <= 27 chars */
         ESP_LOGI(TAG, "logging to %s", path);
         return true;
     }
@@ -166,7 +208,18 @@ static void evt_printf(uint32_t now, const char *fmt, ...)
     if (s_evt.f == NULL) {
         return;
     }
-    fprintf(s_evt.f, "(%" PRIu32 ".%03" PRIu32 ") ", now / 1000, now % 1000);
+    int64_t sec;
+    uint32_t ms;
+    file_time(&s_evt, now, &sec, &ms);
+    fprintf(s_evt.f, "(%lld.%03" PRIu32 ") ", (long long)sec, ms);
+    if (s_evt.real_time) {
+        time_t t = (time_t)sec;
+        struct tm tm;
+        char hms[12];
+        localtime_r(&t, &tm);
+        strftime(hms, sizeof(hms), "%H:%M:%S", &tm);
+        fprintf(s_evt.f, "%s ", hms);
+    }
     va_list ap;
     va_start(ap, fmt);
     vfprintf(s_evt.f, fmt, ap);
@@ -177,9 +230,10 @@ static void evt_printf(uint32_t now, const char *fmt, ...)
 static void evt_service(uint32_t now)
 {
     if (s_raw.f != NULL && s_evt.f == NULL && !s_evt.failed) {
-        char name[24];
+        char name[32];
         if (open_next(&s_evt, "evt", "txt", name, sizeof(name))) {
-            fprintf(s_evt.f, "# OBD_Dash event log, time = s since boot (as in can_NNN.log)\n");
+            fprintf(s_evt.f, "# OBD_Dash event log, time = %s (as in the can_ log), then local time\n",
+                    s_evt.real_time ? "Unix time" : "s since boot (clock not set)");
             s_evt_change = UINT32_MAX;              /* write the current state first */
             can_if_get_stats(&s_evt_cs);
             evt_printf(now, "can: tx %" PRIu32 " failed %" PRIu32 " retries %" PRIu32
@@ -240,8 +294,10 @@ static void raw_write(const can_frame_t *fr)
 {
     /* candump -L: (sec.usec) iface id#data */
     char line[64];
-    int n = snprintf(line, sizeof(line), "(%" PRIu32 ".%03" PRIu32 "000) can0 ",
-                     fr->ts_ms / 1000, fr->ts_ms % 1000);
+    int64_t sec;
+    uint32_t ms;
+    file_time(&s_raw, fr->ts_ms, &sec, &ms);
+    int n = snprintf(line, sizeof(line), "(%lld.%03" PRIu32 "000) can0 ", (long long)sec, ms);
     n += snprintf(line + n, sizeof(line) - n, fr->ext ? "%08" PRIX32 "#" : "%03" PRIX32 "#", fr->id);
     for (int i = 0; i < fr->dlc; i++) {
         n += snprintf(line + n, sizeof(line) - n, "%02X", fr->data[i]);
@@ -253,7 +309,7 @@ static void raw_write(const can_frame_t *fr)
 static void raw_service(void)
 {
     if (s_want_raw && s_raw.f == NULL) {
-        char name[24];
+        char name[32];
         if (open_next(&s_raw, "can", "log", name, sizeof(name))) {
             xQueueReset(s_raw_queue);
             can_if_set_monitor(s_raw_queue);
@@ -302,14 +358,14 @@ static int current_columns(vd_signal_t *cols)
 
 static void params_open(const vd_signal_t *cols, int n)
 {
-    char name[24];
+    char name[32];
     if (!open_next(&s_par, "par", "csv", name, sizeof(name))) {
         return;
     }
     memcpy(s_cols, cols, n * sizeof(cols[0]));
     s_ncols = n;
 
-    fputs("time_s", s_par.f);
+    fputs(s_par.real_time ? "time_s,local_time" : "time_s", s_par.f);
     for (int i = 0; i < n; i++) {
         const vd_signal_info_t *info = vd_info(cols[i]);
         if (info->unit[0] != '\0') {
@@ -329,7 +385,18 @@ static void params_open(const vd_signal_t *cols, int n)
 
 static void params_row(uint32_t now)
 {
-    fprintf(s_par.f, "%" PRIu32 ".%03" PRIu32, now / 1000, now % 1000);
+    int64_t sec;
+    uint32_t ms;
+    file_time(&s_par, now, &sec, &ms);
+    fprintf(s_par.f, "%lld.%03" PRIu32, (long long)sec, ms);
+    if (s_par.real_time) {
+        time_t t = (time_t)sec;
+        struct tm tm;
+        char ts[24];
+        localtime_r(&t, &tm);
+        strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm);
+        fprintf(s_par.f, ",%s.%03" PRIu32, ts, ms);
+    }
     for (int i = 0; i < s_ncols; i++) {
         vd_sample_t smp;
         if (vd_get(s_cols[i], STALE_AFTER_MS, &smp)) {

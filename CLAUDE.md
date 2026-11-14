@@ -180,7 +180,12 @@ Steps, each built, committed and tested on the board by the owner before the nex
    readDTC / freezFrame / select_params keep their names and identifiers so
    diag_view / pid_select_view still work. The project keeps EEZ's light theme
    (the Race page's original gauges rely on it); new widgets set their colours.
-3. Wi-Fi + BLE pages; SNTP -> RTC; real timestamps / YYYYMMDD names for log files.
+3. **Done, built, not run yet** (Wi-Fi + BLE pages and SNTP -> RTC already worked in
+   step 2's test, 47 KB internal RAM after BLE): log files named
+   `<prefix>_YYYYMMDD_HHMMSS` (local time) and stamped in Unix time once the clock is
+   set, numbered + seconds since boot before; time base fixed per file at open. DTC
+   reports dated too. IO sidebar icon fixed (U+F0C1 is not in LVGL's fonts: only
+   LV_SYMBOL_* glyphs exist). LVGL FPS / CPU overlay removed (owner: misleading).
 4. CAN monitor (Esp32_monitor `canmon`) merged with `datalog`'s raw log.
 5. IO page. Research first: CH422G sets ALL IO0-7 in or out together (system register
    bit IO_OE), but EXIO1-4 must stay outputs (touch reset, backlight, LCD reset, SD CS).

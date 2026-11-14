@@ -11,7 +11,10 @@
  *           of every polled PID; empty cell = no fresh value
  *           /sdcard/par_NNN.csv   new file on every (re)connect or PID selection change
  *
- * Timestamps are seconds since boot (the board has no RTC).
+ * File names and times: once the clock is set (SNTP over Wi-Fi, kept by the
+ * RTC) files are named <prefix>_YYYYMMDD_HHMMSS (local time) and timestamped
+ * in Unix time (the CSV also gets a local time column); before that they are
+ * numbered and timestamped in seconds since boot. Fixed per file at open.
  * Files are synced every CONFIG_DATALOG_SYNC_PERIOD_MS and closed when logging
  * is switched off.
  */
@@ -29,8 +32,8 @@ extern "C" {
 typedef struct {
     bool     raw_active;        /* file open and being written */
     bool     params_active;
-    char     raw_file[24];      /* current or last file name, "" if none */
-    char     params_file[24];
+    char     raw_file[32];      /* current or last file name, "" if none */
+    char     params_file[32];
     uint32_t raw_frames;        /* frames written to the current raw file */
     uint32_t raw_dropped;       /* frames lost (queue full) since start */
     uint32_t params_rows;

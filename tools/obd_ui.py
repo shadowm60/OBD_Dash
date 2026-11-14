@@ -58,7 +58,7 @@ SYM_WARN = ''          # LV_SYMBOL_WARNING
 SYM_CAN = ''           # LV_SYMBOL_SHUFFLE
 SYM_WIFI = ''
 SYM_BT = ''
-SYM_IO = ''            # LV_SYMBOL_DRIVE... (link)
+SYM_IO = '\uf011'            # LV_SYMBOL_POWER (only LVGL's built-in symbols are in the fonts)
 SYM_DISP = ''          # LV_SYMBOL_SETTINGS
 
 # sidebar pages: screen name, sidebar text, title

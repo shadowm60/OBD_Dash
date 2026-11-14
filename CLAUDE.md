@@ -349,6 +349,17 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   27 security access, 31 routines, coding.
 - Later: KWP2000 for older Mercedes (ISO-TP), maybe VW TP2.0.
 
+**C/D update (2026-11-14):** no JSON (ESP-IDF 6.1 ships no cJSON): one plain-text file
+per make, `/db/diag/<make>.txt`, sections [ecu] [did] [dtc] with `|` columns, spec in
+`docs/diag_db.md`. The owner extends his bench simulator from the same file: columns
+marked *sim* (services per ECU, DID sim values incl. sweeps `a..b`, simulated DTCs with
+status) are only for it. `tools/diagdb.py` = Python reference: parse / check / decode and
+`Simulator.respond()` (the simulator can import it); test `tools/test/test_diagdb.py`.
+Starter file `sd/db/diag/generic.txt` (repo folder `sd/` mirrors the SD card): standard
+addresses 7E0/7E8, 7E1/7E9, identification DIDs F187.., SAE generic DTC texts.
+**C0 done** (format + Python). Next C1: C parser for the format, uds_client on the link
+layer, web upload into /db/diag, Diag page ECU scan.
+
 **D. Database on the SD card + PC tool**
 - `/sdcard/db/`: `manifest.json` (version, files, checksums), `ecus/<make>.json` (name,
   address, request/response CAN ID, protocol), `dtc/<make>_<ecu>.tsv` (code, text),

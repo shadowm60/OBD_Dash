@@ -1,0 +1,38 @@
+# OBD_Dash diagnostic database: generic (any make with UDS on CAN)
+# Format: docs/diag_db.md. Copy to the SD card as /db/diag/generic.txt (or upload it on
+# the dash's web page). Columns marked sim are for a bench simulator only.
+
+[ecu]
+# name       | tx  | rx  | protocol | services (sim)
+Engine       | 7E0 | 7E8 | uds      | 10 3E 22 19 14     # ISO 15765-4 legislated address
+Transmission | 7E1 | 7E9 | uds      | 10 3E 22 19 14     # ISO 15765-4 legislated address
+
+[did]
+# ecu | did  | name                         | type  | scale | offset | unit | sim
+*     | F187 | Spare part number            | ascii |       |        |      | 0000000000
+*     | F189 | Software version             | ascii |       |        |      | 0001
+*     | F18C | ECU serial number            | ascii |       |        |      | SIM0000001
+*     | F190 | VIN                          | ascii |       |        |      | WVWZZZ1KZ6W000001
+*     | F191 | Hardware number              | ascii |       |        |      | HW01
+*     | F197 | System name                  | ascii |       |        |      | SIMULATOR
+*     | F18A | System supplier              | ascii |       |        |      |
+*     | F195 | Supplier software version    | ascii |       |        |      |
+
+[dtc]
+# ecu | code  | text                                   | status (sim)
+*     | P0100 | Mass air flow circuit                  |
+*     | P0110 | Intake air temperature circuit         |
+*     | P0115 | Engine coolant temperature circuit     |
+*     | P0120 | Throttle position sensor circuit       |
+*     | P0130 | O2 sensor circuit (bank 1 sensor 1)    |
+*     | P0171 | System too lean (bank 1)               |
+*     | P0172 | System too rich (bank 1)               |
+*     | P0300 | Random / multiple cylinder misfire     |
+*     | P0301 | Cylinder 1 misfire detected            |
+*     | P0302 | Cylinder 2 misfire detected            |
+*     | P0303 | Cylinder 3 misfire detected            |
+*     | P0304 | Cylinder 4 misfire detected            |
+*     | P0420 | Catalyst efficiency below threshold (bank 1) |
+*     | P0500 | Vehicle speed sensor                   |
+*     | U0100 | Lost communication with ECM / PCM      |
+Engine | P0301 | Cylinder 1 misfire detected           | 2F

@@ -46,6 +46,13 @@ static uint32_t s_sec_frames, s_sec_bits;
 static uint32_t s_start_ms;
 static uint32_t s_drop_base;                /* can_if mon_dropped at reset */
 
+/* where the task is, for canmon_debug_log() */
+static TaskHandle_t      s_task;
+static volatile uint32_t s_loop_ms;         /* last pass of the main loop */
+static volatile int      s_stage;
+static volatile uint32_t s_cmds_done;
+enum { ST_CMD = 1, ST_WAIT, ST_DRAIN, ST_SECOND, ST_DO_CMD };
+
 #define LOCK()   xSemaphoreTake(s_lock, portMAX_DELAY)
 #define UNLOCK() xSemaphoreGive(s_lock)
 
@@ -216,13 +223,19 @@ static void canmon_task(void *arg)
     uint32_t next_sec = now_ms() + 1000;
 
     while (1) {
+        s_loop_ms = now_ms();
+        s_stage = ST_CMD;
         while (xQueueReceive(s_cmd_q, &c, 0) == pdTRUE) {
+            s_stage = ST_DO_CMD;
             do_cmd(&c);
+            s_cmds_done++;
         }
 
         /* Drain the monitor queue in batches; the lock is taken per batch. */
+        s_stage = ST_WAIT;
         if (xQueueReceive(s_mon_q, &f, pdMS_TO_TICKS(50)) == pdTRUE) {
             int n = 0;
+            s_stage = ST_DRAIN;
             LOCK();
             do {
                 tab_update(&f);         /* our own OBD requests (TX) too */
@@ -245,6 +258,7 @@ static void canmon_task(void *arg)
             if ((int32_t)(now - next_sec) > 1000) {
                 next_sec = now + 1000;      /* we were stalled, don't catch up */
             }
+            s_stage = ST_SECOND;
             each_second();
         }
     }
@@ -261,7 +275,39 @@ static esp_err_t post(cmd_t c)
 }
 
 esp_err_t canmon_start(void) { return post((cmd_t){ .type = CMD_START }); }
-esp_err_t canmon_stop(void)  { return post((cmd_t){ .type = CMD_STOP }); }
+/* The essential part of a stop is done right here (both calls are plain
+ * stores), so the monitor stops even if its task is busy; the task then
+ * empties the queue. */
+esp_err_t canmon_stop(void)
+{
+    if (s_lock == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    can_if_set_monitor(CAN_IF_MON_VIEW, NULL);
+    can_if_set_accept_all(CAN_IF_ALL_MONITOR, false);
+    if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_st.running = false;
+        s_st.fps = 0;
+        s_st.load_pct = 0;
+        UNLOCK();
+    } else {
+        ESP_LOGW(TAG, "stop: stats lock busy");
+    }
+    return post((cmd_t){ .type = CMD_STOP });
+}
+
+void canmon_debug_log(void)
+{
+    static const char *const names[] = { "?", "cmd", "wait frames", "drain", "each second", "do_cmd" };
+    int st = s_stage;
+    ESP_LOGW(TAG, "task %s, stage %s, last loop %" PRIu32 " ms ago, cmds done %" PRIu32
+             ", cmd queue %u, frame queue %u",
+             s_task == NULL ? "none" : eTaskGetState(s_task) == eBlocked ? "blocked"
+                 : eTaskGetState(s_task) == eReady ? "ready (starved?)"
+                 : eTaskGetState(s_task) == eRunning ? "running" : "other",
+             st >= 0 && st <= ST_DO_CMD ? names[st] : "?", now_ms() - s_loop_ms, s_cmds_done,
+             (unsigned)uxQueueMessagesWaiting(s_cmd_q), (unsigned)uxQueueMessagesWaiting(s_mon_q));
+}
 esp_err_t canmon_reset(void) { return post((cmd_t){ .type = CMD_RESET }); }
 
 esp_err_t canmon_set_bus(uint32_t bitrate, bool listen_only)
@@ -322,7 +368,7 @@ esp_err_t canmon_init(void)
     }
     s_st.state = "stopped";
     /* stack in PSRAM: internal RAM is needed by Wi-Fi / BLE; this task never writes flash */
-    if (xTaskCreatePinnedToCoreWithCaps(canmon_task, "canmon", 4096, NULL, 4, NULL, 0, MALLOC_CAP_SPIRAM) != pdPASS) {
+    if (xTaskCreatePinnedToCoreWithCaps(canmon_task, "canmon", 4096, NULL, 4, &s_task, 0, MALLOC_CAP_SPIRAM) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;

@@ -44,12 +44,15 @@ typedef struct {
 esp_err_t canmon_init(void);
 
 esp_err_t canmon_start(void);
-esp_err_t canmon_stop(void);
+esp_err_t canmon_stop(void);                        /* takes effect at once */
 esp_err_t canmon_reset(void);                       /* counters and the ID table */
 /* Restart the bus with another bitrate / listen-only (OBD filter kept). */
 esp_err_t canmon_set_bus(uint32_t bitrate, bool listen_only);
 
 void canmon_get_stats(canmon_stats_t *out);
+
+/* Logs where the monitor task is (diagnostics, e.g. a command not taken). */
+void canmon_debug_log(void);
 
 /* Writes the ID table as fixed-width text (sorted by ID), at most `max_rows`
  * rows. Returns the number of IDs in the table. */

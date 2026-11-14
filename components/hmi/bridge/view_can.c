@@ -98,6 +98,7 @@ void view_can_update(bool visible)
     if (s_pending_us && (st.running == s_pending_run || esp_timer_get_time() - s_pending_us > 2000000)) {
         if (st.running != s_pending_run) {
             ESP_LOGW(TAG, "monitor did not %s within 2 s", s_pending_run ? "start" : "stop");
+            canmon_debug_log();
         }
         s_pending_us = 0;
     }

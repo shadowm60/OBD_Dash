@@ -277,5 +277,5 @@ Open ideas (only on request):
 - Remember the last live view.
 - DTC text descriptions.
 - PSRAM at 120 MHz for more FPS.
-- rusEFI connection method: a dropdown exists, but only OBD is implemented.
+- rusEFI connection method: the dropdown was removed from the OBD page (unused; settings fields `conn_method` / `rusefi_base_id` kept for the blob layout). Re-add UI when it gets implemented.
 - Commit or ignore `ObdDash_Logs/` (owner to decide).

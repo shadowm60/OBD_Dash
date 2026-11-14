@@ -28,6 +28,7 @@
 #include "comsm.h"
 #include "can_if.h"
 #include "datalog.h"
+#include "canmon.h"
 #include "sd_card.h"
 
 #define EPOCH_VALID 1700000000
@@ -121,10 +122,16 @@ void view_status_update(void)
     ble_svc_get_status(&b);
     comsm_status_t c;
     comsm_get_status(&c);
+    canmon_stats_t m;
+    canmon_get_stats(&m);
+    char mon[24] = "";
+    if (m.running) {
+        snprintf(mon, sizeof(mon), "    CAN %" PRIu32 "/s", m.fps);
+    }
     const char *wifi = w.state == WIFI_SVC_CONNECTED ? LV_SYMBOL_WIFI " on"
                      : w.state == WIFI_SVC_CONNECTING ? LV_SYMBOL_WIFI " ..." : LV_SYMBOL_WIFI " off";
-    uv_strf(&v_status, "%s%s    %s    %s%s    %s    %s",
-            obd_short(&c), logging() ? "  " LV_SYMBOL_SAVE " REC" : "", wifi,
+    uv_strf(&v_status, "%s%s%s    %s    %s%s    %s    %s",
+            obd_short(&c), logging() ? "  " LV_SYMBOL_SAVE " REC" : "", mon, wifi,
             LV_SYMBOL_BLUETOOTH, b.state == BLE_SVC_CONNECTED ? " on" : "",
             waveshare_sd_card_mounted() ? LV_SYMBOL_SD_CARD : "no SD", clock);
 }

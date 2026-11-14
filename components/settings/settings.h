@@ -40,6 +40,7 @@ typedef struct {
     bool     wifi_autoconnect;      /* connect to the stored Wi-Fi network at boot */
     char     page[SETTINGS_PAGE_LEN];   /* EEZ screen name of the last page, restored at boot */
     uint8_t  screen_timeout_idx;    /* Display page list index, 0 = never */
+    uint8_t  can_bitrate_idx;       /* CAN page: 0 125k, 1 250k, 2 500k, 3 1M */
 } app_settings_t;
 
 /* Initialises NVS (erasing it if the partition is corrupt/outdated) and loads

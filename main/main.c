@@ -10,6 +10,7 @@
  *   datalog      SD card logging (raw CAN, parameters); switched by the Settings screen
  *   wifi_svc     Wi-Fi station: scan / connect, SNTP clock (-> RTC)
  *   ble_svc      Bluetooth LE central (NimBLE): scan, connect, pair
+ *   canmon       CAN bus monitor for the CAN page (ID table, rates, bus load)
  *
  * Init order matters for internal RAM (see Esp32_monitor): the display takes
  * its large contiguous blocks before Wi-Fi and the BT controller fragment /
@@ -32,6 +33,7 @@
 #include "settings.h"
 #include "obd_pids.h"
 #include "datalog.h"
+#include "canmon.h"
 
 static const char *TAG = "app_main";
 
@@ -80,8 +82,13 @@ void app_main(void)
         ESP_LOGW(TAG, "no SD card, logging will fail until one is inserted and the board restarted");
     }
 
-    const can_if_config_t can_cfg = CAN_IF_CONFIG_OBD_DEFAULT();
+    static const uint32_t BITRATES[] = { 125000, 250000, 500000, 1000000 };    /* = CAN page list */
+    app_settings_t boot_cfg;
+    settings_get(&boot_cfg);
+    can_if_config_t can_cfg = CAN_IF_CONFIG_OBD_DEFAULT();
+    can_cfg.bitrate = BITRATES[boot_cfg.can_bitrate_idx < 4 ? boot_cfg.can_bitrate_idx : 2];
     ESP_ERROR_CHECK(can_if_init(&can_cfg));
+    ESP_ERROR_CHECK(canmon_init());
     ESP_ERROR_CHECK(comsm_init());
     ESP_ERROR_CHECK(datalog_init(MOUNT_POINT));
     log_heap("obd");

@@ -312,7 +312,7 @@ static void raw_service(void)
         char name[32];
         if (open_next(&s_raw, "can", "log", name, sizeof(name))) {
             xQueueReset(s_raw_queue);
-            can_if_set_monitor(s_raw_queue);
+            can_if_set_monitor(CAN_IF_MON_LOG, s_raw_queue);
             portENTER_CRITICAL(&s_lock);
             strcpy(s_status.raw_file, name);
             s_status.raw_frames = 0;
@@ -320,18 +320,18 @@ static void raw_service(void)
             portEXIT_CRITICAL(&s_lock);
         }
     } else if (!s_want_raw && s_raw.f != NULL) {
-        can_if_set_monitor(NULL);
+        can_if_set_monitor(CAN_IF_MON_LOG, NULL);
         close_file(&s_raw);
         ESP_LOGI(TAG, "raw log closed (%" PRIu32 " frames)", s_status.raw_frames);
     }
     if (s_raw.f == NULL) {
-        can_if_set_monitor(NULL);
+        can_if_set_monitor(CAN_IF_MON_LOG, NULL);
         portENTER_CRITICAL(&s_lock);
         s_status.raw_active = false;
         portEXIT_CRITICAL(&s_lock);
     }
     /* Full bus capture only while a raw log is written: no extra load otherwise. */
-    can_if_set_accept_all(s_raw.f != NULL && s_want_all_traffic);
+    can_if_set_accept_all(CAN_IF_ALL_LOG, s_raw.f != NULL && s_want_all_traffic);
 }
 
 /* ---------------------------------------------------------------- parameters */

@@ -319,6 +319,7 @@ typedef struct _objects_t {
     lv_obj_t *obj263;
     lv_obj_t *obj264;
     lv_obj_t *obj265;
+    lv_obj_t *can_id_table;
     lv_obj_t *obj266;
     lv_obj_t *obj267;
     lv_obj_t *obj268;
@@ -438,6 +439,17 @@ typedef struct _objects_t {
     lv_obj_t *obj382;
     lv_obj_t *obj383;
     lv_obj_t *obj384;
+    lv_obj_t *obj385;
+    lv_obj_t *obj386;
+    lv_obj_t *obj387;
+    lv_obj_t *obj388;
+    lv_obj_t *obj389;
+    lv_obj_t *obj390;
+    lv_obj_t *obj391;
+    lv_obj_t *obj392;
+    lv_obj_t *obj393;
+    lv_obj_t *obj394;
+    lv_obj_t *obj395;
 } objects_t;
 
 extern objects_t objects;

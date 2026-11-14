@@ -30,18 +30,24 @@ typedef struct {
     QueueHandle_t queue;
 } subscriber_t;
 
-static twai_node_handle_t s_node;
+static twai_node_handle_t s_node;          /* NULL while stopped */
+/* Held by the TX task while it uses the node and by start/stop while they
+ * create / delete it, so the node never disappears under a transmit. */
+static SemaphoreHandle_t  s_node_lock;
+static TaskHandle_t       s_tx_task;
+static can_if_config_t    s_cfg;
 static QueueHandle_t      s_tx_queue;
 static SemaphoreHandle_t  s_tx_done;
 static volatile bool      s_tx_ok;
 static volatile bool      s_need_recover;
-static volatile bool      s_want_accept_all;
+static volatile uint8_t   s_want_accept_all;    /* CAN_IF_ALL_* owners */
 static bool               s_accept_all;         /* applied state, TX task only */
 static uint32_t           s_filter_id, s_filter_mask;
+static bool               s_listen_only;
 
 static subscriber_t       s_subs[CAN_IF_MAX_SUBSCRIBERS];
 static volatile uint8_t   s_sub_count;
-static QueueHandle_t volatile s_monitor;
+static QueueHandle_t volatile s_monitor[CAN_IF_MON_COUNT];
 
 static can_if_stats_t     s_stats;
 static portMUX_TYPE       s_stats_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -55,11 +61,13 @@ uint32_t can_if_now_ms(void)
 
 static void monitor_push_from_isr(const can_frame_t *f, BaseType_t *woken)
 {
-    QueueHandle_t q = s_monitor;
-    if (q != NULL && xQueueSendFromISR(q, f, woken) != pdTRUE) {
-        portENTER_CRITICAL_ISR(&s_stats_lock);
-        s_stats.mon_dropped++;
-        portEXIT_CRITICAL_ISR(&s_stats_lock);
+    for (int i = 0; i < CAN_IF_MON_COUNT; i++) {
+        QueueHandle_t q = s_monitor[i];
+        if (q != NULL && xQueueSendFromISR(q, f, woken) != pdTRUE) {
+            portENTER_CRITICAL_ISR(&s_stats_lock);
+            s_stats.mon_dropped++;
+            portEXIT_CRITICAL_ISR(&s_stats_lock);
+        }
     }
 }
 
@@ -157,7 +165,7 @@ static void apply_filter(bool accept_all)
         ESP_LOGE(TAG, "filter change failed: %s", esp_err_to_name(err));
         return;
     }
-    ESP_LOGI(TAG, "receive filter: %s", accept_all ? "all IDs" : "OBD responses only");
+    ESP_LOGI(TAG, "receive filter: %s", accept_all ? "all IDs" : "configured filter");
 }
 
 static void can_tx_task(void *arg)
@@ -168,6 +176,15 @@ static void can_tx_task(void *arg)
     static twai_frame_t tx;
 
     while (1) {
+        if (s_node == NULL) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+        xSemaphoreTake(s_node_lock, portMAX_DELAY);
+        if (s_node == NULL) {
+            xSemaphoreGive(s_node_lock);
+            continue;
+        }
         if (s_need_recover) {
             s_need_recover = false;
             ESP_LOGW(TAG, "bus-off, starting recovery");
@@ -178,11 +195,12 @@ static void can_tx_task(void *arg)
             }
         }
 
-        if (s_want_accept_all != s_accept_all) {
-            apply_filter(s_want_accept_all);
+        if ((s_want_accept_all != 0) != s_accept_all) {
+            apply_filter(s_want_accept_all != 0);
         }
 
         if (xQueueReceive(s_tx_queue, &cur, pdMS_TO_TICKS(100)) != pdTRUE) {
+            xSemaphoreGive(s_node_lock);
             continue;
         }
 
@@ -206,6 +224,8 @@ static void can_tx_task(void *arg)
             ok = s_tx_ok;
         } while (!ok && attempts < TX_ATTEMPTS && can_if_now_ms() - start < TX_RETRY_WINDOW_MS);
 
+        xSemaphoreGive(s_node_lock);
+
         portENTER_CRITICAL(&s_stats_lock);
         s_stats.tx_retries += attempts - 1;
         if (ok) {
@@ -215,14 +235,16 @@ static void can_tx_task(void *arg)
         }
         portEXIT_CRITICAL(&s_stats_lock);
 
-        QueueHandle_t mon = s_monitor;
-        if (ok && mon != NULL) {
+        if (ok) {
             cur.ts_ms = can_if_now_ms();
             cur.tx = true;
-            if (xQueueSend(mon, &cur, 0) != pdTRUE) {
-                portENTER_CRITICAL(&s_stats_lock);
-                s_stats.mon_dropped++;
-                portEXIT_CRITICAL(&s_stats_lock);
+            for (int i = 0; i < CAN_IF_MON_COUNT; i++) {
+                QueueHandle_t mon = s_monitor[i];
+                if (mon != NULL && xQueueSend(mon, &cur, 0) != pdTRUE) {
+                    portENTER_CRITICAL(&s_stats_lock);
+                    s_stats.mon_dropped++;
+                    portEXIT_CRITICAL(&s_stats_lock);
+                }
             }
         }
     }
@@ -232,7 +254,7 @@ static void can_tx_task(void *arg)
 
 esp_err_t can_if_send(const can_frame_t *frame, int timeout_ms)
 {
-    if (frame == NULL || frame->dlc > CAN_IF_MAX_DLC || s_tx_queue == NULL) {
+    if (frame == NULL || frame->dlc > CAN_IF_MAX_DLC || s_tx_queue == NULL || s_node == NULL || s_listen_only) {
         return ESP_ERR_INVALID_ARG;
     }
     TickType_t to = timeout_ms < 0 ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms);
@@ -260,14 +282,18 @@ esp_err_t can_if_subscribe(uint32_t id_min, uint32_t id_max, QueueHandle_t queue
     return ESP_OK;
 }
 
-void can_if_set_monitor(QueueHandle_t queue)
+void can_if_set_monitor(can_if_monitor_t slot, QueueHandle_t queue)
 {
-    s_monitor = queue;
+    if (slot < CAN_IF_MON_COUNT) {
+        s_monitor[slot] = queue;
+    }
 }
 
-void can_if_set_accept_all(bool on)
+void can_if_set_accept_all(uint8_t owner, bool on)
 {
-    s_want_accept_all = on;
+    portENTER_CRITICAL(&s_stats_lock);
+    s_want_accept_all = on ? (s_want_accept_all | owner) : (s_want_accept_all & ~owner);
+    portEXIT_CRITICAL(&s_stats_lock);
 }
 
 void can_if_get_stats(can_if_stats_t *out)
@@ -275,18 +301,41 @@ void can_if_get_stats(can_if_stats_t *out)
     portENTER_CRITICAL(&s_stats_lock);
     *out = s_stats;
     portEXIT_CRITICAL(&s_stats_lock);
+
+    out->tec = out->rec = 0;
+    if (s_node_lock != NULL && xSemaphoreTake(s_node_lock, pdMS_TO_TICKS(20)) == pdTRUE) {
+        twai_node_status_t st;
+        if (s_node != NULL && twai_node_get_info(s_node, &st, NULL) == ESP_OK) {
+            out->tec = st.tx_error_count;
+            out->rec = st.rx_error_count;
+        }
+        xSemaphoreGive(s_node_lock);
+    }
 }
 
-esp_err_t can_if_init(const can_if_config_t *cfg)
+void can_if_reset_stats(void)
 {
-    s_stats.state = CAN_IF_BUS_STOPPED;
+    portENTER_CRITICAL(&s_stats_lock);
+    can_if_bus_state_t st = s_stats.state;
+    memset(&s_stats, 0, sizeof(s_stats));
+    s_stats.state = st;
+    portEXIT_CRITICAL(&s_stats_lock);
+}
 
-    s_tx_queue = xQueueCreate(TX_QUEUE_LEN, sizeof(can_frame_t));
-    s_tx_done  = xSemaphoreCreateBinary();
-    if (s_tx_queue == NULL || s_tx_done == NULL) {
-        return ESP_ERR_NO_MEM;
-    }
+bool can_if_running(void)
+{
+    return s_node != NULL;
+}
 
+void can_if_get_config(can_if_config_t *out)
+{
+    *out = s_cfg;
+}
+
+/* Create, configure and enable the node. Called with s_node_lock held. */
+static esp_err_t node_create(const can_if_config_t *cfg)
+{
+    twai_node_handle_t node = NULL;
     twai_onchip_node_config_t node_cfg = {
         .io_cfg = {
             .tx = CONFIG_CAN_TX,
@@ -297,12 +346,16 @@ esp_err_t can_if_init(const can_if_config_t *cfg)
         .bit_timing = { .bitrate = cfg->bitrate },
         .fail_retry_cnt = 3,        /* don't retry forever when nobody ACKs */
         .tx_queue_depth = 4,
+        .flags.enable_listen_only = cfg->listen_only,
     };
-    ESP_RETURN_ON_ERROR(twai_new_node_onchip(&node_cfg, &s_node), TAG, "node create");
+    ESP_RETURN_ON_ERROR(twai_new_node_onchip(&node_cfg, &node), TAG, "node create");
 
+    s_node = node;      /* set_mask() uses s_node */
+    s_listen_only = cfg->listen_only;
     s_filter_id = cfg->filter_id;
     s_filter_mask = cfg->filter_mask;
-    ESP_RETURN_ON_ERROR(set_mask(s_filter_id, s_filter_mask), TAG, "filter");
+    s_accept_all = false;           /* new node: OBD filter; the TX task re-applies "all IDs" if wanted */
+    s_need_recover = false;
 
     twai_event_callbacks_t cbs = {
         .on_rx_done = on_rx_done,
@@ -310,15 +363,81 @@ esp_err_t can_if_init(const can_if_config_t *cfg)
         .on_state_change = on_state_change,
         .on_error = on_error,
     };
-    ESP_RETURN_ON_ERROR(twai_node_register_event_callbacks(s_node, &cbs, NULL), TAG, "callbacks");
-    ESP_RETURN_ON_ERROR(twai_node_enable(s_node), TAG, "enable");
-    s_stats.state = CAN_IF_BUS_ACTIVE;
+    esp_err_t err = set_mask(s_filter_id, s_filter_mask);
+    if (err == ESP_OK) {
+        err = twai_node_register_event_callbacks(node, &cbs, NULL);
+    }
+    if (err == ESP_OK) {
+        err = twai_node_enable(node);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "node setup failed: %s", esp_err_to_name(err));
+        twai_node_delete(node);
+        s_node = NULL;
+        return err;
+    }
+    return ESP_OK;
+}
 
-    if (xTaskCreate(can_tx_task, "can_tx", TX_TASK_STACK, NULL, TX_TASK_PRIO, NULL) != pdPASS) {
+esp_err_t can_if_start(const can_if_config_t *cfg)
+{
+    if (cfg == NULL || cfg->bitrate == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_node_lock == NULL) {
+        s_node_lock = xSemaphoreCreateMutex();
+        s_tx_queue  = xQueueCreate(TX_QUEUE_LEN, sizeof(can_frame_t));
+        s_tx_done   = xSemaphoreCreateBinary();
+        if (s_node_lock == NULL || s_tx_queue == NULL || s_tx_done == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+        s_stats.state = CAN_IF_BUS_STOPPED;
+    }
+
+    can_if_stop();
+
+    xSemaphoreTake(s_node_lock, portMAX_DELAY);
+    esp_err_t err = node_create(cfg);
+    if (err == ESP_OK) {
+        s_cfg = *cfg;
+        portENTER_CRITICAL(&s_stats_lock);
+        s_stats.state = CAN_IF_BUS_ACTIVE;
+        portEXIT_CRITICAL(&s_stats_lock);
+    }
+    xSemaphoreGive(s_node_lock);
+    ESP_RETURN_ON_ERROR(err, TAG, "start");
+
+    if (s_tx_task == NULL &&
+        xTaskCreatePinnedToCore(can_tx_task, "can_tx", TX_TASK_STACK, NULL, TX_TASK_PRIO, &s_tx_task, 0) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
 
-    ESP_LOGI(TAG, "started: %" PRIu32 " bit/s, filter 0x%03" PRIX32 "/0x%03" PRIX32,
-             cfg->bitrate, cfg->filter_id, cfg->filter_mask);
+    ESP_LOGI(TAG, "started: %" PRIu32 " bit/s, filter 0x%03" PRIX32 "/0x%03" PRIX32 "%s",
+             cfg->bitrate, cfg->filter_id, cfg->filter_mask, cfg->listen_only ? ", listen only" : "");
     return ESP_OK;
+}
+
+void can_if_stop(void)
+{
+    if (s_node_lock == NULL) {
+        return;
+    }
+    xSemaphoreTake(s_node_lock, portMAX_DELAY);
+    if (s_node != NULL) {
+        twai_node_handle_t node = s_node;
+        s_node = NULL;
+        twai_node_disable(node);
+        twai_node_delete(node);
+        xQueueReset(s_tx_queue);
+        ESP_LOGI(TAG, "stopped");
+    }
+    portENTER_CRITICAL(&s_stats_lock);
+    s_stats.state = CAN_IF_BUS_STOPPED;
+    portEXIT_CRITICAL(&s_stats_lock);
+    xSemaphoreGive(s_node_lock);
+}
+
+esp_err_t can_if_init(const can_if_config_t *cfg)
+{
+    return can_if_start(cfg);
 }

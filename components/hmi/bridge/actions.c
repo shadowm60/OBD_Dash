@@ -26,10 +26,22 @@ void action_nav_params(lv_event_t *e)
 void action_nav_freeze(lv_event_t *e)      { nav_go("freezFrame"); }   /* SCREEN_LOADED reads it */
 
 /* OBD page */
-void action_conn_button_pressed(lv_event_t *e) { comsm_toggle(); }
+void action_conn_button_pressed(lv_event_t *e)
+{
+    comsm_status_t st;
+    comsm_get_status(&st);
+    if (st.state == COMSM_IDLE) {
+        view_can_prepare_obd();             /* listen-only can't send requests */
+    }
+    comsm_toggle();
+}
 void action_obd_drive(lv_event_t *e)       { nav_go_anim("drive", LV_SCR_LOAD_ANIM_FADE_IN, 200); }
 void action_obd_race(lv_event_t *e)        { nav_go_anim("liveData", LV_SCR_LOAD_ANIM_FADE_IN, 200); }
 void action_obd_tune(lv_event_t *e)        { nav_go_anim("tune", LV_SCR_LOAD_ANIM_FADE_IN, 200); }
+
+/* CAN page */
+void action_can_start_stop(lv_event_t *e)  { view_can_start_stop(); }
+void action_can_reset(lv_event_t *e)       { view_can_reset(); }
 
 /* Wi-Fi / BLE */
 void action_wifi_scan(lv_event_t *e)       { view_wifi_scan(); }

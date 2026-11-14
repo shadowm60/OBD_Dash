@@ -28,8 +28,10 @@ comsm           connection state machine task, owns the OBD client
 obd             obd_client (one request in flight, timeout, NRC, addressing)
                 obd_pids   (Service 01 catalogue in flash, support/enable state, scheduler)
 isotp           ISO 15765-2 transport (isotp-c) + glue to can_if
-can_if          esp_twai driver: TX queue, RX dispatch by ID range, bus stats
+can_if          esp_twai driver: start / restart (bitrate, listen-only), TX queue with retries,
+                RX dispatch by ID range, two monitor taps (log, bus monitor), bus stats
 datalog         SD logging task: raw CAN (candump .log) + polled parameters (.csv)
+canmon          CAN page bus monitor: ID table, rates, bus load (from Esp32_monitor, without its logger)
 wifi_svc        Wi-Fi station: scan, connect, stored network, SNTP clock (from Esp32_monitor)
 ble_svc         Bluetooth LE central (NimBLE): scan, connect, pair (from Esp32_monitor)
 vehicle_data    latest value + timestamp of every signal (producers -> consumers)
@@ -78,7 +80,7 @@ the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on eve
 | **Home** | Board and firmware, uptime, clock, free RAM; one line per service (OBD, CAN, Wi-Fi, BLE, SD, logging) |
 | **OBD** | Connect / disconnect, ECU status, the three live views, Select parameters, log parameters, read speed, connection type |
 | **DTC** | Read / clear / save the trouble codes, freeze frame |
-| **CAN** | Raw CAN log options (bus monitor: next step) |
+| **CAN** | Bus monitor: every ID on the bus (DLC, last data, count, period; our own OBD requests too), frames/s, peak, bus load, error counters. Bitrate and listen-only (only while OBD is disconnected; Connect switches listen-only off). Raw log options |
 | **Wi-Fi** | Scan, connect, forget, connect at boot; IP, RSSI, SNTP time (stored in the RTC) |
 | **BLE** | 10 s scan, connect + pair, GATT services, forget bonds |
 | **IO** | Placeholder (DI / DO, I2C scan: later step) |

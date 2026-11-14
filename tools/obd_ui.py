@@ -105,6 +105,13 @@ VARIABLES = {
     'can_log_raw': ('boolean', 'false'),
     'can_log_all': ('boolean', 'false'),
     'can_log_info': ('string', '""'),
+    'can_bitrate_sel': ('integer', '2'),
+    'can_listen_only': ('boolean', 'false'),
+    'can_run_text': ('string', '"Start monitor"'),
+    'can_stats': ('string', '"monitor stopped"'),
+    'can_load': ('integer', '0'),
+    'can_load_text': ('string', '""'),
+    'can_ids': ('string', '""'),
     # wifi
     'wifi_list': ('string', '"(press Scan)"'),
     'wifi_sel': ('integer', '0'),
@@ -131,6 +138,7 @@ ACTIONS = [
     'nav_home', 'nav_obd', 'nav_readdtc', 'nav_can', 'nav_wifi', 'nav_ble', 'nav_io', 'nav_display',
     'nav_params', 'nav_freeze',
     'conn_button_pressed', 'obd_drive', 'obd_race', 'obd_tune',
+    'can_start_stop', 'can_reset',
     'wifi_scan', 'wifi_connect', 'wifi_disconnect', 'wifi_forget',
     'ble_scan', 'ble_connect', 'ble_disconnect', 'ble_forget',
     'sd_remount', 'screen_off', 'restart',
@@ -257,6 +265,19 @@ class B:
         return t
 
 
+def _bar(self, var, vmin, vmax, x, y, w, h, color=ACCENT, hidden=None):
+    t = self.base('LVGLBarWidget', x, y, w, h, {
+        'MAIN': {'DEFAULT': {'bg_color': BTN, 'radius': 4}},
+        'INDICATOR': {'DEFAULT': {'bg_color': color, 'radius': 4}}})
+    t.update(min=vmin, minType='literal', max=vmax, maxType='literal', mode='NORMAL',
+             value=var, valueType='expression', previewValue=(vmin + vmax) // 2,
+             valueLeft=0, valueLeftType='literal', previewValueLeft=0, enableAnimation=False)
+    return self.hide(t, hidden)
+
+
+B.bar = _bar
+
+
 def ident(t, name):
     """EEZ identifier -> objects.<name> in screens.h, for what bindings can't do."""
     t['identifier'] = name
@@ -356,17 +377,30 @@ def page_params(b):
 
 
 def page_can(b):
+    bitrates = ['125 kbit/s', '250 kbit/s', '500 kbit/s', '1 Mbit/s']     # order = BITRATES in view_can.c
+    lw = 250
+    rw = CW - lw - 10
     return [
-        b.panel(CX, TOP, CW, 200, [
-            b.label('Raw log (SD card, candump format)', 0, 0, None, 16, GREY),
-            b.checkbox('Log raw CAN', 'can_log_raw', 0, 30, 20),
-            b.checkbox('All traffic (every ID on the bus, not only OBD)', 'can_log_all', 0, 74, 20),
-            b.label('can_log_info', 0, 120, CW - 26, 16, expr=True, wrap=True),
+        b.panel(CX, TOP, lw, CH, [
+            b.label('Bitrate', 0, 0, None, 16, GREY),
+            b.dropdown(None, 'can_bitrate_sel', 0, 22, lw - 26, literal_options=bitrates, font=16),
+            b.checkbox('Listen only', 'can_listen_only', 0, 76, 16),
+            b.button('can_run_text', 0, 112, lw - 26, 50, 'can_start_stop', ACCENT, expr=True),
+            b.button('Clear stats', 0, 172, lw - 26, 40, 'can_reset', font=16),
+            b.label('Raw log to SD', 0, 228, None, 16, GREY),
+            b.checkbox('Log raw CAN', 'can_log_raw', 0, 254, 16),
+            b.checkbox('All traffic', 'can_log_all', 0, 284, 16),
+            b.label('can_log_info', 0, 318, lw - 26, 12, GREY, expr=True, wrap=True),
         ]),
-        b.panel(CX, TOP + 210, CW, CH - 210, [
-            b.label('Bus monitor: ID table, frame rates and bus load come in the next step.',
-                    0, 0, CW - 26, 16, GREY, wrap=True),
+        b.panel(CX + lw + 10, TOP, rw, 130, [
+            b.label('can_stats', 0, 0, rw - 26 - 150, 12, expr=True, wrap=True),
+            b.label('Bus load', rw - 26 - 140, 0, None, 12, GREY),
+            b.label('can_load_text', rw - 26 - 60, 0, 60, 12, expr=True, align='RIGHT'),
+            b.bar('can_load', 0, 100, rw - 26 - 140, 22, 140, 18),
         ]),
+        b.panel(CX + lw + 10, TOP + 140, rw, CH - 140, [
+            ident(b.label('can_ids', 0, 0, rw - 16, 'MONTSERRAT_12', expr=True), 'can_id_table')],
+                scroll=True, pad=8),
     ]
 
 

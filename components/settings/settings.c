@@ -35,6 +35,7 @@ static void set_defaults(app_settings_t *c)
     c->pids_per_request = 6;        /* falls back to 1 if the ECU can't */
     c->brightness = 100;
     c->wifi_autoconnect = true;
+    c->can_bitrate_idx = 2;         /* 500 kbit/s, OBD-II on CAN */
     /* Default selection: what the current dashboard shows. */
     static const uint8_t default_pids[] = { 0x05 /* coolant */, 0x0C /* rpm */,
                                             0x0D /* speed */, 0x24 /* lambda */ };

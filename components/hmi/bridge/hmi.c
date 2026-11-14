@@ -11,6 +11,7 @@
 
 #include "lvgl.h"
 #include "ui.h"
+#include "screens.h"
 #include "eez_vars.h"
 #include "bridge.h"
 #include "settings.h"
@@ -37,6 +38,7 @@ static void fast_cb(lv_timer_t *t)
     view_status_update();
     view_wifi_update(nav_is("wifi"));
     view_ble_update(nav_is("ble"));
+    view_can_update(nav_is("can"));
     view_display_update(nav_is("display"));
     screen_poll();
     apply_vars(false);      /* draw in this same lv_timer_handler() pass */
@@ -54,12 +56,17 @@ void hmi_init(void)
     settings_get(&cfg);
 
     ui_init();
+    /* EEZ 0.29 offers only Montserrat: the ID table wants fixed width. */
+    if (objects.can_id_table != NULL) {
+        lv_obj_set_style_text_font(objects.can_id_table, &lv_font_unscii_8, 0);
+    }
     screen_init(cfg.brightness, cfg.screen_timeout_idx);
     view_home_init();
     view_display_init();
     view_wifi_init();
     view_ble_init();
     view_obd_init();
+    view_can_init();
     obd_bridge_init();
     nav_init(cfg.page);
 

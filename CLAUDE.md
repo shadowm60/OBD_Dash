@@ -186,7 +186,14 @@ Steps, each built, committed and tested on the board by the owner before the nex
    set, numbered + seconds since boot before; time base fixed per file at open. DTC
    reports dated too. IO sidebar icon fixed (U+F0C1 is not in LVGL's fonts: only
    LV_SYMBOL_* glyphs exist). LVGL FPS / CPU overlay removed (owner: misleading).
-4. CAN monitor (Esp32_monitor `canmon`) merged with `datalog`'s raw log.
+4. **Done, built, not run yet:** CAN page bus monitor. `can_if` now based on
+   Esp32_monitor's (start / restart with bitrate + listen-only, node lock, TEC/REC),
+   plus two monitor slots (`CAN_IF_MON_LOG` datalog, `CAN_IF_MON_VIEW` canmon) and
+   "accept all IDs" owners (`CAN_IF_ALL_LOG`, `CAN_IF_ALL_MONITOR`); the wanted filter
+   survives a restart. `canmon` = the monitor part of Esp32_monitor's canmon (no
+   logger: datalog stays the only logger). Bitrate (stored) / listen-only (not stored)
+   only change while OBD is idle; Connect leaves listen-only first. ID table in
+   `unscii_8` (objects.can_id_table).
 5. IO page. Research first: CH422G sets ALL IO0-7 in or out together (system register
    bit IO_OE), but EXIO1-4 must stay outputs (touch reset, backlight, LCD reset, SD CS).
    Find how Waveshare reads DI0/DI1 on this board (their DI/DO example).

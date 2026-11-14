@@ -32,6 +32,8 @@ extern void action_ble_forget(lv_event_t * e);
 extern void action_sd_remount(lv_event_t * e);
 extern void action_screen_off(lv_event_t * e);
 extern void action_restart(lv_event_t * e);
+extern void action_can_start_stop(lv_event_t * e);
+extern void action_can_reset(lv_event_t * e);
 
 #ifdef __cplusplus
 }

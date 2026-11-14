@@ -16,7 +16,10 @@
  * count is appended as one hex digit ("010C0D1"): the adapter returns as soon
  * as they are in instead of waiting its timeout for more ECUs. If the adapter
  * rejects the digit ('?') it is not used again; if a multi-frame answer comes
- * back cut short, counts are only used for single frame answers from then on.
+ * back cut short, the request is sent again at once without the count and
+ * counts are only used for single frame answers from then on (the caller
+ * never sees the cut answer). obd_elm_single_frame_fast(): callers can keep
+ * answers to one frame to stay on the fast path.
  * The average request time is logged every 100 requests.
  */
 #include "obd_elm.h"
@@ -44,6 +47,8 @@ static bool     s_count_mf_ok = true;       /* ... also for multi-frame answers 
 static uint8_t  s_req_frames;               /* count sent with this request, 0 = none */
 static uint32_t s_req_start;
 static uint32_t s_stat_n, s_stat_sum_ms, s_stat_max_ms;
+static uint8_t  s_last_req[7];              /* for the resend without count */
+static uint16_t s_last_len;
 
 /* request in progress */
 static bool     s_pending;
@@ -58,6 +63,8 @@ static uint32_t s_asm_id;
 static uint8_t  s_asm[OBD_ELM_MAX_MSG];
 static uint16_t s_asm_len, s_asm_total;
 static uint8_t  s_asm_sn;
+
+static esp_err_t send_payload(const uint8_t *req, uint16_t len, uint8_t frames);
 
 static uint32_t now_ms(void)
 {
@@ -206,6 +213,18 @@ esp_err_t obd_elm_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, ui
         s_cur_rx = rx_id;
     }
 
+    memcpy(s_last_req, req, len);
+    s_last_len = len;
+    return send_payload(req, len, frames);
+}
+
+bool obd_elm_single_frame_fast(void)
+{
+    return s_count_ok;
+}
+
+static esp_err_t send_payload(const uint8_t *req, uint16_t len, uint8_t frames)
+{
     char hex[2 * 7 + 3];
     for (uint16_t i = 0; i < len; i++) {
         snprintf(hex + 2 * i, 3, "%02X", req[i]);
@@ -344,7 +363,11 @@ obd_elm_result_t obd_elm_poll(uint32_t wait_ms, obd_elm_msg_cb_t cb, void *arg)
                 s_pending = false;
                 if (s_req_frames > 1 && s_asm_total && s_asm_len < s_asm_total) {
                     s_count_mf_ok = false;      /* the count cut a multi-frame answer short */
-                    ESP_LOGW(TAG, "multi-frame answer cut short: count only for single frames now");
+                    ESP_LOGW(TAG, "multi-frame answer cut short: count only for single frames now, resending");
+                    if (send_payload(s_last_req, s_last_len, 0) == ESP_OK) {
+                        return OBD_ELM_PENDING;
+                    }
+                    return OBD_ELM_ERROR;
                 }
                 uint32_t dt = now_ms() - s_req_start;
                 s_stat_n++;

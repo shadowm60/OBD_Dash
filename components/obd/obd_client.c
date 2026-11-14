@@ -89,6 +89,11 @@ void obd_client_elm_invalidate(void)
     obd_elm_invalidate();
 }
 
+uint16_t obd_client_batch_bytes(void)
+{
+    return s_link_kind == OBD_LINK_ELM && obd_elm_single_frame_fast() ? 7 : 0;
+}
+
 const char *obd_client_link_error(void)
 {
     return s_link_kind == OBD_LINK_ELM ? obd_elm_error() : "";

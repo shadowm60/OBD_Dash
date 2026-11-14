@@ -58,6 +58,9 @@ obd_link_t  obd_client_link(void);
 void        obd_client_set_elm_io(const obd_elm_io_t *io);
 /* Something else (console) talked to the adapter: set it up again. */
 void        obd_client_elm_invalidate(void);
+/* Largest Service 01 answer (bytes, incl. 0x41) a batch should produce on
+ * this link, 0 = no limit. ELM link: 7, one CAN frame, the fast path. */
+uint16_t    obd_client_batch_bytes(void);
 /* Last link problem, e.g. "adapter not connected", "CAN ERROR"; "" if none. */
 const char *obd_client_link_error(void);
 

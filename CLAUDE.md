@@ -260,7 +260,11 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   the PID table, `expected_frames()` in obd_client.c; dropped if the adapter answers '?',
   only single frame if a multi-frame answer comes back short), BLE connection interval
   7.5-20 ms requested (actual one logged). `obd_elm: requests: avg / max` every 100.
-  Before: ~165-240 ms per request.
+  Before: ~165-240 ms per request. Measured after: avg 51-52 ms, max ~90-150 ms per
+  request (bench, 2S). The count cut a multi-frame (multi-PID) answer short on the 2S and
+  comsm wrongly fell back to 1 PID: now the request is resent without the count, and over
+  ELM comsm trims batches to answers of <= 7 bytes (one frame, `obd_client_batch_bytes()`),
+  i.e. 2-3 PIDs per fast request. Built, not run yet.
 - Steps: A1 GATT client in ble_svc (find serial char, notify on, write, RX buffer) + a raw
   ELM test on the BLE page (ATZ, ATI, 0100); A2 `car_link` interface (request/response with
   tx/rx IDs, timeouts) with two backends, board CAN (obd_client / isotp) and ELM327; comsm

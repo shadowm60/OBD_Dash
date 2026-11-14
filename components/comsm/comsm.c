@@ -284,6 +284,21 @@ static void step_running(uint32_t now)
         status_update(st_batch, s_batch_limit);
     }
     size_t n = obd_pid_next_batch(now, s_batch_limit, s_pending_idx);
+    /* ELM link: keep the answer in one CAN frame, the adapter's fast path
+     * (the PIDs left out are simply still due next time). */
+    uint16_t max_bytes = obd_client_batch_bytes();
+    if (max_bytes && n > 1) {
+        unsigned total = 1;                     /* 0x41 */
+        size_t k = 0;
+        for (; k < n; k++) {
+            unsigned add = 1u + obd_pid_desc((size_t)s_pending_idx[k])->len;
+            if (k > 0 && total + add > max_bytes) {
+                break;
+            }
+            total += add;
+        }
+        n = k;
+    }
     if (n == 0) {
 #if CONFIG_OBD_KEEPALIVE_MS > 0
         /* Optional: detect a lost ECU while nothing is polled. */

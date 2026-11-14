@@ -78,6 +78,21 @@ void can_if_set_monitor_filter(uint32_t id, uint32_t mask)
     s_mon_fmask = mask & 0x7FF;
 }
 
+void can_if_inject_monitor(const can_frame_t *f)
+{
+    if (!mon_pass(f)) {
+        return;
+    }
+    for (int i = 0; i < CAN_IF_MON_COUNT; i++) {
+        QueueHandle_t q = s_monitor[i];
+        if (q != NULL && xQueueSend(q, f, 0) != pdTRUE) {
+            portENTER_CRITICAL(&s_stats_lock);
+            s_stats.mon_dropped++;
+            portEXIT_CRITICAL(&s_stats_lock);
+        }
+    }
+}
+
 static void monitor_push_from_isr(const can_frame_t *f, BaseType_t *woken)
 {
     if (!mon_pass(f)) {

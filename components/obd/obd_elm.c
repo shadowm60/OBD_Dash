@@ -21,6 +21,11 @@
  * never sees the cut answer). obd_elm_single_frame_fast(): callers can keep
  * answers to one frame to stay on the fast path.
  * The average request time is logged every 100 requests.
+ *
+ * Raw log: every frame sent (our request as one single frame) and received
+ * (one per reply / monitor line) goes to can_if_inject_monitor(), so the
+ * raw CAN log and the CAN page monitor show the adapter's traffic in the
+ * same format. Times are when the line arrived over BLE (a few ms late).
  */
 #include "obd_elm.h"
 
@@ -31,6 +36,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "can_if.h"
 
 static const char *TAG = "obd_elm";
 
@@ -71,6 +77,13 @@ void obd_elm_monitor_stop(void);
 static uint32_t now_ms(void)
 {
     return (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+static void tap(uint32_t id, const uint8_t *data, uint8_t dlc, bool tx)
+{
+    can_frame_t f = { .id = id, .ts_ms = can_if_now_ms(), .dlc = dlc > 8 ? 8 : dlc, .tx = tx };
+    memcpy(f.data, data, f.dlc);
+    can_if_inject_monitor(&f);
 }
 
 void obd_elm_set_io(const obd_elm_io_t *io)
@@ -238,6 +251,11 @@ static esp_err_t send_payload(const uint8_t *req, uint16_t len, uint8_t frames)
         frames = 0;
     }
     s_req_frames = frames;
+    {
+        uint8_t sf[8] = { (uint8_t)len };
+        memcpy(sf + 1, req, len);
+        tap(s_cur_tx, sf, (uint8_t)(len + 1), true);
+    }
     if (frames) {
         char d[2] = { "0123456789ABCDEF"[frames], '\0' };
         strcat(hex, d);
@@ -288,6 +306,7 @@ static void on_frame_line(const char *l, obd_elm_msg_cb_t cb, void *arg)
         b[nb++] = (uint8_t)(hi << 4 | lo);
     }
     s_saw_data = true;
+    tap(id, b, (uint8_t)nb, false);
     uint8_t pci = b[0] >> 4;
     if (pci == 0) {                             /* single frame */
         uint8_t sl = b[0] & 0x0F;
@@ -533,6 +552,7 @@ static void mon_line(const char *l, obd_elm_frame_cb_t cb, void *arg)
         d[dlc++] = (uint8_t)(hi << 4 | lo);
     }
     s_mon_frames++;
+    tap(id, d, dlc, false);
     cb(id, d, dlc, arg);
 }
 

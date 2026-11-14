@@ -329,7 +329,7 @@ static void raw_service(void)
      * connected (a short ECU dropout / retry keeps the file). */
     comsm_status_t cs;
     comsm_get_status(&cs);
-    bool want = s_want_raw && (s_monitor_on || cs.state != COMSM_IDLE);
+    bool want = s_want_raw && (s_monitor_on || cs.state != COMSM_IDLE || cs.monitoring);
     if (want && s_raw.f == NULL) {
         char name[32];
         if (open_next(&s_raw, "can", "log", name, sizeof(name))) {

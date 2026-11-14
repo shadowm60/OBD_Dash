@@ -82,6 +82,11 @@ typedef struct {
  * with (id & mask) == (filter & mask); mask 0 = every frame (default).
  * OBD subscribers are not affected. */
 void can_if_set_monitor_filter(uint32_t filter, uint32_t mask);
+
+/* A frame that crossed another link (BLE ELM327 adapter), given to the monitor
+ * slots as if it was on the board CAN: the raw log and the CAN page monitor
+ * see that traffic too. Any task, not from an ISR. */
+void can_if_inject_monitor(const can_frame_t *f);
 typedef enum {
     CAN_IF_MON_LOG = 0,         /* datalog: raw CAN log */
     CAN_IF_MON_VIEW,            /* canmon: bus monitor (CAN page) */

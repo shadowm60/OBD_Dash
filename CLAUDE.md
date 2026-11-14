@@ -254,8 +254,7 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   and waits for the prompt). obd stays BLE-free: main passes `obd_elm_io_t` (ble_svc_serial_*).
   comsm applies `comsm_set_link()` at every connect; setting `obd_link`; OBD page "Link"
   dropdown. Console stays off the adapter while OBD runs on it and makes OBD re-init after
-  any console command. Not yet: raw CAN log of the ELM conversation (A3), auto-connect of
-  the adapter (A4).
+  any console command. (A3 / A4: see below.)
 - **Speed tuning, built, not run yet:** response-count digit for Service 01 (frames from
   the PID table, `expected_frames()` in obd_client.c; dropped if the adapter answers '?',
   only single frame if a multi-frame answer comes back short), BLE connection interval
@@ -317,6 +316,12 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   the monitor set-up; first 8 monitor lines + a 5 s statistic logged (`obd_elm: monitor`).
 - **Tested OK (2026-11-14):** with ATCSM0 and the Dash DBC filter all 12 rusEFI messages
   arrive over the 2S, ~140 frames/s, 0 not understood, 0 restarts.
+- **A3 (built, not run yet):** obd_elm hands every frame it sends (request as one single
+  frame, PCI = length) or receives (reply lines, monitor lines) to
+  `can_if_inject_monitor()` -> all monitor slots through the receive filter: raw `can_` log
+  and CAN page monitor show the adapter traffic. Raw log session also while the Dash
+  monitors over the adapter. Times = when the line arrived over BLE. With the board CAN on
+  the same bus too, both copies are logged.
 - **A4 auto-connect (built, not run yet):** the last device whose serial port worked is
   remembered (settings `ble_adapter_valid/addr/type/name`, view_link.c); with the BLE
   adapter as car interface, `ble_svc_set_autoconnect()` reconnects every 5 s (4 s connect

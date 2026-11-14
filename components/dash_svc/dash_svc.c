@@ -151,6 +151,7 @@ esp_err_t dash_svc_load(const char *name)
     s_st.skipped = s_db.skipped;
     s_st.frames = s_st.unknown = s_st.dropped = 0;
     s_st.msgs_seen = 0;
+    s_st.generation++;
     apply_base();
     const char *base = strrchr(path, '/');
     strlcpy(s_st.file, base ? base + 1 : path, sizeof(s_st.file));
@@ -273,6 +274,60 @@ int dash_svc_format_signals(char *buf, size_t len, int max_rows)
     if (n > max_rows && o + 32 < len) {
         snprintf(buf + o, len - o, "... %d more signals\n", n - max_rows);
     }
+    return n;
+}
+
+int dash_svc_find(const char *name)
+{
+    if (s_lock == NULL) {
+        return -1;
+    }
+    LOCK();
+    int i = dbc_find(&s_db, name);
+    UNLOCK();
+    return i;
+}
+
+int dash_svc_signal_count(void)
+{
+    return s_lock ? s_db.nsig : 0;
+}
+
+bool dash_svc_value(int idx, dash_svc_value_t *out)
+{
+    if (s_lock == NULL) {
+        return false;
+    }
+    LOCK();
+    bool ok = idx >= 0 && idx < s_db.nsig;
+    if (ok) {
+        const dbc_signal_t *s = &s_db.sigs[idx];
+        strlcpy(out->name, s->name, sizeof(out->name));
+        strlcpy(out->unit, s->unit, sizeof(out->unit));
+        out->value = s->value;
+        out->received = s->ts_ms != 0;
+        out->age_ms = out->received ? can_if_now_ms() - s->ts_ms : 0;
+        out->decimals = decimals(s->scale);
+        out->min = s->min;
+        out->max = s->max;
+    }
+    UNLOCK();
+    return ok;
+}
+
+int dash_svc_signal_names(char *buf, size_t len)
+{
+    buf[0] = '\0';
+    if (s_lock == NULL) {
+        return 0;
+    }
+    size_t o = 0;
+    LOCK();
+    int n = 0;
+    for (uint16_t i = 0; i < s_db.nsig && o + DBC_NAME_LEN + 2 < len; i++, n++) {
+        o += snprintf(buf + o, len - o, "%s%s", i ? "\n" : "", s_db.sigs[i].name);
+    }
+    UNLOCK();
     return n;
 }
 

@@ -41,7 +41,18 @@ typedef struct {
     uint16_t msgs_seen;         /* DBC messages received at least once */
     uint32_t dropped;           /* queue full */
     char     error[48];         /* "" if fine */
+    uint32_t generation;        /* increments with every load: signal indexes change */
 } dash_svc_status_t;
+
+typedef struct {
+    char     name[32];
+    char     unit[12];
+    double   value;
+    uint32_t age_ms;
+    bool     received;          /* false: never received since the load */
+    int      decimals;          /* from the DBC resolution (scale) */
+    double   min, max;          /* DBC range */
+} dash_svc_value_t;
 
 esp_err_t dash_svc_init(void);
 
@@ -63,6 +74,14 @@ void dash_svc_get_status(dash_svc_status_t *out);
 /* Text table of all signals: "name  value unit  age", sorted as in the DBC,
  * one line per signal, max_rows lines. Returns the number of signals. */
 int dash_svc_format_signals(char *buf, size_t len, int max_rows);
+
+/* Signal index by name (case-insensitive), -1 if none. Valid until the next load. */
+int  dash_svc_find(const char *name);
+int  dash_svc_signal_count(void);
+/* Signal by index; false if the index is out of range. */
+bool dash_svc_value(int idx, dash_svc_value_t *out);
+/* All signal names, '\n' separated, in DBC order; returns the count. */
+int  dash_svc_signal_names(char *buf, size_t len);
 
 /* Latest value of a signal by name; false if unknown or never received.
  * age_ms: time since it was received. */

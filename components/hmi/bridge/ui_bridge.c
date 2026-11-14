@@ -215,6 +215,7 @@ static void bridge_timer_cb(lv_timer_t *t)
     uint32_t now = lv_tick_get();
     refresh_connection(now);
     view_obd_update();
+    view_dash_tick();
     diag_view_refresh();
     pid_select_view_refresh();
     live_values_refresh();

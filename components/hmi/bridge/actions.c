@@ -19,6 +19,7 @@ void action_nav_display(lv_event_t *e)     { nav_go("display"); }
 void action_dash_reload(lv_event_t *e)     { view_dash_reload(); }
 void action_dash_apply(lv_event_t *e)      { view_dash_apply(); }
 void action_nav_dash_setup(lv_event_t *e)  { nav_go("dash_setup"); }
+void action_nav_dash_signals(lv_event_t *e) { nav_go("dash_signals"); }
 void action_nav_ble_console(lv_event_t *e) { nav_go("ble_console"); }
 void action_elm_atz(lv_event_t *e)         { view_elm_send("ATZ"); }
 void action_elm_ati(lv_event_t *e)         { view_elm_send("ATI"); }

@@ -290,6 +290,14 @@ Goal: OBD (comsm), CAN logging (datalog) and later Diag can use either the board
   0 = as in the file. Settings `dash_base`, `dash_dbc` (new fields; the old `rusefi_base_id`
   is NOT used, its default 512 would shift other DBCs). Sub-page `dash_setup` (Dash page
   button Settings): DBC dropdown, base text (decimal / 0x), Apply, shows file vs bus ID range.
+  Tested OK by the owner (signals received and shown).
+- **B2 done, built, not run yet:** Dash page = 3 x 3 tiles (name, value Montserrat 40,
+  unit; "--" after 3 s without data; 100 ms refresh via ui_bridge -> view_dash_tick).
+  Layout per DBC in `/sdcard/db/dash/<dbc file>.txt` ("<tile> = <signal>"), written when a
+  tile is changed on the settings page (tile + signal dropdowns); without a file: signals
+  picked by name (RPM, CLT, TPS, MAP, lambda, IAT, battery, speed, oil), then the first ones.
+  Signal table moved to sub-page `dash_signals` (settings: "All signals"). Tile panels
+  have identifiers `dash_tile1..9` for B3 (alarm colours).
 - Tile layout + alarm limits in `/sdcard/db/dash/layout.json`, edited in the PC tool.
 
 **C. Diag page: manufacturer diagnostics over UDS (VW group, Mercedes first)**

@@ -89,6 +89,7 @@ void view_ble_forget(void);
 void view_dash_update(bool visible);
 void view_dash_reload(void);
 void view_dash_apply(void);             /* Dash settings: DBC file + base ID */
+void view_dash_tick(void);              /* 100 ms (ui_bridge): tile values */
 /* BLE adapter console (view_elm.c) */
 void view_elm_update(bool visible);
 void view_elm_send(const char *cmd);

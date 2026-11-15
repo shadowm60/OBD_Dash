@@ -22,6 +22,10 @@ void action_diag_read_info(lv_event_t *e)  { view_diag_read_info(); }
 void action_diag_read_dtc(lv_event_t *e)   { view_diag_read_dtc(); }
 void action_diag_clear_dtc(lv_event_t *e)  { view_diag_clear_dtc(); }
 void action_diag_save(lv_event_t *e)       { view_diag_save(); }
+void action_diag_did_read(lv_event_t *e)   { view_diag_did_read(); }
+void action_diag_did_live(lv_event_t *e)   { view_diag_did_live(); }
+void action_nav_diag_did(lv_event_t *e)    { nav_go("diag_did"); }
+void action_nav_diag_ecu(lv_event_t *e)    { nav_go("diag_ecu"); }
 void action_dash_apply(lv_event_t *e)      { view_dash_apply(); }
 void action_nav_dash_setup(lv_event_t *e)  { nav_go("dash_setup"); }
 void action_nav_dash_signals(lv_event_t *e) { nav_go("dash_signals"); }

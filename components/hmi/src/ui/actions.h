@@ -58,6 +58,10 @@ extern void action_diag_read_info(lv_event_t * e);
 extern void action_diag_read_dtc(lv_event_t * e);
 extern void action_diag_clear_dtc(lv_event_t * e);
 extern void action_diag_save(lv_event_t * e);
+extern void action_nav_diag_did(lv_event_t * e);
+extern void action_nav_diag_ecu(lv_event_t * e);
+extern void action_diag_did_read(lv_event_t * e);
+extern void action_diag_did_live(lv_event_t * e);
 
 #ifdef __cplusplus
 }

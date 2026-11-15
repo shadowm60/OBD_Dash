@@ -92,6 +92,8 @@ void view_diag_read_info(void);
 void view_diag_read_dtc(void);
 void view_diag_clear_dtc(void);
 void view_diag_save(void);
+void view_diag_did_read(void);
+void view_diag_did_live(void);
 /* Dash page (view_dash.c) */
 void view_dash_update(bool visible);
 void view_dash_reload(void);

@@ -85,12 +85,13 @@ SUB_PAGES = [
     ('dash_signals', 'dash', 'Dash signals'),
     ('dash_tile', 'dash', 'Dash tile'),
     ('diag_ecu', 'diag', 'Diagnostics: ECU'),
+    ('diag_did', 'diag', 'Diagnostics: read data'),
 ]
 # replaced by the pages above
 OLD_PAGES = ['startup', 'clearDTC', 'settings', 'system']
 # screen order in the project (= ScreensEnum); the first one is shown at the first boot
 ORDER = ['home', 'obd', 'readDTC', 'select_params', 'freezFrame', 'drive', 'liveData', 'tune',
-         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag', 'ble_console', 'dash_setup', 'dash_signals', 'dash_tile', 'diag_ecu']
+         'can', 'wifi', 'ble', 'io', 'display', 'dash', 'diag', 'ble_console', 'dash_setup', 'dash_signals', 'dash_tile', 'diag_ecu', 'diag_did']
 
 # name -> (type, default expression). Existing variables are kept as they are.
 VARIABLES = {
@@ -155,6 +156,13 @@ VARIABLES = {
     'diag_ecus': ('string', '""'),
     'diag_ecu_title': ('string', '""'),
     'diag_ecu_text': ('string', '""'),
+    'diag_did_title': ('string', '""'),
+    'diag_did_list': ('string', '""'),
+    'diag_did_sel': ('integer', '0'),
+    'diag_did_hex': ('string', '""'),
+    'diag_did_live_text': ('string', '"Live"'),
+    'diag_did_result': ('string', '""'),
+    'diag_did_raw': ('string', '""'),
     'dash_signals': ('string', '""'),
     'dash_files': ('string', '""'),
     'dash_file_sel': ('integer', '0'),
@@ -216,6 +224,7 @@ ACTIONS = [
     'io_do0_toggle', 'io_do1_toggle', 'io_reset', 'i2c_scan',
     'wifi_scan', 'wifi_connect', 'wifi_disconnect', 'wifi_forget',
     'ble_scan', 'ble_connect', 'ble_disconnect', 'ble_forget',
+    'nav_diag_did', 'nav_diag_ecu', 'diag_did_read', 'diag_did_live',
     'diag_scan', 'diag_read_info', 'diag_read_dtc', 'diag_clear_dtc', 'diag_save',
     'dash_reload', 'nav_dash_setup', 'dash_apply', 'nav_dash_signals', 'dash_tile_save', 'dash_tile_clear',
     'nav_ble_console', 'elm_atz', 'elm_ati', 'elm_atrv', 'elm_0100', 'elm_send', 'elm_clear',
@@ -676,6 +685,23 @@ def page_diag(b):
     ]
 
 
+def page_diag_did(b):
+    # keyboard (screen.c) covers the bottom 220 px: the DID field stays above it
+    iw = CW - 26
+    return [
+        b.panel(CX, TOP, CW, CH, [
+            b.label('diag_did_title', 0, 0, iw, 16, GREY, expr=True),
+            b.dropdown('diag_did_list', 'diag_did_sel', 0, 26, iw - 200, font=16),
+            b.textarea('diag_did_hex', iw - 190, 26, 190, 'DID hex', maxlen=4, accepted='0123456789abcdefABCDEF'),
+            b.button('Read', 0, 84, 150, 44, 'diag_did_read', ACCENT, font=16),
+            b.button('diag_did_live_text', 160, 84, 150, 44, 'diag_did_live', font=16, expr=True),
+            b.label('diag_did_result', 0, 146, iw, 24, expr=True, wrap=True),
+            b.label('diag_did_raw', 0, 216, iw, 12, GREY, expr=True, wrap=True),
+            b.button('Back to\nECU', iw - 164, CH - 26 - 60, 164, 60, 'nav_diag_ecu', font=16),
+        ]),
+    ]
+
+
 def page_diag_ecu(b):
     rw = 190
     bw = rw - 26
@@ -688,6 +714,7 @@ def page_diag_ecu(b):
             b.button('Read DTCs', 0, 60, bw, 50, 'diag_read_dtc', ACCENT, font=16),
             b.button('Clear DTCs', 0, 120, bw, 50, 'diag_clear_dtc', DANGER, font=16),
             b.button('Save to SD', 0, 180, bw, 50, 'diag_save', font=16),
+            b.button('Read data', 0, 240, bw, 50, 'nav_diag_did', font=16),
             b.button('Back to\nECU list', 0, CH - 26 - 60, bw, 60, 'nav_diag', font=16),
         ]),
     ]
@@ -718,7 +745,7 @@ def page_display(b):
 BUILDERS = {
     'home': page_home, 'obd': page_obd, 'readDTC': page_dtc, 'can': page_can, 'wifi': page_wifi,
     'ble': page_ble, 'io': page_io, 'display': page_display,
-    'dash': page_dash, 'diag': page_diag, 'ble_console': page_ble_console, 'dash_setup': page_dash_setup, 'dash_signals': page_dash_signals, 'dash_tile': page_dash_tile, 'diag_ecu': page_diag_ecu,
+    'dash': page_dash, 'diag': page_diag, 'ble_console': page_ble_console, 'dash_setup': page_dash_setup, 'dash_signals': page_dash_signals, 'dash_tile': page_dash_tile, 'diag_ecu': page_diag_ecu, 'diag_did': page_diag_did,
     'select_params': page_params, 'freezFrame': page_freeze,
 }
 

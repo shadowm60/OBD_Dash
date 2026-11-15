@@ -10,12 +10,16 @@
  *              decoded), Clear DTCs (14 FF FF FF after a confirmation, then read
  *              again), Save to SD (dtc_<ECU>_<date>.txt).
  *              diag_ecu_title, diag_ecu_text.
+ *   diag_did   read one DID (C3): database DIDs of the ECU (diag_did_list /
+ *              diag_did_sel, entry 0 = the hex field diag_did_hex), Read, Live
+ *              (every second); diag_did_result (decoded), diag_did_raw (bytes).
  *
  * Requests go one after the other through comsm (UDS over the chosen car
  * interface), only while OBD is not connected. Scan = Tester Present (3E 00);
  * a negative answer still means the ECU is there.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <time.h>
@@ -24,6 +28,7 @@
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include "lvgl.h"
 #include "bridge.h"
 #include "screens.h"
@@ -48,6 +53,13 @@ static uivar_t v_scan = UIVAR("diag_scan_text");
 static uivar_t v_status = UIVAR("diag_status");
 static uivar_t v_title = UIVAR("diag_ecu_title");
 static uivar_t v_text = UIVAR("diag_ecu_text");
+static uivar_t v_did_title = UIVAR("diag_did_title");
+static uivar_t v_did_list = UIVAR("diag_did_list");
+static uivar_t v_did_sel = UIVAR("diag_did_sel");
+static uivar_t v_did_hex = UIVAR("diag_did_hex");
+static uivar_t v_did_live = UIVAR("diag_did_live_text");
+static uivar_t v_did_result = UIVAR("diag_did_result");
+static uivar_t v_did_raw = UIVAR("diag_did_raw");
 
 typedef enum { ECU_UNKNOWN, ECU_ASKING, ECU_YES, ECU_NO, ECU_ERROR } ecu_state_t;
 
@@ -63,7 +75,7 @@ static int          s_nfiles;
 static char         s_msg[128];
 
 /* ---- one job at a time: scan, identification, DTCs, clear */
-typedef enum { JOB_NONE, JOB_SCAN, JOB_INFO, JOB_DTC, JOB_CLEAR } job_t;
+typedef enum { JOB_NONE, JOB_SCAN, JOB_INFO, JOB_DTC, JOB_CLEAR, JOB_DID } job_t;
 static job_t        s_job;
 static int          s_step;                 /* scan: ECU index; info: DID index */
 static bool         s_sent;
@@ -79,6 +91,19 @@ static char         s_info_when[32], s_dtc_when[32];
 static bool         s_have_info, s_have_dtc;
 static char         s_job_msg[96];
 EXT_RAM_BSS_ATTR static char s_page[MAX_INFO * INFO_LEN + 6144 + 512];
+
+/* read-data page */
+#define MAX_DID_LIST 128
+static uint16_t     s_did_ids[MAX_DID_LIST];
+static int          s_ndid_list;
+EXT_RAM_BSS_ATTR static char s_did_opts[MAX_DID_LIST * 72 + 32];
+static bool         s_did_entered;
+static uint16_t     s_did;                  /* DID being read */
+static bool         s_live;
+static int64_t      s_did_next_us;
+static uint32_t     s_did_count;
+EXT_RAM_BSS_ATTR static char s_did_res[160];
+EXT_RAM_BSS_ATTR static char s_did_raw[COMSM_UDS_MAX * 3 + 160];
 
 /* ---------------------------------------------------------------- database */
 
@@ -456,6 +481,52 @@ static void dtc_result(const comsm_uds_result_t *r)
     }
 }
 
+static void did_result(const comsm_uds_result_t *r)
+{
+    char when[32];
+    stamp(when, sizeof(when));
+    s_did_count++;
+    const diagdb_did_t *d = diagdb_find_did(&s_db, s_ecu, s_did);
+    if (r->state == COMSM_UDS_DONE && r->len >= 3 && r->data[0] == 0x62 && (r->data[1] << 8 | r->data[2]) == s_did) {
+        const uint8_t *p = r->data + 3;
+        int n = r->len - 3;
+        char v[96];
+        if (d) {
+            diagdb_decode(d, p, n, v, sizeof(v));
+            snprintf(s_did_res, sizeof(s_did_res), "%04X  %.48s:  %s", s_did, d->name, v);
+        } else {
+            snprintf(s_did_res, sizeof(s_did_res), "%04X  (not in the database): %d bytes", s_did, n);
+        }
+        size_t o = snprintf(s_did_raw, sizeof(s_did_raw), "raw (%d bytes):", n);
+        for (int i = 0; i < n && o + 4 < sizeof(s_did_raw); i++) {
+            o += snprintf(s_did_raw + o, sizeof(s_did_raw) - o, " %02X", p[i]);
+        }
+        bool text = n > 0;
+        for (int i = 0; i < n; i++) {
+            text &= (p[i] >= 0x20 && p[i] < 0x7F) || p[i] == 0 || p[i] == 0xFF;
+        }
+        if (text && o + n + 16 < sizeof(s_did_raw)) {
+            o += snprintf(s_did_raw + o, sizeof(s_did_raw) - o, "\ntext: \"");
+            for (int i = 0; i < n; i++) {
+                s_did_raw[o++] = (p[i] >= 0x20 && p[i] < 0x7F) ? (char)p[i] : '.';
+            }
+            o += snprintf(s_did_raw + o, sizeof(s_did_raw) - o, "\"");
+        }
+        snprintf(s_did_raw + o, sizeof(s_did_raw) - o, "\n%s, read %lu time%s", when,
+                 (unsigned long)s_did_count, s_did_count == 1 ? "" : "s");
+    } else {
+        if (r->state == COMSM_UDS_NEGATIVE) {
+            snprintf(s_did_res, sizeof(s_did_res), "%04X: %s (NRC %02X)", s_did, nrc_text(r->nrc), r->nrc);
+        } else if (r->state == COMSM_UDS_TIMEOUT) {
+            snprintf(s_did_res, sizeof(s_did_res), "%04X: no answer", s_did);
+        } else {
+            snprintf(s_did_res, sizeof(s_did_res), "%04X: error %s", s_did, r->error);
+        }
+        snprintf(s_did_raw, sizeof(s_did_raw), "%s, read %lu time%s", when, (unsigned long)s_did_count,
+                 s_did_count == 1 ? "" : "s");
+    }
+}
+
 /* Runs the current job one request at a time. */
 static void job_step(void)
 {
@@ -477,6 +548,7 @@ static void job_step(void)
         case JOB_INFO:  req[0] = 0x22; req[1] = s_info_did[s_step] >> 8; req[2] = s_info_did[s_step] & 0xFF; len = 3; break;
         case JOB_DTC:   req[0] = 0x19; req[1] = 0x02; req[2] = 0xFF; len = 3; break;
         case JOB_CLEAR: req[0] = 0x14; req[1] = 0xFF; req[2] = 0xFF; req[3] = 0xFF; len = 4; break;
+        case JOB_DID:   req[0] = 0x22; req[1] = s_did >> 8; req[2] = s_did & 0xFF; len = 3; break;
         default: return;
         }
         if (comsm_uds_request(s_db.ecus[ecu].tx, s_db.ecus[ecu].rx, req, len) == ESP_OK) {
@@ -526,6 +598,10 @@ static void job_step(void)
     }
     case JOB_DTC:
         dtc_result(&r);
+        s_job = JOB_NONE;
+        break;
+    case JOB_DID:
+        did_result(&r);
         s_job = JOB_NONE;
         break;
     case JOB_CLEAR:
@@ -623,17 +699,134 @@ static void update_ecu_page(void)
     uv_str(&v_text, s_page);
 }
 
+/* ---------------------------------------------------------------- read-data page */
+
+static void did_enter(void)
+{
+    s_ndid_list = 0;
+    size_t o = snprintf(s_did_opts, sizeof(s_did_opts), "(DID typed in the field ->)");
+    for (int i = 0; i < s_db.ndid && s_ndid_list < MAX_DID_LIST; i++) {
+        const diagdb_did_t *d = &s_db.dids[i];
+        if (d->ecu != s_ecu && d->ecu != DIAGDB_ALL) {
+            continue;
+        }
+        bool dup = false;
+        for (int k = 0; k < s_ndid_list; k++) {
+            dup |= s_did_ids[k] == d->did;
+        }
+        if (dup) {
+            continue;
+        }
+        const diagdb_did_t *best = diagdb_find_did(&s_db, s_ecu, d->did);
+        s_did_ids[s_ndid_list++] = d->did;
+        o += snprintf(s_did_opts + o, sizeof(s_did_opts) - o, "\n%04X  %.60s", d->did, best->name);
+    }
+    uv_str(&v_did_list, s_did_opts);
+    uv_int(&v_did_sel, s_ndid_list ? 1 : 0);
+    s_live = false;
+    s_did_count = 0;
+    s_did_res[0] = s_did_raw[0] = '\0';
+}
+
+/* DID chosen on the page; false (and a message) if none */
+static bool chosen_did(uint16_t *did)
+{
+    int sel = uv_get_int(&v_did_sel, 0);
+    if (sel >= 1 && sel <= s_ndid_list) {
+        *did = s_did_ids[sel - 1];
+        return true;
+    }
+    char t[8];
+    uv_get_str(&v_did_hex, t, sizeof(t));
+    char *end;
+    unsigned long v = strtoul(t, &end, 16);
+    if (t[0] == '\0' || *end != '\0' || v > 0xFFFF) {
+        view_show_message("Read data", "Choose a DID from the list, or type 4 hex digits (e.g. F190) in the field.");
+        return false;
+    }
+    *did = (uint16_t)v;
+    return true;
+}
+
+static void did_start(void)
+{
+    uint16_t did;
+    if (s_ecu < 0 || !chosen_did(&did)) {
+        s_live = false;
+        return;
+    }
+    if (did != s_did) {
+        s_did_count = 0;
+    }
+    s_did = did;
+    start_job(JOB_DID);
+}
+
+void view_diag_did_read(void)
+{
+    if (s_job != JOB_NONE || !obd_idle("diagnostics")) {
+        return;
+    }
+    s_live = false;
+    did_start();
+}
+
+void view_diag_did_live(void)
+{
+    if (s_live) {
+        s_live = false;
+        return;
+    }
+    if (!obd_idle("diagnostics")) {
+        return;
+    }
+    s_live = true;
+    s_did_next_us = 0;
+}
+
+static void update_did_page(void)
+{
+    if (s_ecu < 0 || s_ecu >= s_db.necu) {
+        uv_str(&v_did_title, "no ECU");
+        return;
+    }
+    if (!s_did_entered) {
+        s_did_entered = true;
+        did_enter();
+    }
+    int64_t now = esp_timer_get_time();
+    if (s_live && s_job == JOB_NONE && now >= s_did_next_us) {
+        s_did_next_us = now + 1000000;
+        did_start();
+    }
+    const diagdb_ecu_t *e = &s_db.ecus[s_ecu];
+    uv_strf(&v_did_title, "%s  (%03X / %03X) - read data by identifier (22)%s", e->name, e->tx, e->rx,
+            s_job == JOB_DID ? "  - reading..." : "");
+    uv_str(&v_did_live, s_live ? "Stop live" : "Live");
+    uv_str(&v_did_result, s_did_res[0] ? s_did_res : "Choose a DID and press Read (or Live: every second).");
+    uv_str(&v_did_raw, s_did_raw);
+}
+
 /* ---------------------------------------------------------------- 250 ms */
 
 void view_diag_update(bool visible)
 {
     bool ecu_page = nav_is("diag_ecu");
-    if (!visible && !ecu_page) {
+    bool did_page = nav_is("diag_did");
+    if (!did_page) {
+        s_did_entered = false;
+        s_live = false;
+    }
+    if (!visible && !ecu_page && !did_page) {
         s_entered = false;
         s_job = JOB_NONE;
         return;
     }
     job_step();
+    if (did_page) {
+        update_did_page();
+        return;
+    }
     if (ecu_page) {
         update_ecu_page();
         return;

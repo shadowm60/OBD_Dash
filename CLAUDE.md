@@ -374,7 +374,11 @@ NRC = present too), list with state.
 DIDs F180..F1FF of the ECU, decoded), Read DTCs (19 02 FF, DB text incl. generic failure
 type fallback, status: failed now / confirmed / pending / MIL), Clear DTCs (confirm box,
 14 FF FF FF, then read again), Save to SD (`dtc_<ECU>_<date>.txt`, in the web page's DTC
-group). Jobs run one request at a time (job_step, 250 ms tick). Next C3: read any DID.
+group). Jobs run one request at a time (job_step, 250 ms tick).
+**C3 done, built, not run yet:** ECU page "Read data" -> sub-page `diag_did`: dropdown of
+the ECU's DB DIDs (entry 0 = hex field), Read, Live (1 s), decoded result + raw hex (+ text
+if printable), time and count; unknown DIDs show raw bytes. generic.txt got F405 / F40C /
+F40D (OBD PIDs over UDS, ISO 27145 F4xx) with sweeping sim values for Live.
 
 **D. Database on the SD card + PC tool**
 - `/sdcard/db/`: `manifest.json` (version, files, checksums), `ecus/<make>.json` (name,

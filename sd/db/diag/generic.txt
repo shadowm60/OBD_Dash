@@ -17,6 +17,10 @@ Transmission | 7E1 | 7E9 | uds      | 10 3E 22 19 14     # ISO 15765-4 legislate
 *     | F197 | System name                  | ascii |       |        |      | SIMULATOR
 *     | F18A | System supplier              | ascii |       |        |      |
 *     | F195 | Supplier software version    | ascii |       |        |      |
+# OBD PIDs over UDS: DID F4xx = Service 01 PID xx (ISO 27145); sim values sweep for Live
+Engine | F405 | Coolant temperature       | u8    | 1     | -40    | C    | 20..95
+Engine | F40C | Engine speed              | u16   | 0.25  | 0      | rpm  | 800..6000
+Engine | F40D | Vehicle speed             | u8    | 1     | 0      | km/h | 0..120
 
 [dtc]
 # ecu | code  | text                                   | status (sim)

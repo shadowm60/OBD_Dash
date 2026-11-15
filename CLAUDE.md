@@ -28,8 +28,11 @@ tools/eez-build.sh                  # regenerate components/hmi/src/ui/ from the
 
 - **ninja warning:** the VS Code ninja is a different version. A "build log version"
   warning just means a full rebuild.
-- **`sdkconfig` is the owner's local file** and is not committed. Put defaults in
-  `sdkconfig.defaults`, and mirror needed changes into `sdkconfig` by hand.
+- **`sdkconfig` is generated and git-ignored** (untracked since `2eb84cd`). ESP-IDF
+  regenerates it from `sdkconfig.defaults` + Kconfig, so put every permanent config
+  change in `sdkconfig.defaults` (edit it, or `idf.py save-defconfig`) and run
+  `reconfigure`. A `menuconfig`-only change lives only in the local `sdkconfig` and is
+  lost on a clean build — mirror it into `sdkconfig.defaults` to keep it.
 - **EEZ headless build:** EEZ Studio is at `~/tools/EEZ-Studio-0.29.0.AppImage`, and the
   script handles its quirks: unset `ELECTRON_RUN_AS_NODE`, `--no-sandbox --disable-gpu
   --ozone-platform=x11`, `APPIMAGE_EXTRACT_AND_RUN=1`. It should print "No error and no
@@ -78,6 +81,10 @@ Navigation:
   press to go to the OBD page (`live_view.c`).
 
 ## Architecture rules (see README for the component list)
+
+Each component has its own `README.md` (purpose, dependencies, integration, API,
+gotchas), and `components/README.md` is the index with a layering diagram — use those
+for per-component API detail; the rules below are the cross-cutting ones.
 
 **Layering.** The layers, bottom to top:
 
@@ -214,7 +221,8 @@ Steps, each built, committed and tested on the board by the owner before the nex
    `wifi_autoconnect`, applied live via `wifi_svc_set_auto_retry`) the station keeps
    trying every 30 s after the 5 quick retries; manual Disconnect / Forget stops it.
 
-`sdkconfig` (local) got the step 1 options by hand; the previous copy is not kept.
+The step 1 options (Bluetooth/NimBLE, PSRAM budgeting, Wi-Fi tuning) live in
+`sdkconfig.defaults`; `sdkconfig` itself is git-ignored (see Build / flash / UI).
 
 ## Roadmap (agreed 2026-11-14, owner: "structure it and don't forget")
 

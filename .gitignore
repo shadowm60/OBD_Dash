@@ -8,3 +8,7 @@ components/hmi/src/ui/.eez-project-build
 #FreeCAD backups
 *.FCBak
 __pycache__/
+
+#ESP-IDF generated config (regenerated from sdkconfig.defaults) - do not store
+sdkconfig
+sdkconfig.old

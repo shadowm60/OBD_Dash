@@ -18,6 +18,8 @@ void action_nav_io(lv_event_t *e)          { nav_go("io"); }
 void action_nav_display(lv_event_t *e)     { nav_go("display"); }
 void action_dash_reload(lv_event_t *e)     { view_dash_reload(); }
 void action_diag_scan(lv_event_t *e)       { view_diag_scan(); }
+void action_diag_scan_dtc(lv_event_t *e)   { view_diag_scan_dtc(); }
+void action_diag_save_report(lv_event_t *e) { view_diag_save_report(); }
 void action_diag_read_info(lv_event_t *e)  { view_diag_read_info(); }
 void action_diag_read_dtc(lv_event_t *e)   { view_diag_read_dtc(); }
 void action_diag_clear_dtc(lv_event_t *e)  { view_diag_clear_dtc(); }

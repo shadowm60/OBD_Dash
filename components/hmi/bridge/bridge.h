@@ -88,6 +88,8 @@ void view_ble_forget(void);
 /* Diag page (view_diag.c) */
 void view_diag_update(bool visible);
 void view_diag_scan(void);
+void view_diag_scan_dtc(void);              /* scan + read every answering ECU's DTCs */
+void view_diag_save_report(void);           /* all ECUs of the last scan -> dtc_scan_<date>.txt */
 void view_diag_read_info(void);
 void view_diag_read_dtc(void);
 void view_diag_clear_dtc(void);

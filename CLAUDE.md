@@ -390,6 +390,12 @@ built-in diagdb.Simulator, quick buttons, decoded answers, "Add this DID" from a
 answer), Save (diagdb.dump: canonical layout, comments not kept), Upload (/up/diag/).
 Settings in ~/.obd_dash_tool.json. Tested on the PC with a mock dash (hidden window).
 
+**Scan + DTCs (2026-11-15, built, not run yet):** Diag page button "Scan + DTCs": the scan
+job reads 19 02 FF right after each answering ECU's 3E 00 (`s_scan_phase`), per-ECU count
++ text (`s_ecu_ndtc`, `s_ecu_dtc`, PSRAM) shown in the rows; "Save report" writes
+`dtc_scan_<date>.txt` (all ECUs of the last scan, state + DTCs with texts / status).
+Only the ECUs listed in the chosen database file are asked.
+
 **Session keepalive (2026-11-15, owner noticed 10 03 was not kept alive; built, not run
 yet):** comsm tracks a positive 10 xx (xx != 01) in REQ_UDS (`session_track`) and sends
 3E 80 (REQ_KEEP, no answer expected, timeout = OK) to that ECU every 2 s when nothing

@@ -51,6 +51,7 @@ static const char *TAG = "view_diag";
 static uivar_t v_files = UIVAR("diag_files");
 static uivar_t v_file_sel = UIVAR("diag_file_sel");
 static uivar_t v_scan = UIVAR("diag_scan_text");
+static uivar_t v_scan_dtc = UIVAR("diag_scan_dtc_text");
 static uivar_t v_status = UIVAR("diag_status");
 static uivar_t v_title = UIVAR("diag_ecu_title");
 static uivar_t v_text = UIVAR("diag_ecu_text");
@@ -82,6 +83,12 @@ static int          s_step;                 /* scan: ECU index; info: DID index 
 static bool         s_sent;
 static uint32_t     s_seq;
 static int          s_ecu = -1;             /* ECU of the ECU page */
+static bool         s_scan_dtc;             /* Scan + DTCs: also read each answering ECU's DTCs */
+static int          s_scan_phase;           /* 0 tester present, 1 DTC read of the same ECU */
+static int16_t     *s_ecu_ndtc;             /* per ECU: DTCs found, -1 not read */
+#define ECU_DTC_LEN 1536
+static char        *s_ecu_dtc;              /* per ECU: DTC text (MAX_ECU x ECU_DTC_LEN, PSRAM) */
+static char         s_scan_when[32];
 
 /* ECU page results */
 static uint16_t     s_info_did[MAX_INFO];
@@ -106,6 +113,9 @@ static uint32_t     s_did_count;
 EXT_RAM_BSS_ATTR static char s_did_res[160];
 EXT_RAM_BSS_ATTR static char s_did_raw[COMSM_UDS_MAX * 3 + 160];
 
+static void clear_results(void);
+static void stamp(char *out, size_t len);
+
 /* ---------------------------------------------------------------- database */
 
 static bool alloc_tables(void)
@@ -119,10 +129,12 @@ static bool alloc_tables(void)
     s_ecu_st = heap_caps_calloc(MAX_ECU, sizeof(ecu_state_t), MALLOC_CAP_SPIRAM);
     s_ecu_nrc = heap_caps_calloc(MAX_ECU, 1, MALLOC_CAP_SPIRAM);
     s_row_lbl = heap_caps_calloc(MAX_ECU, sizeof(lv_obj_t *), MALLOC_CAP_SPIRAM);
+    s_ecu_ndtc = heap_caps_calloc(MAX_ECU, sizeof(int16_t), MALLOC_CAP_SPIRAM);
+    s_ecu_dtc = heap_caps_calloc(MAX_ECU, ECU_DTC_LEN, MALLOC_CAP_SPIRAM);
     s_db.max_ecu = MAX_ECU;
     s_db.max_did = MAX_DID;
     s_db.max_dtc = MAX_DTC;
-    return s_db.ecus && s_db.dids && s_db.dtcs && s_ecu_st && s_ecu_nrc && s_row_lbl;
+    return s_db.ecus && s_db.dids && s_db.dtcs && s_ecu_st && s_ecu_nrc && s_row_lbl && s_ecu_ndtc && s_ecu_dtc;
 }
 
 static int list_files(void)
@@ -226,11 +238,21 @@ static void update_rows(void)
         const diagdb_ecu_t *e = &s_db.ecus[i];
         const char *st = s_ecu_st[i] == ECU_ASKING ? "asking..." : s_ecu_st[i] == ECU_YES ? "answers"
                        : s_ecu_st[i] == ECU_NO ? "no answer" : s_ecu_st[i] == ECU_ERROR ? "link error" : "";
-        char t[112];
+        char t[140], d[40] = "";
+        if (s_ecu_st[i] == ECU_YES && s_ecu_ndtc[i] > 0) {
+            snprintf(d, sizeof(d), ", %d DTC%s", s_ecu_ndtc[i], s_ecu_ndtc[i] == 1 ? "" : "s");
+        } else if (s_ecu_st[i] == ECU_YES && s_ecu_ndtc[i] == 0) {
+            snprintf(d, sizeof(d), ", no DTCs");
+        } else if (s_ecu_st[i] == ECU_YES && s_ecu_dtc[i * ECU_DTC_LEN]) {
+            snprintf(d, sizeof(d), ", DTCs: %.24s", s_ecu_dtc + i * ECU_DTC_LEN);
+        } else if (s_job == JOB_SCAN && s_scan_phase == 1 && s_step == i) {
+            snprintf(d, sizeof(d), ", reading DTCs...");
+        }
         if (s_ecu_st[i] == ECU_YES && s_ecu_nrc[i]) {
-            snprintf(t, sizeof(t), "%-20s  %03X / %03X   %s (negative answer %02X)", e->name, e->tx, e->rx, st, s_ecu_nrc[i]);
+            snprintf(t, sizeof(t), "%-20s  %03X / %03X   %s (negative answer %02X)%s", e->name, e->tx, e->rx, st,
+                     s_ecu_nrc[i], d);
         } else {
-            snprintf(t, sizeof(t), "%-20s  %03X / %03X   %s", e->name, e->tx, e->rx, st);
+            snprintf(t, sizeof(t), "%-20s  %03X / %03X   %s%s", e->name, e->tx, e->rx, st, d);
         }
         if (strcmp(lv_label_get_text(s_row_lbl[i]), t) != 0) {
             lv_label_set_text(s_row_lbl[i], t);
@@ -254,7 +276,7 @@ static void load(const char *name)
     }
     bool ok = diagdb_parse(&s_db, f);
     fclose(f);
-    memset(s_ecu_st, 0, MAX_ECU * sizeof(ecu_state_t));
+    clear_results();
     if (!ok) {
         snprintf(s_msg, sizeof(s_msg), "%.24s: no ECUs%s%.60s", name, s_db.error[0] ? " - " : "", s_db.error);
     } else if (s_db.skipped) {
@@ -317,7 +339,16 @@ static void start_job(job_t j)
     s_sent = false;
 }
 
-void view_diag_scan(void)
+static void clear_results(void)
+{
+    memset(s_ecu_st, 0, MAX_ECU * sizeof(ecu_state_t));
+    for (int i = 0; i < MAX_ECU; i++) {
+        s_ecu_ndtc[i] = -1;
+        s_ecu_dtc[i * ECU_DTC_LEN] = '\0';
+    }
+}
+
+static void scan_start(bool dtcs)
 {
     if (s_job == JOB_SCAN) {
         s_job = JOB_NONE;                       /* Stop */
@@ -330,8 +361,21 @@ void view_diag_scan(void)
         view_show_message("Diag", "No database loaded: upload one (e.g. generic.txt) on the web page into db/diag/.");
         return;
     }
-    memset(s_ecu_st, 0, MAX_ECU * sizeof(ecu_state_t));
+    clear_results();
+    s_scan_dtc = dtcs;
+    s_scan_phase = 0;
+    stamp(s_scan_when, sizeof(s_scan_when));
     start_job(JOB_SCAN);
+}
+
+void view_diag_scan(void)
+{
+    scan_start(false);
+}
+
+void view_diag_scan_dtc(void)
+{
+    scan_start(true);
 }
 
 static void stamp(char *out, size_t len)
@@ -448,38 +492,45 @@ static void status_text(uint8_t st, char *out, size_t len)
     }
 }
 
-static void dtc_result(const comsm_uds_result_t *r)
+/* 19 02 answer of `ecu` -> text; returns the number of DTCs, -1 if not read */
+static int format_dtcs(const comsm_uds_result_t *r, int ecu, char *out, size_t len)
 {
     size_t o = 0;
-    stamp(s_dtc_when, sizeof(s_dtc_when));
     if (r->state == COMSM_UDS_NEGATIVE) {
-        snprintf(s_dtc_text, sizeof(s_dtc_text), "%s (NRC %02X)", nrc_text(r->nrc), r->nrc);
-        return;
+        snprintf(out, len, "%s (NRC %02X)", nrc_text(r->nrc), r->nrc);
+        return -1;
     }
     if (r->state != COMSM_UDS_DONE || r->len < 3 || r->data[0] != 0x59) {
         if (r->state == COMSM_UDS_TIMEOUT) {
-            snprintf(s_dtc_text, sizeof(s_dtc_text), "no answer");
+            snprintf(out, len, "no answer");
         } else {
-            snprintf(s_dtc_text, sizeof(s_dtc_text), "error %s", r->error);
+            snprintf(out, len, "error %s", r->error);
         }
-        return;
+        return -1;
     }
     int n = (r->len - 3) / 4;
     if (n == 0) {
-        snprintf(s_dtc_text, sizeof(s_dtc_text), "no trouble codes");
-        return;
+        snprintf(out, len, "no trouble codes");
+        return 0;
     }
-    o += snprintf(s_dtc_text + o, sizeof(s_dtc_text) - o, "%d trouble code%s:", n, n == 1 ? "" : "s");
-    for (int i = 0; i < n && o + 180 < sizeof(s_dtc_text); i++) {
+    o += snprintf(out + o, len - o, "%d trouble code%s:", n, n == 1 ? "" : "s");
+    for (int i = 0; i < n && o + 180 < len; i++) {
         const uint8_t *p = r->data + 3 + 4 * i;
         uint32_t code = (uint32_t)p[0] << 16 | (uint32_t)p[1] << 8 | p[2];
         char c[12], st[64];
         diagdb_format_dtc(code, c);
         status_text(p[3], st, sizeof(st));
-        const char *t = diagdb_dtc_text(&s_db, s_ecu, code);
-        o += snprintf(s_dtc_text + o, sizeof(s_dtc_text) - o, "\n  %s  %.64s\n      status %02X: %s",
+        const char *t = diagdb_dtc_text(&s_db, ecu, code);
+        o += snprintf(out + o, len - o, "\n  %s  %.64s\n      status %02X: %s",
                       c, t ? t : "(no text in the database)", p[3], st);
     }
+    return n;
+}
+
+static void dtc_result(const comsm_uds_result_t *r)
+{
+    stamp(s_dtc_when, sizeof(s_dtc_when));
+    format_dtcs(r, s_ecu, s_dtc_text, sizeof(s_dtc_text));
 }
 
 static void did_result(const comsm_uds_result_t *r)
@@ -545,7 +596,13 @@ static void job_step(void)
         uint8_t req[7];
         uint8_t len = 0;
         switch (s_job) {
-        case JOB_SCAN:  req[0] = 0x3E; req[1] = 0x00; len = 2; break;
+        case JOB_SCAN:
+            if (s_scan_phase == 0) {
+                req[0] = 0x3E; req[1] = 0x00; len = 2;
+            } else {
+                req[0] = 0x19; req[1] = 0x02; req[2] = 0xFF; len = 3;
+            }
+            break;
         case JOB_INFO:  req[0] = 0x22; req[1] = s_info_did[s_step] >> 8; req[2] = s_info_did[s_step] & 0xFF; len = 3; break;
         case JOB_DTC:   req[0] = 0x19; req[1] = 0x02; req[2] = 0xFF; len = 3; break;
         case JOB_CLEAR: req[0] = 0x14; req[1] = 0xFF; req[2] = 0xFF; req[3] = 0xFF; len = 4; break;
@@ -555,7 +612,7 @@ static void job_step(void)
         if (comsm_uds_request(s_db.ecus[ecu].tx, s_db.ecus[ecu].rx, req, len) == ESP_OK) {
             s_sent = true;
             s_seq = r.seq;
-            if (s_job == JOB_SCAN) {
+            if (s_job == JOB_SCAN && s_scan_phase == 0) {
                 s_ecu_st[ecu] = ECU_ASKING;
             }
         } else {
@@ -577,10 +634,20 @@ static void job_step(void)
     }
     switch (s_job) {
     case JOB_SCAN:
+        if (s_scan_phase == 1) {                /* DTCs of an answering ECU */
+            s_ecu_ndtc[ecu] = (int16_t)format_dtcs(&r, ecu, s_ecu_dtc + ecu * ECU_DTC_LEN, ECU_DTC_LEN);
+            s_scan_phase = 0;
+            s_step++;
+            break;
+        }
         s_ecu_st[ecu] = r.state == COMSM_UDS_DONE || r.state == COMSM_UDS_NEGATIVE ? ECU_YES
                       : r.state == COMSM_UDS_TIMEOUT ? ECU_NO : ECU_ERROR;
         s_ecu_nrc[ecu] = r.state == COMSM_UDS_NEGATIVE ? r.nrc : 0;
-        s_step++;
+        if (s_scan_dtc && s_ecu_st[ecu] == ECU_YES) {
+            s_scan_phase = 1;                   /* same ECU: read its DTCs next */
+        } else {
+            s_step++;
+        }
         break;
     case JOB_INFO: {
         const diagdb_did_t *d = diagdb_find_did(&s_db, s_ecu, s_info_did[s_step]);
@@ -675,6 +742,54 @@ void view_diag_save(void)
     build_page();
     fprintf(f, "OBD_Dash diagnostics report\nECU: %s (request %03X, answer %03X)\nDatabase: %s\n\n%s\n",
             s_db.ecus[s_ecu].name, s_db.ecus[s_ecu].tx, s_db.ecus[s_ecu].rx, s_file, s_page);
+    fclose(f);
+    char m[112];
+    snprintf(m, sizeof(m), "Saved to %.90s", path);
+    view_show_message("Saved", m);
+    ESP_LOGI(TAG, "%s", m);
+}
+
+void view_diag_save_report(void)
+{
+    bool any = false;
+    for (int i = 0; i < s_db.necu; i++) {
+        any |= s_ecu_st[i] != ECU_UNKNOWN;
+    }
+    if (!any || s_job == JOB_SCAN) {
+        view_show_message("Save report", s_job == JOB_SCAN ? "Wait for the scan to finish." : "Scan first (Scan + DTCs for the trouble codes).");
+        return;
+    }
+    char st[20] = "", path[80];
+    time_t t = time(NULL);
+    if (t > 1700000000) {
+        struct tm tm;
+        localtime_r(&t, &tm);
+        strftime(st, sizeof(st), "%Y%m%d_%H%M%S", &tm);
+    } else {
+        snprintf(st, sizeof(st), "%lu", (unsigned long)(esp_log_timestamp() / 1000));
+    }
+    snprintf(path, sizeof(path), MOUNT_POINT "/dtc_scan_%s.txt", st);
+    FILE *f = fopen(path, "w");
+    if (f == NULL) {
+        view_show_message("Save failed", "Could not write to the SD card.");
+        return;
+    }
+    int yes = 0, with_dtc = 0;
+    for (int i = 0; i < s_db.necu; i++) {
+        yes += s_ecu_st[i] == ECU_YES;
+        with_dtc += s_ecu_ndtc[i] > 0;
+    }
+    fprintf(f, "OBD_Dash scan report\nScan: %s\nDatabase: %s\n%d of %u ECUs answered, %d with trouble codes\n",
+            s_scan_when, s_file, yes, s_db.necu, with_dtc);
+    for (int i = 0; i < s_db.necu; i++) {
+        const diagdb_ecu_t *e = &s_db.ecus[i];
+        const char *state = s_ecu_st[i] == ECU_YES ? "answers" : s_ecu_st[i] == ECU_NO ? "no answer"
+                          : s_ecu_st[i] == ECU_ERROR ? "link error" : "not asked";
+        fprintf(f, "\n%s (request %03X, answer %03X): %s\n", e->name, e->tx, e->rx, state);
+        if (s_ecu_st[i] == ECU_YES) {
+            fprintf(f, "  %s\n", s_ecu_dtc[i * ECU_DTC_LEN] ? s_ecu_dtc + i * ECU_DTC_LEN : "trouble codes not read");
+        }
+    }
     fclose(f);
     char m[112];
     snprintf(m, sizeof(m), "Saved to %.90s", path);
@@ -848,7 +963,8 @@ void view_diag_update(bool visible)
             settings_put(&c);
         }
     }
-    uv_str(&v_scan, s_job == JOB_SCAN ? "Stop" : "Scan ECUs");
+    uv_str(&v_scan, s_job == JOB_SCAN && !s_scan_dtc ? "Stop" : "Scan ECUs");
+    uv_str(&v_scan_dtc, s_job == JOB_SCAN && s_scan_dtc ? "Stop" : "Scan + DTCs");
     int yes = 0, asked = 0;
     for (int i = 0; i < s_db.necu; i++) {
         yes += s_ecu_st[i] == ECU_YES;

@@ -622,11 +622,11 @@ typedef struct _objects_t {
     lv_obj_t *obj536;
     lv_obj_t *obj537;
     lv_obj_t *obj538;
-    lv_obj_t *diag_ecu_list;
     lv_obj_t *obj539;
     lv_obj_t *obj540;
     lv_obj_t *obj541;
     lv_obj_t *obj542;
+    lv_obj_t *diag_ecu_list;
     lv_obj_t *obj543;
     lv_obj_t *obj544;
     lv_obj_t *obj545;
@@ -725,11 +725,11 @@ typedef struct _objects_t {
     lv_obj_t *obj638;
     lv_obj_t *obj639;
     lv_obj_t *obj640;
-    lv_obj_t *dash_signal_table;
     lv_obj_t *obj641;
     lv_obj_t *obj642;
     lv_obj_t *obj643;
     lv_obj_t *obj644;
+    lv_obj_t *dash_signal_table;
     lv_obj_t *obj645;
     lv_obj_t *obj646;
     lv_obj_t *obj647;
@@ -846,6 +846,10 @@ typedef struct _objects_t {
     lv_obj_t *obj758;
     lv_obj_t *obj759;
     lv_obj_t *obj760;
+    lv_obj_t *obj761;
+    lv_obj_t *obj762;
+    lv_obj_t *obj763;
+    lv_obj_t *obj764;
 } objects_t;
 
 extern objects_t objects;

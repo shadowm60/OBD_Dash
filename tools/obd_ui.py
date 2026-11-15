@@ -152,6 +152,7 @@ VARIABLES = {
     'diag_files': ('string', '""'),
     'diag_file_sel': ('integer', '0'),
     'diag_scan_text': ('string', '"Scan ECUs"'),
+    'diag_scan_dtc_text': ('string', '"Scan + DTCs"'),
     'diag_status': ('string', '""'),
     'diag_ecus': ('string', '""'),
     'diag_ecu_title': ('string', '""'),
@@ -225,7 +226,7 @@ ACTIONS = [
     'wifi_scan', 'wifi_connect', 'wifi_disconnect', 'wifi_forget',
     'ble_scan', 'ble_connect', 'ble_disconnect', 'ble_forget',
     'nav_diag_did', 'nav_diag_ecu', 'diag_did_read', 'diag_did_live',
-    'diag_scan', 'diag_read_info', 'diag_read_dtc', 'diag_clear_dtc', 'diag_save',
+    'diag_scan', 'diag_scan_dtc', 'diag_save_report', 'diag_read_info', 'diag_read_dtc', 'diag_clear_dtc', 'diag_save',
     'dash_reload', 'nav_dash_setup', 'dash_apply', 'nav_dash_signals', 'dash_tile_save', 'dash_tile_clear',
     'nav_ble_console', 'elm_atz', 'elm_ati', 'elm_atrv', 'elm_0100', 'elm_send', 'elm_clear',
     'sd_remount', 'screen_off', 'restart',
@@ -674,14 +675,16 @@ def page_dash_setup(b):
 def page_diag(b):
     iw = CW - 26
     return [
-        b.panel(CX, TOP, CW, 110, [
+        b.panel(CX, TOP, CW, 150, [
             b.label('Database (db/diag/ on the SD card, upload on the web page)', 0, 0, None, 12, GREY),
-            b.dropdown('diag_files', 'diag_file_sel', 0, 20, 330, font=16),
-            b.button('diag_scan_text', 344, 20, 170, 44, 'diag_scan', ACCENT, font=16, expr=True),
-            b.label('diag_status', 0, 72, iw, 12, GREY, expr=True, wrap=True),
+            b.dropdown('diag_files', 'diag_file_sel', 0, 20, 300, font=16),
+            b.button('diag_scan_text', 310, 20, 150, 44, 'diag_scan', ACCENT, font=16, expr=True),
+            b.button('diag_scan_dtc_text', 470, 20, iw - 470, 44, 'diag_scan_dtc', ACCENT, font=16, expr=True),
+            b.button('Save report', 0, 74, 150, 44, 'diag_save_report', font=16),
+            b.label('diag_status', 160, 72, iw - 160, 12, GREY, expr=True, wrap=True),
         ]),
         # rows built by view_diag.c (tap = ECU page)
-        ident(b.panel(CX, TOP + 120, CW, CH - 120, scroll=True, pad=8), 'diag_ecu_list'),
+        ident(b.panel(CX, TOP + 160, CW, CH - 160, scroll=True, pad=8), 'diag_ecu_list'),
     ]
 
 

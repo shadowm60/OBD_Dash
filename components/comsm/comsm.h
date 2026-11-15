@@ -41,6 +41,10 @@ typedef struct {
     uint8_t  pids_per_request;  /* in use; 1 if the ECU rejected multi-PID requests */
     uint32_t change_count;      /* increments on every state change */
     bool     monitoring;        /* adapter link: broadcast monitor running (Dash) */
+    /* diagnostic session kept open with tester present (after a positive 10 xx, xx != 01) */
+    bool     session_open;
+    uint8_t  session_type;      /* 03 extended, ... */
+    uint16_t session_tx, session_rx;
 } comsm_status_t;
 
 esp_err_t comsm_init(void);
@@ -89,6 +93,11 @@ typedef struct {
     uint8_t  data[COMSM_UDS_MAX];
     char     error[24];
 } comsm_uds_result_t;
+
+/* Sessions: after a positive answer to 10 xx (xx != 01) comsm keeps that ECU's
+ * session open: 3E 80 (tester present, no answer wanted) every 2 s when nothing
+ * else went to it, until 10 01 to it, a session on another ECU, OBD Connect,
+ * or 10 min without a request. See comsm_status_t session_*. */
 
 /* ESP_ERR_INVALID_STATE: OBD connected or a request still running. */
 esp_err_t comsm_uds_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, uint8_t len);

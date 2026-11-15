@@ -87,6 +87,16 @@ for bad in ['[did]\n* | F190 | VIN | float', '[ecu]\nA | 7E0 | 7E8\nA | 7E1 | 7E
 gen = diagdb.load(os.path.join(ROOT, 'sd', 'db', 'diag', 'generic.txt'))
 check(len(gen.ecus) == 2 and gen.ecu('Engine').rx == 0x7E8, 'generic.txt')
 
+# sessions with the S3 timeout
+t = [100.0]
+ss = diagdb.Simulator(db, clock=lambda: t[0])
+check(ss.session_of(eng) == 1, 'default session')
+ss.respond(eng, bytes.fromhex('1003')); check(ss.session_of(eng) == 3, 'extended')
+t[0] += 4; check(ss.respond(eng, bytes.fromhex('3E80')) is None, '3E 80 no answer')
+t[0] += 4; check(ss.session_of(eng) == 3, 'kept alive by 3E 80')
+t[0] += 6; check(ss.session_of(eng) == 1, 'S3 timeout')
+check(any('-> default' in e for e in ss.events), 'timeout event')
+
 # writing: dump -> parse gives the same database
 for src in (db, gen):
     text = diagdb.dump(src)

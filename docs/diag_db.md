@@ -92,7 +92,8 @@ completed this cycle, 0x80 warning indicator (MIL) requested.
 | Request | Meaning | Answer (`respond()`) |
 |---|---|---|
 | `3E 00` | tester present (ECU scan) | `7E 00` |
-| `10 01` / `10 03` | default / extended session | `50 xx 00 32 01 F4` (P2 50 ms, P2* 5000 ms) |
+| `10 01` / `10 03` | default / extended session | `50 xx 00 32 01 F4` (P2 50 ms, P2* 5000 ms); a non-default session falls back to default 5 s (S3) after the last request |
+| `3E 80` | tester present, no answer wanted (the dash sends it every 2 s while a session is open) | nothing; keeps the session alive |
 | `22 hh ll` | read DID | `62 hh ll` + data; unknown or no sim value: `7F 22 31` |
 | `19 02 mm` | DTCs by status mask | `59 02 FF` + per DTC (status & mm != 0): 3 DTC bytes + status |
 | `19 01 mm` | number of DTCs | `59 01 FF 01 nn nn` |

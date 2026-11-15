@@ -290,19 +290,42 @@ def _encode_sim(did, now):
     return raw.to_bytes(n, 'big', signed=signed)
 
 
+S3_TIMEOUT = 5.0   # s without a request: a non-default session falls back to default
+
+
 class Simulator:
-    """Answers requests from the database. Keeps the 'cleared' state per ECU."""
+    """Answers requests from the database. Keeps per ECU: the 'cleared' state and
+    the diagnostic session (10 xx); a non-default session falls back to the default
+    session S3_TIMEOUT s after the last request, like a real ECU. Session changes are
+    appended to `events` (text), for a simulator to show."""
 
     def __init__(self, db, clock=time.time):
         self.db = db
         self.clock = clock
         self.cleared = set()
+        self.sessions = {}          # ecu name (lower) -> [session, time of the last request]
+        self.events = []
+
+    def session_of(self, ecu):
+        """Current session of an ECU (1 default, 3 extended, ...), S3 timeout applied."""
+        self._s3(ecu, self.clock())
+        return self.sessions.get(ecu.name.lower(), [1, 0])[0]
+
+    def _s3(self, ecu, now):
+        s = self.sessions.get(ecu.name.lower())
+        if s and s[0] != 1 and now - s[1] > S3_TIMEOUT:
+            self.events.append(f'{ecu.name}: no request for {S3_TIMEOUT:g} s, session {s[0]:02X} -> default (01)')
+            s[0] = 1
 
     def respond(self, ecu, req):
         """req: request bytes (service + data). Returns the response bytes;
         None = no answer at all (e.g. 3E 80, suppress positive response)."""
         if not req:
             return None
+        now = self.clock()
+        self._s3(ecu, now)
+        sess = self.sessions.setdefault(ecu.name.lower(), [1, now])
+        sess[1] = now                               # every request keeps the session alive
         sid = req[0]
         if sid not in ecu.services:
             return bytes([0x7F, sid, 0x11])
@@ -313,6 +336,9 @@ class Simulator:
         if sid == 0x10:
             if len(req) != 2:
                 return bytes([0x7F, sid, 0x13])
+            if req[1] != sess[0]:
+                self.events.append(f'{ecu.name}: session {sess[0]:02X} -> {req[1]:02X}')
+            sess[0] = req[1]
             return bytes([0x50, req[1], 0x00, 0x32, 0x01, 0xF4])
         if sid == 0x22:
             if len(req) < 3 or len(req) % 2 != 1:

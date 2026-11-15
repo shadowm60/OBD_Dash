@@ -23,7 +23,7 @@ static const char *TAG = "comsm";
 
 typedef enum { CMD_CONNECT, CMD_DISCONNECT, CMD_TOGGLE, CMD_READ_DTC, CMD_CLEAR_DTC, CMD_FREEZE_FRAME } cmd_t;
 
-typedef enum { REQ_NONE, REQ_PROBE, REQ_DISCOVERY, REQ_POLL, REQ_DIAG, REQ_UDS } req_kind_t;
+typedef enum { REQ_NONE, REQ_PROBE, REQ_DISCOVERY, REQ_POLL, REQ_DIAG, REQ_UDS, REQ_KEEP } req_kind_t;
 
 static QueueHandle_t  s_cmd_queue;
 static comsm_status_t s_status;
@@ -49,6 +49,14 @@ static uint32_t          s_uds_tx, s_uds_rx;
 static uint8_t           s_uds_req[7], s_uds_len;
 static comsm_uds_result_t s_uds;
 static uint32_t          s_uds_last_ms;
+static uint32_t          s_cur_tx, s_cur_rx;        /* UDS request being run */
+static uint8_t           s_cur_sid, s_cur_sub;
+/* open diagnostic session, kept alive with 3E 80 (task only) */
+#define KEEP_PERIOD_MS   2000
+#define SESSION_IDLE_MS  (10 * 60 * 1000)
+static bool              s_sess_on;
+static uint8_t           s_sess_type;
+static uint32_t          s_sess_tx, s_sess_rx, s_sess_next_ms, s_sess_user_ms;
 static uint8_t        s_batch_limit;        /* what this ECU accepts, <= s_batch_cfg */
 static uint8_t        s_batch_applied;      /* s_batch_cfg value s_batch_limit was set from */
 static uint8_t        s_discovery_pid;
@@ -174,7 +182,78 @@ static void uds_service(void)
     portEXIT_CRITICAL(&s_lock);
     obd_client_set_link((obd_link_t)s_link_cfg);
     obd_client_set_ids(tx, rx);
+    s_cur_tx = tx;
+    s_cur_rx = rx;
+    s_cur_sid = req[0];
+    s_cur_sub = len > 1 ? req[1] : 0;
     send_raw(REQ_UDS, req, len);
+}
+
+static void st_session(comsm_status_t *s, uint32_t arg)
+{
+    s->session_open = s_sess_on;
+    s->session_type = s_sess_type;
+    s->session_tx = (uint16_t)s_sess_tx;
+    s->session_rx = (uint16_t)s_sess_rx;
+}
+
+static void session_end(const char *why)
+{
+    if (s_sess_on) {
+        ESP_LOGI(TAG, "session %02X on %03lX ended (%s)", s_sess_type, (unsigned long)s_sess_tx, why);
+        s_sess_on = false;
+        status_update(st_session, 0);
+    }
+}
+
+/* after a UDS answer: follow session changes, push the keepalive back */
+static void session_track(bool positive)
+{
+    uint32_t now = can_if_now_ms();
+    if (positive && s_cur_sid == 0x10) {
+        if (s_cur_sub == 0x01) {
+            if (s_sess_on && s_sess_tx == s_cur_tx) {
+                session_end("back to the default session");
+            }
+        } else {
+            if (s_sess_on && s_sess_tx != s_cur_tx) {
+                session_end("session on another ECU");
+            }
+            s_sess_on = true;
+            s_sess_type = s_cur_sub;
+            s_sess_tx = s_cur_tx;
+            s_sess_rx = s_cur_rx;
+            status_update(st_session, 0);
+            ESP_LOGI(TAG, "session %02X on %03lX: tester present every %d s", s_sess_type,
+                     (unsigned long)s_sess_tx, KEEP_PERIOD_MS / 1000);
+        }
+    }
+    if (s_sess_on && s_cur_tx == s_sess_tx) {
+        s_sess_next_ms = now + KEEP_PERIOD_MS;  /* any request keeps the session alive */
+        s_sess_user_ms = now;
+    }
+}
+
+/* idle: send 3E 80 to the session's ECU when due */
+static void keep_service(void)
+{
+    if (!s_sess_on || s_state != COMSM_IDLE || s_pending != REQ_NONE || s_uds_want) {
+        return;
+    }
+    uint32_t now = can_if_now_ms();
+    if ((int32_t)(now - (s_sess_user_ms + SESSION_IDLE_MS)) >= 0) {
+        session_end("10 min without a request");
+        return;
+    }
+    if ((int32_t)(now - s_sess_next_ms) < 0) {
+        return;
+    }
+    static const uint8_t TP[2] = { 0x3E, 0x80 };
+    obd_client_set_link((obd_link_t)s_link_cfg);
+    obd_client_set_ids(s_sess_tx, s_sess_rx);
+    send_raw(REQ_KEEP, TP, sizeof(TP));
+    s_sess_next_ms = now + KEEP_PERIOD_MS;
+    s_uds_last_ms = now;                        /* keeps the adapter's Dash monitor paused */
 }
 
 esp_err_t comsm_uds_request(uint32_t tx_id, uint32_t rx_id, const uint8_t *req, uint8_t len)
@@ -252,8 +331,11 @@ void comsm_set_link_monitor(bool on, uint32_t filter, uint32_t mask, comsm_frame
     s_mon_want = on;
 }
 
+static void session_end(const char *why);
+
 static void start_connect(void)
 {
+    session_end("OBD connect");
     monitor_stop();                         /* OBD has the adapter now */
     obd_client_abort();
     obd_client_set_link((obd_link_t)s_link_cfg);
@@ -395,9 +477,17 @@ static void on_request_finished(obd_req_status_t st)
         s_uds.seq++;
         portEXIT_CRITICAL(&s_lock);
         s_uds_last_ms = can_if_now_ms();
+        session_track(us == COMSM_UDS_DONE);
         obd_client_set_functional();        /* hardware filter back to OBD */
         break;
     }
+
+    case REQ_KEEP:                          /* 3E 80: no answer expected */
+        if (st == OBD_REQ_NEGATIVE) {
+            ESP_LOGW(TAG, "tester present refused (NRC %02X)", obd_client_nrc());
+        }
+        obd_client_set_functional();
+        break;
 
     case REQ_NONE:
         break;
@@ -545,6 +635,7 @@ static void comsm_task(void *arg)
     while (1) {
         /* Sleep on the command queue while there is nothing to do on the bus. */
         uds_service();
+        keep_service();
         bool busy = (s_state != COMSM_IDLE && s_state != COMSM_RETRY_WAIT) || s_pending != REQ_NONE;
         if (!busy && monitor_service()) {
             busy = true;                    /* the monitor poll waits for the adapter itself */

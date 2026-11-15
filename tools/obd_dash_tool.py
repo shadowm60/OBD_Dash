@@ -398,7 +398,9 @@ class App(tk.Tk):
             self.status.set(str(e))
             return
         self._save_cfg()
+        sess = st.get('session')
         self.status.set(f'dash reachable: OBD {st.get("obd")}{", API LOCKED (restart the dash)" if st.get("locked") else ""}'
+                        f'{", session " + sess + " kept open by the dash (10 01 ends it)" if sess else ""}'
                         f'{"" if st.get("obd") == "idle" else " - disconnect OBD on the dash to use the console"}')
 
     # ---- console
@@ -437,6 +439,14 @@ class App(tk.Tk):
                 return
         for line in describe(self.db, ecu, req, rsp):
             self._say('  ' + line)
+        if rsp and rsp[0] == 0x50 and len(rsp) >= 2:
+            self._say('  session open: ' + ('the dash keeps it alive (tester present every 2 s) until 10 01'
+                                           if not self.local.get() else 'built-in simulator: expires 5 s after the last request')
+                      if rsp[1] != 0x01 else '  back in the default session')
+        if self.local.get():
+            for ev in self.sim.events:
+                self._say('  [simulator] ' + ev)
+            self.sim.events.clear()
         self.last_did = None
         if rsp and rsp[0] == 0x62 and len(rsp) >= 3:
             self.last_did = (ecu, rsp[1] << 8 | rsp[2], rsp[3:])

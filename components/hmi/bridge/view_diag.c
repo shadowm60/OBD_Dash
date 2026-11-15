@@ -854,6 +854,14 @@ void view_diag_update(bool visible)
         yes += s_ecu_st[i] == ECU_YES;
         asked += s_ecu_st[i] == ECU_YES || s_ecu_st[i] == ECU_NO || s_ecu_st[i] == ECU_ERROR;
     }
+    comsm_status_t cs;
+    comsm_get_status(&cs);
+    if (cs.session_open && s_msg[0] == '\0') {
+        snprintf(s_msg, sizeof(s_msg), "Session %02X open on %03X (tester present every 2 s).",
+                 cs.session_type, cs.session_tx);
+    } else if (!cs.session_open && strncmp(s_msg, "Session ", 8) == 0) {
+        s_msg[0] = '\0';
+    }
     if (s_db.necu == 0) {
         uv_strf(&v_status, "%s", s_msg[0] ? s_msg : "no database loaded");
     } else {

@@ -390,6 +390,13 @@ built-in diagdb.Simulator, quick buttons, decoded answers, "Add this DID" from a
 answer), Save (diagdb.dump: canonical layout, comments not kept), Upload (/up/diag/).
 Settings in ~/.obd_dash_tool.json. Tested on the PC with a mock dash (hidden window).
 
+**Session keepalive (2026-11-15, owner noticed 10 03 was not kept alive; built, not run
+yet):** comsm tracks a positive 10 xx (xx != 01) in REQ_UDS (`session_track`) and sends
+3E 80 (REQ_KEEP, no answer expected, timeout = OK) to that ECU every 2 s when nothing
+else went to it; ends on 10 01 to it, a session on another ECU, OBD connect, 10 min
+without a request. Status `session_open/type/tx/rx` -> Diag status line, /api/status
+`session`, PC tool. diagdb.Simulator: sessions per ECU with S3 = 5 s, `events`.
+
 **D. Database on the SD card + PC tool**
 - `/sdcard/db/`: `manifest.json` (version, files, checksums), `ecus/<make>.json` (name,
   address, request/response CAN ID, protocol), `dtc/<make>_<ecu>.tsv` (code, text),

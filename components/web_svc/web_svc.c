@@ -356,9 +356,13 @@ static esp_err_t status_get(httpd_req_t *req)
 {
     comsm_status_t cs;
     comsm_get_status(&cs);
-    char b[96];
-    snprintf(b, sizeof(b), "{\"obd\":\"%s\",\"pin\":true,\"locked\":%s}", comsm_state_name(cs.state),
-             s_pin_fails >= 10 ? "true" : "false");
+    char b[160];
+    snprintf(b, sizeof(b), "{\"obd\":\"%s\",\"pin\":true,\"locked\":%s,\"session\":\"%s\"}",
+             comsm_state_name(cs.state), s_pin_fails >= 10 ? "true" : "false", "");
+    if (cs.session_open) {
+        snprintf(b, sizeof(b), "{\"obd\":\"%s\",\"pin\":true,\"locked\":%s,\"session\":\"%02X on %03X\"}",
+                 comsm_state_name(cs.state), s_pin_fails >= 10 ? "true" : "false", cs.session_type, cs.session_tx);
+    }
     return json(req, "200 OK", b);
 }
 

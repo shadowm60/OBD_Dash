@@ -358,7 +358,7 @@ status) are only for it. `tools/diagdb.py` = Python reference: parse / check / d
 Starter file `sd/db/diag/generic.txt` (repo folder `sd/` mirrors the SD card): standard
 addresses 7E0/7E8, 7E1/7E9, identification DIDs F187.., SAE generic DTC texts.
 **C0 done** (format + Python).
-**C1 done, built, not run yet:** `components/diagdb` = C parser of the same format (sim
+**C1 done, tested OK (2026-11-15, owner's simulator):** `components/diagdb` = C parser of the same format (sim
 columns skipped; PC test `tools/test/test_diagdb_c.sh`, also parses generic.txt).
 UDS requests: `comsm_uds_request(tx, rx, req<=7)` / `comsm_uds_get()`, run by the comsm
 task only while OBD is idle (REQ_UDS), over the chosen link; pauses the adapter's Dash
@@ -369,7 +369,7 @@ UDS request. obd_client_set_link only re-inits the adapter when the link changes
 re-inits after the BLE serial port comes back. web_svc: `diag/` group, .txt upload into
 /db/diag. Diag page: database dropdown (setting `diag_db`), Scan ECUs (3E 00 to each ECU,
 NRC = present too), list with state.
-**C2 done, built, not run yet:** ECU rows are lv buttons built in view_diag.c in
+**C2 done, tested OK (2026-11-15: engine + transmission identified):** ECU rows are lv buttons built in view_diag.c in
 `objects.diag_ecu_list` (tap -> sub-page `diag_ecu`). ECU page: Identification (all DB
 DIDs F180..F1FF of the ECU, decoded), Read DTCs (19 02 FF, DB text incl. generic failure
 type fallback, status: failed now / confirmed / pending / MIL), Clear DTCs (confirm box,

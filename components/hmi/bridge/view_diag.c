@@ -36,6 +36,7 @@
 #include "sd_card.h"
 #include "comsm.h"
 #include "diagdb.h"
+#include "web_svc.h"
 
 static const char *TAG = "view_diag";
 
@@ -856,9 +857,10 @@ void view_diag_update(bool visible)
     if (s_db.necu == 0) {
         uv_strf(&v_status, "%s", s_msg[0] ? s_msg : "no database loaded");
     } else {
-        uv_strf(&v_status, "%s: %u ECUs, %u DIDs, %u DTC texts. %s%d of %d answered. Tap an ECU for details.%s%s",
+        uv_strf(&v_status, "%s: %u ECUs, %u DIDs, %u DTC texts. %s%d of %d answered. Tap an ECU for details. "
+                "PC tool PIN %s.%s%s",
                 s_file, s_db.necu, s_db.ndid, s_db.ndtc, s_job == JOB_SCAN ? "Scanning... " : "", yes, asked,
-                s_msg[0] ? "  " : "", s_msg);
+                web_svc_pin(), s_msg[0] ? "  " : "", s_msg);
     }
     update_rows();
 }

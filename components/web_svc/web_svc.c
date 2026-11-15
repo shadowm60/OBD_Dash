@@ -13,6 +13,11 @@
 #include "esp_vfs_fat.h"
 #include "sd_card.h"
 #include "datalog.h"
+#include "esp_random.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "comsm.h"
 
 static const char *TAG = "web_svc";
 
@@ -311,14 +316,144 @@ static esp_err_t up_post(httpd_req_t *req)
     return httpd_resp_sendstr(req, "ok");
 }
 
+/* ---------------------------------------------------------------- PC tool API
+ *   GET  /api/status                 {"obd":"idle","pin":true}   (no PIN)
+ *   POST /api/uds?pin=&tx=&rx=&req=  one UDS request (hex), read services only:
+ *        {"state":"done"|"negative"|"timeout"|"error","nrc":"31","data":"62F190...","error":"..."}
+ * The PIN (4 digits, new at every boot) is shown on the dash (Wi-Fi / Diag
+ * page). Wrong PIN: 1 s delay; after 10 wrong ones the API is locked until
+ * the next boot. */
+
+static char     s_pin[5];
+static int      s_pin_fails;
+
+const char *web_svc_pin(void)
+{
+    return s_pin;
+}
+
+/* read-only: tester present, default / extended session, read DID, read DTCs */
+static bool allowed(const uint8_t *req, int len)
+{
+    switch (req[0]) {
+    case 0x3E: return len == 2;
+    case 0x10: return len == 2 && (req[1] == 0x01 || req[1] == 0x03);
+    case 0x22: return len >= 3 && (len - 1) % 2 == 0;
+    case 0x19: return len >= 2;
+    default:   return false;
+    }
+}
+
+static esp_err_t json(httpd_req_t *req, const char *status, const char *body)
+{
+    httpd_resp_set_status(req, status);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(req, body);
+}
+
+static esp_err_t status_get(httpd_req_t *req)
+{
+    comsm_status_t cs;
+    comsm_get_status(&cs);
+    char b[96];
+    snprintf(b, sizeof(b), "{\"obd\":\"%s\",\"pin\":true,\"locked\":%s}", comsm_state_name(cs.state),
+             s_pin_fails >= 10 ? "true" : "false");
+    return json(req, "200 OK", b);
+}
+
+static int hexbytes(const char *s, uint8_t *out, int max)
+{
+    int n = 0;
+    while (*s && n < max) {
+        if (*s == ' ') { s++; continue; }
+        if (hexv(s[0]) < 0 || hexv(s[1]) < 0) return -1;
+        out[n++] = (uint8_t)(hexv(s[0]) << 4 | hexv(s[1]));
+        s += 2;
+    }
+    return *s ? -1 : n;
+}
+
+static esp_err_t uds_post(httpd_req_t *req)
+{
+    char q[160], pin[8] = "", tx[8] = "", rx[8] = "", rq[40] = "";
+    if (httpd_req_get_url_query_str(req, q, sizeof(q)) != ESP_OK) {
+        return json(req, "400 Bad Request", "{\"error\":\"pin, tx, rx and req are needed\"}");
+    }
+    httpd_query_key_value(q, "pin", pin, sizeof(pin));
+    httpd_query_key_value(q, "tx", tx, sizeof(tx));
+    httpd_query_key_value(q, "rx", rx, sizeof(rx));
+    httpd_query_key_value(q, "req", rq, sizeof(rq));
+    if (s_pin_fails >= 10) {
+        return json(req, "403 Forbidden", "{\"error\":\"locked after 10 wrong PINs: restart the dash\"}");
+    }
+    if (strcmp(pin, s_pin) != 0) {
+        s_pin_fails++;
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        ESP_LOGW(TAG, "API: wrong PIN (%d)", s_pin_fails);
+        return json(req, "403 Forbidden", "{\"error\":\"wrong PIN (shown on the dash: Wi-Fi or Diag page)\"}");
+    }
+    char *e1, *e2;
+    unsigned long t = strtoul(tx, &e1, 16), r = strtoul(rx, &e2, 16);
+    uint8_t data[7];
+    int n = hexbytes(rq, data, sizeof(data));
+    if (!tx[0] || !rx[0] || *e1 || *e2 || t > 0x7FF || r > 0x7FF || n <= 0) {
+        return json(req, "400 Bad Request", "{\"error\":\"tx, rx: 11-bit hex IDs; req: 1..7 hex bytes\"}");
+    }
+    if (!allowed(data, n)) {
+        return json(req, "403 Forbidden",
+                    "{\"error\":\"only read requests: 3E 00, 10 01, 10 03, 22 <DID>.., 19 ..\"}");
+    }
+    /* the Diag page may be using the link: wait up to 2 s for a free slot */
+    esp_err_t err = ESP_ERR_INVALID_STATE;
+    comsm_uds_result_t res;
+    comsm_uds_get(&res);
+    uint32_t seq = res.seq;
+    for (int i = 0; i < 40 && (err = comsm_uds_request(t, r, data, (uint8_t)n)) == ESP_ERR_INVALID_STATE; i++) {
+        comsm_status_t cs;
+        comsm_get_status(&cs);
+        if (cs.state != COMSM_IDLE) {
+            return json(req, "409 Conflict", "{\"error\":\"OBD is connected: disconnect it on the dash first\"}");
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+        comsm_uds_get(&res);
+        seq = res.seq;
+    }
+    if (err != ESP_OK) {
+        return json(req, "409 Conflict", "{\"error\":\"the dash is busy, try again\"}");
+    }
+    int64_t end = esp_timer_get_time() + 8000000;       /* longer than response pending (5 s) */
+    do {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        comsm_uds_get(&res);
+    } while ((res.state == COMSM_UDS_BUSY || res.seq == seq) && esp_timer_get_time() < end);
+    static const char *const ST[] = { "idle", "busy", "done", "negative", "timeout", "error" };
+    char *b = heap_caps_malloc(COMSM_UDS_MAX * 2 + 160, MALLOC_CAP_SPIRAM);
+    if (b == NULL) {
+        return json(req, "500 Internal Server Error", "{\"error\":\"out of memory\"}");
+    }
+    int o = snprintf(b, 160, "{\"state\":\"%s\",\"nrc\":\"%02X\",\"error\":\"%s\",\"data\":\"",
+                     res.seq == seq ? "timeout" : ST[res.state], res.nrc, res.error);
+    for (int i = 0; i < res.len && res.seq != seq; i++) {
+        o += sprintf(b + o, "%02X", res.data[i]);
+    }
+    strcpy(b + o, "\"}");
+    ESP_LOGI(TAG, "API: %03lX %s -> %s", t, rq, ST[res.state]);
+    esp_err_t e = json(req, "200 OK", b);
+    heap_caps_free(b);
+    return e;
+}
+
 /* ---------------------------------------------------------------- API */
 
 esp_err_t web_svc_init(void)
 {
+    snprintf(s_pin, sizeof(s_pin), "%04lu", (unsigned long)(esp_random() % 10000));
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.stack_size = 6144;
     cfg.task_caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;    /* SD + sockets only, never writes flash */
     cfg.max_open_sockets = 4;
+    cfg.max_uri_handlers = 12;
     cfg.lru_purge_enable = true;
     cfg.uri_match_fn = httpd_uri_match_wildcard;
     cfg.core_id = 0;                /* CAN / OBD run on core 1 */
@@ -335,6 +470,8 @@ esp_err_t web_svc_init(void)
         { .uri = "/dl/*",     .method = HTTP_GET,  .handler = dl_get },
         { .uri = "/del/*",    .method = HTTP_POST, .handler = del_post },
         { .uri = "/up/*",     .method = HTTP_POST, .handler = up_post },
+        { .uri = "/api/status", .method = HTTP_GET, .handler = status_get },
+        { .uri = "/api/uds",  .method = HTTP_POST, .handler = uds_post },
     };
     for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
         httpd_register_uri_handler(s_srv, &uris[i]);

@@ -14,7 +14,10 @@
  *   POST /del/<file>       delete
  *   POST /up/dbc/<file>    upload a .dbc (Dash page) into /sdcard/db/dbc/
  *
- * <file> is a log name in the card root, or dbc/<name>.dbc.
+ *   GET  /api/status       PC tool: dash state (no PIN)
+ *   POST /api/uds?pin=&tx=&rx=&req=   PC tool: one read-only UDS request
+ *
+ * <file> is a log name in the card root, dbc/<name>.dbc or diag/<name>.txt.
  * Only plain file names in the card's root with one of the log prefixes (no
  * '/', no ".."). No password: anyone on the same network can use it. The
  * server task's stack is in PSRAM; files are streamed in 8 KB blocks.
@@ -33,6 +36,9 @@ extern "C" {
 esp_err_t web_svc_init(void);
 
 bool web_svc_running(void);
+
+/* PIN of the PC tool API (/api/uds), new at every boot; shown on the dash. */
+const char *web_svc_pin(void);
 
 #ifdef __cplusplus
 }

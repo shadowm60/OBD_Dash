@@ -107,7 +107,7 @@ void view_wifi_update(bool visible)
                       st.ip, st.netmask, st.gw, st.dns, st.rssi, st.channel, up);
         o += snprintf(buf + o, sizeof(buf) - o, "Time:  %s\n", st.time_synced ? "synchronised (SNTP)" : "waiting for SNTP");
         if (web_svc_running()) {
-            o += snprintf(buf + o, sizeof(buf) - o, "Log files:  http://%s/\n", st.ip);
+            o += snprintf(buf + o, sizeof(buf) - o, "Log files:  http://%s/\nPC tool PIN:  %s\n", st.ip, web_svc_pin());
         }
     }
     if (st.last_reason && st.state != WIFI_SVC_CONNECTED) {

@@ -87,5 +87,19 @@ for bad in ['[did]\n* | F190 | VIN | float', '[ecu]\nA | 7E0 | 7E8\nA | 7E1 | 7E
 gen = diagdb.load(os.path.join(ROOT, 'sd', 'db', 'diag', 'generic.txt'))
 check(len(gen.ecus) == 2 and gen.ecu('Engine').rx == 0x7E8, 'generic.txt')
 
+# writing: dump -> parse gives the same database
+for src in (db, gen):
+    text = diagdb.dump(src)
+    back = diagdb.parse(text)
+    check(back == src, 'dump / parse round trip')
+check(diagdb.dump(db).count('[ecu]') == 1 and 'U0100-87' in diagdb.dump(db), 'dump content')
+bad_db = diagdb.parse(TEXT)
+bad_db.dids[0].name = 'VIN # comment'
+try:
+    diagdb.dump(bad_db)
+    check(False, 'dump must refuse "#" in a value')
+except diagdb.DbError:
+    pass
+
 print(f'{fails} FAILED' if fails else 'all diagdb tests passed')
 sys.exit(1 if fails else 0)

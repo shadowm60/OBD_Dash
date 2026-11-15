@@ -380,6 +380,16 @@ the ECU's DB DIDs (entry 0 = hex field), Read, Live (1 s), decoded result + raw 
 if printable), time and count; unknown DIDs show raw bytes. generic.txt got F405 / F40C /
 F40D (OBD PIDs over UDS, ISO 27145 F4xx) with sweeping sim values for Live.
 
+**D2 done, built, not run on the dash yet:** D2a `web_svc`: `GET /api/status`,
+`POST /api/uds?pin=&tx=&rx=&req=` (hex) -> comsm_uds_request, JSON answer; read services
+only (3E, 10 01 / 10 03, 22, 19); PIN 4 digits from esp_random at boot, shown on the Wi-Fi
+page and the Diag status line; wrong PIN 1 s delay, 10 lock until reboot; 409 while OBD is
+connected. D2b `tools/obd_dash_tool.py` (Tk, stdlib only): ECUs / DIDs / DTCs tabs (add /
+edit / delete, entries checked by diagdb.parse, ECU rename follows), Console (dash or the
+built-in diagdb.Simulator, quick buttons, decoded answers, "Add this DID" from a 62
+answer), Save (diagdb.dump: canonical layout, comments not kept), Upload (/up/diag/).
+Settings in ~/.obd_dash_tool.json. Tested on the PC with a mock dash (hidden window).
+
 **D. Database on the SD card + PC tool**
 - `/sdcard/db/`: `manifest.json` (version, files, checksums), `ecus/<make>.json` (name,
   address, request/response CAN ID, protocol), `dtc/<make>_<ecu>.tsv` (code, text),

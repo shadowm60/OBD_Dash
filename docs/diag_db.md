@@ -108,6 +108,13 @@ dash -> 7E0  22 F1 90       sim -> 7E8  62 F1 90 57 56 57 5A 5A 5A 31 4B 5A 36 5
 dash -> 7E0  19 02 FF       sim -> 7E8  59 02 FF 03 01 00 2F
 ```
 
+## Editing
+
+`tools/obd_dash_tool.py` edits the file in tables, uploads it to the dash and has a
+console to try requests (through the dash or against the built-in simulator), see the
+README. A file saved by the tool is rewritten in the standard layout; comments are not
+kept.
+
 ## Checking a file
 
 ```sh

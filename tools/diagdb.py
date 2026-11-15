@@ -204,6 +204,50 @@ def load(path):
         return parse(f.read())
 
 
+# ---------------------------------------------------------------- writing
+
+def _g(x, dflt):
+    return '' if x == dflt else f'{x:g}'
+
+
+def _table(rows):
+    """rows of columns -> lines with aligned '|' (trailing empty columns dropped)."""
+    rows = [list(r) for r in rows]
+    for r in rows:
+        for c in r:
+            if '#' in c or '|' in c or '\n' in c:
+                raise DbError(f'"#", "|" and line breaks are not allowed in a value: {c!r}')
+    for r in rows:
+        while r and r[-1] == '':
+            r.pop()
+    n = max((len(r) for r in rows), default=0)
+    w = [max((len(r[i]) for r in rows if i < len(r)), default=0) for i in range(n)]
+    out = []
+    for r in rows:
+        cells = [c.ljust(w[i]) if i < len(r) - 1 else c for i, c in enumerate(r)]
+        out.append(' | '.join(cells).rstrip())
+    return out
+
+
+def dump(db, header=None):
+    """Db -> file text in the canonical layout (comments of an edited file are not kept,
+    except `header`)."""
+    lines = []
+    for h in (header or ['OBD_Dash diagnostic database, format: docs/diag_db.md']):
+        lines.append(f'# {h}' if h else '#')
+    lines += ['', '[ecu]', '# name | tx | rx | protocol | services (sim)']
+    lines += _table([[e.name, f'{e.tx:03X}', f'{e.rx:03X}', e.protocol,
+                      '' if e.services == DEFAULT_SERVICES else ' '.join(f'{x:02X}' for x in e.services)]
+                     for e in db.ecus])
+    lines += ['', '[did]', '# ecu | did | name | type | scale | offset | unit | sim']
+    lines += _table([[d.ecu, f'{d.did:04X}', d.name, d.type, _g(d.scale, 1.0), _g(d.offset, 0.0), d.unit, d.sim]
+                     for d in db.dids])
+    lines += ['', '[dtc]', '# ecu | code | text | status (sim)']
+    lines += _table([[d.ecu, format_dtc_code(d.code), d.text, '' if d.status is None else f'{d.status:02X}']
+                     for d in db.dtcs])
+    return '\n'.join(lines) + '\n'
+
+
 # ---------------------------------------------------------------- decoding (dash side)
 
 def decode(did, data):

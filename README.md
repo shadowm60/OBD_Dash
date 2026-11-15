@@ -216,6 +216,22 @@ The layout lives in `components/hmi/OBD_Dash.eez-project` (EEZ Studio 0.29). On 
 with a meter, the scale, arcs and labels lying fully inside a meter are drawn once into a
 cached image; values placed on a meter must sit inside a panel, like the tiles do.
 
+## PC tool (diagnostic database)
+
+`python3 tools/obd_dash_tool.py sd/db/diag/generic.txt` (Python 3 with Tk, nothing else):
+
+- **ECUs / DIDs / DTCs** tabs: add, edit, delete entries (checked like the dash reads
+  them); **Save** writes the file in the standard layout (`docs/diag_db.md`; comments in
+  an edited file are not kept).
+- **Upload to dash**: the dash's IP (Wi-Fi page) -> the file lands in `db/diag/`; open
+  the Diag page again to load it.
+- **Console**: pick an ECU, type a request (`22 F1 90`) or use the quick buttons; the
+  answer is shown decoded. It goes through the dash (IP + the **PC tool PIN** shown on
+  the dash's Wi-Fi / Diag page; OBD must be disconnected on the dash) or, ticked, to the
+  built-in simulator. **Add this DID** turns an answer into a database entry. The dash
+  only forwards read requests (3E, 10 01 / 10 03, 22, 19); wrong PINs are slowed down,
+  10 lock the API until the dash restarts.
+
 ## Logging
 
 Switched on the CAN page (Log raw CAN, All traffic) and the OBD page (Log parameters);

@@ -12,3 +12,6 @@ __pycache__/
 #ESP-IDF generated config (regenerated from sdkconfig.defaults) - do not store
 sdkconfig
 sdkconfig.old
+
+# EEZ Studio editor state (open tabs, zoom), per user
+*.eez-project-ui-state

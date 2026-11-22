@@ -24,10 +24,14 @@ extern "C" {
 #define DIAGDB_ALL       (-1)        /* entry for every ECU ('*') */
 
 typedef enum { DIAGDB_ASCII, DIAGDB_HEX, DIAGDB_U8, DIAGDB_U16, DIAGDB_U32, DIAGDB_S8, DIAGDB_S16, DIAGDB_S32 } diagdb_type_t;
+typedef enum { DIAGDB_PROTOCOL_UDS, DIAGDB_PROTOCOL_KWP, DIAGDB_PROTOCOL_AUTO } diagdb_protocol_t;
 
 typedef struct {
     char     name[DIAGDB_NAME_LEN];
     uint16_t tx, rx;
+    diagdb_protocol_t protocol;
+    uint8_t  kwp_dtc_req[7];         /* complete request, including service 0x18 */
+    uint8_t  kwp_dtc_len;
 } diagdb_ecu_t;
 
 typedef struct {
@@ -40,6 +44,15 @@ typedef struct {
 } diagdb_did_t;
 
 typedef struct {
+    int16_t       ecu;
+    uint8_t       local_id;
+    char          name[DIAGDB_TEXT_LEN];
+    diagdb_type_t type;
+    double        scale, offset;
+    char          unit[DIAGDB_UNIT_LEN];
+} diagdb_kwp_id_t;
+
+typedef struct {
     int16_t  ecu;
     uint32_t code;                  /* 3 bytes: SAE code + failure type byte */
     char     text[DIAGDB_TEXT_LEN];
@@ -48,9 +61,10 @@ typedef struct {
 typedef struct {
     diagdb_ecu_t *ecus;
     diagdb_did_t *dids;
+    diagdb_kwp_id_t *kwp_ids;
     diagdb_dtc_t *dtcs;
-    uint16_t      max_ecu, max_did, max_dtc;
-    uint16_t      necu, ndid, ndtc;
+    uint16_t      max_ecu, max_did, max_kwp_id, max_dtc;
+    uint16_t      necu, ndid, nkwp_id, ndtc;
     char          error[80];        /* first problem: "line 12: ..." ("" = none) */
     uint32_t      skipped;          /* lines not understood (the first one in error) */
 } diagdb_t;
@@ -62,6 +76,8 @@ bool diagdb_parse(diagdb_t *db, FILE *f);
 int  diagdb_find_ecu(const diagdb_t *db, const char *name);
 /* ECU specific entry first, then '*'; NULL if none. */
 const diagdb_did_t *diagdb_find_did(const diagdb_t *db, int ecu, uint16_t did);
+/* ECU-specific KWP local identifier first, then '*'. */
+const diagdb_kwp_id_t *diagdb_find_kwp_id(const diagdb_t *db, int ecu, uint8_t local_id);
 /* ECU text, '*' text, then the same SAE code with failure type 00; NULL if none. */
 const char *diagdb_dtc_text(const diagdb_t *db, int ecu, uint32_t code);
 
@@ -69,7 +85,7 @@ const char *diagdb_dtc_text(const diagdb_t *db, int ecu, uint32_t code);
 bool diagdb_parse_dtc(const char *s, uint32_t *code);
 /* code -> "P0301" or "P0301-1C" (buf >= 10). */
 void diagdb_format_dtc(uint32_t code, char *buf);
-/* Data bytes of a 0x62 answer -> text ("850 rpm", "WVW...", "01 02 0A"). */
+/* Identifier data bytes -> text ("850 rpm", "WVW...", "01 02 0A"). */
 void diagdb_decode(const diagdb_did_t *d, const uint8_t *data, int len, char *out, int out_len);
 
 #ifdef __cplusplus

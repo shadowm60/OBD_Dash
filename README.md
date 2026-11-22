@@ -25,7 +25,7 @@ hmi             EEZ Studio UI (src/ui, generated) + bridge/ (hand written)
                   live_values.c signals -> v_* text variables of the live screens ("--" when stale)
 comsm           connection state machine task, owns the OBD client
                 comsm_diag: DTC read/clear + freeze frame jobs (pause polling while running)
-obd             obd_client (one request in flight, timeout, NRC, addressing)
+obd             obd_client (one request in flight, timeout, NRC, addressing; ISO-TP for UDS/KWP)
                 obd_pids   (Service 01 catalogue in flash, support/enable state, scheduler)
 isotp           ISO 15765-2 transport (isotp-c) + glue to can_if
 can_if          esp_twai driver: start / restart (bitrate, listen-only), TX queue with retries,
@@ -86,7 +86,7 @@ the page buttons and a status line (OBD, REC, Wi-Fi, BLE, SD card, clock) on eve
 | **OBD** | Connect / disconnect, ECU status, MIL telltale next to Connect while connected (red = MIL on, amber = stored codes without MIL, green = none; tap = DTC page), the three live views, Select parameters, read speed, log parameters. Uses the **Car interface** chosen on the IO page |
 | **DTC** | Read / clear / save the trouble codes, freeze frame. Read (and Clear, freeze frame) connect to the ECU first when OBD is not connected; it stays connected afterwards |
 | **Dash** | 3 x 3 tiles with signals decoded from a CAN broadcast (rusEFI first) with a DBC file in `/db/dbc/` on the SD card (upload it on the web page); `--` when a signal stops. **Settings**: DBC file, base ID (bus ID of the DBC's first message; rusEFI's CAN base is configurable, default 512 = 0x200; all 11-bit IDs move with it), All signals (table). **Tap a tile** to choose its signal and warning / alarm limits (below / above): amber = warning, red blinking = alarm. Layout and limits are saved per DBC in `/db/dash/<dbc>.txt` (`1 = RPM | whi=6500 ahi=7200`), editable by hand. Listen only. Source = the **Car interface** (IO page): board CAN at the CAN page bitrate, or the BLE adapter in monitor mode (ID filter from the DBC; paused while OBD uses the adapter) |
-| **Diag** | UDS diagnostics from a database file per make in `/db/diag/` on the SD card (upload it on the web page): choose the file, **Scan ECUs** (Tester Present to each ECU of the file, over the car interface, while OBD is disconnected), list of who answers; **Scan + DTCs** also reads each answering ECU's trouble codes (count in the list), **Save report** writes all of them to `dtc_scan_<date>.txt`; **tap an ECU**: Identification (part / software / serial numbers, VIN... from the database), Read DTCs (with texts and status), Clear DTCs (asks first), Save to SD (`dtc_<ECU>_<date>.txt`), **Read data**: any DID from the database or typed in hex, once or Live (every second), decoded + raw bytes; format and simulator notes in [docs/diag_db.md](docs/diag_db.md), starter file `sd/db/diag/generic.txt`, checker / simulator helper `tools/diagdb.py` |
+| **Diag** | Diagnostics over UDS and KWP/ISO-TP from a database file per make in `/db/diag/` on the SD card (upload it on the web page): choose the file, **Scan ECUs** probes each candidate CAN ID pair (UDS first, then a KWP session probe; `kwp` entries probe KWP first), list who answers; **Scan + DTCs** also reads each answering ECU's trouble codes, **Save report** writes all of them to `dtc_scan_<date>.txt`; **tap an ECU**: Identification (UDS DIDs or configured KWP local IDs), Read DTCs, Clear DTCs (asks first), Save to SD (`dtc_<ECU>_<date>.txt`), **Read data**: an identifier from the database or typed in hex; format and simulator notes in [docs/diag_db.md](docs/diag_db.md), starter file `sd/db/diag/generic.txt`, checker / simulator helper `tools/diagdb.py` |
 | **CAN** | Board CAN bus monitor: every ID on the bus (DLC, last data, count, period; our own OBD requests too), frames/s, peak, bus load, error counters. Bitrate and listen-only (only while OBD is disconnected; Connect switches listen-only off). Raw log options |
 | **Wi-Fi** | Scan, connect, forget, auto connect; IP, RSSI, SNTP time (stored in the RTC), address of the log file web page |
 | **BLE** | 10 s scan, connect + pair, GATT services, forget bonds; Adapter console: raw commands to a BLE ELM327 adapter (ATZ, ATI, ATRV, 0100, custom) |
@@ -220,7 +220,7 @@ cached image; values placed on a meter must sit inside a panel, like the tiles d
 
 `python3 tools/obd_dash_tool.py sd/db/diag/generic.txt` (Python 3 with Tk, nothing else):
 
-- **ECUs / DIDs / DTCs** tabs: add, edit, delete entries (checked like the dash reads
+- **ECUs / DIDs / KWP IDs / DTCs** tabs: add, edit, delete entries (checked like the dash reads
   them); **Save** writes the file in the standard layout (`docs/diag_db.md`; comments in
   an edited file are not kept).
 - **Upload to dash**: the dash's IP (Wi-Fi page) -> the file lands in `db/diag/`; open

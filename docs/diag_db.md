@@ -10,8 +10,8 @@ One plain-text file per make in `/db/diag/` on the SD card, for example `vw.txt`
 
 Columns marked *sim* are only read by the simulator; the dash ignores them.
 
-Only read services are described here: the dash never writes data, never unlocks
-security access, never runs routines.
+The dash never unlocks security access or runs routines. Clear DTC remains an
+explicit, confirmed action on the ECU page.
 
 ## Layout
 
@@ -21,11 +21,13 @@ security access, never runs routines.
 Engine   | 7E0 | 7E8 | uds | 10 3E 22 19 14
 [did]
 *        | F190 | VIN | ascii | | | | WVWZZZ1KZ6W000001
+[kwp_id]
+Engine   | 90 | VIN (current) | ascii
 [dtc]
 Engine   | P0301 | Cylinder 1 misfire detected | 2F
 ```
 
-- Sections `[ecu]`, `[did]`, `[dtc]`, in any order, each may appear more than once.
+- Sections `[ecu]`, `[did]`, `[kwp_id]`, `[dtc]`, in any order, each may appear more than once.
 - One entry per line, columns separated by `|`, spaces around them ignored.
   Trailing empty columns can be left out.
 - `#` starts a comment (whole line, or the rest of a line).
@@ -38,8 +40,15 @@ Engine   | P0301 | Cylinder 1 misfire detected | 2F
 | name | unique name, used in `[did]` / `[dtc]` and shown on the dash |
 | tx | request CAN ID (11-bit hex), the dash sends to this |
 | rx | response CAN ID (11-bit hex), the ECU answers on this |
-| protocol | `uds` (ISO 14229 over ISO-TP); later maybe `kwp` |
-| services *(sim)* | service IDs the simulated ECU answers, hex, space separated, e.g. `10 3E 22 19 14`. Others get NRC 0x11 (service not supported). Empty = `10 3E 22 19 14` |
+| protocol | `uds`, `kwp`, or `auto`; all use ISO-TP over the configured CAN IDs |
+| services *(sim)* | service IDs the simulated ECU answers, hex, space separated. Others get NRC 0x11 (service not supported). Empty defaults to `10 3E 22 19 14` for `uds`, `10 3E 1A 18 14` for `kwp`, and both sets for `auto` |
+| KWP DTC request | complete KWP ReadDTCByStatus request in hex, including `18`; default `18 00 FF 00`. KWP variants differ, so this is editable per ECU |
+
+**Scan behavior:** `uds` and `auto` try UDS Tester Present (`3E 00`) first, then
+probe KWP with diagnostic-session start (`10 81`) at the same request/response CAN
+IDs. A positive KWP session response (`50 81`) selects KWP for that ECU for the
+rest of the scan and ECU page. `kwp` starts with the KWP probe. The scan checks
+only the candidate ECU addresses in this file; it does not sweep arbitrary CAN IDs.
 
 ### [did]: data identifiers (service 0x22, ReadDataByIdentifier)
 
@@ -59,7 +68,22 @@ An ECU-specific line wins over a `*` line with the same DID.
 The dash's **Identification** button reads every DID in F180..F1FF that applies to the
 ECU (its own lines and `*` lines), in file order.
 
-Types (multi-byte numbers are big-endian, as UDS sends them):
+### [kwp_id]: KWP ECU identification (service 0x1A)
+
+| Column | Meaning |
+|---|---|
+| ecu | ECU name, or `*` = every ECU |
+| local ID | one-byte KWP local identifier, hex |
+| name | shown on the dash |
+| type / scale / offset / unit | decoding, using the same numeric / ASCII / hex rules as `[did]` |
+| sim *(sim)* | value returned by the bench simulator |
+
+The KWP **Identification** button reads the listed local IDs for that ECU, in file
+order. These IDs are manufacturer-specific; the database must list the IDs the ECU
+actually implements. A KWP ECU can also use its `[kwp_id]` entries on the Read data
+page. An empty `[kwp_id]` section is valid.
+
+Types (multi-byte numbers are big-endian):
 
 | type | data bytes | decoded as | sim value |
 |---|---|---|---|
@@ -69,7 +93,7 @@ Types (multi-byte numbers are big-endian, as UDS sends them):
 | `s8` `s16` `s32` | 1 / 2 / 4 | signed (two's complement) | as above |
 
 The simulator turns a physical sim value back into raw: raw = (value - offset) / scale,
-rounded.
+rounded. The `[kwp_id]` simulator uses the same value conversion.
 
 ### [dtc]: trouble code texts, simulated faults
 
@@ -82,8 +106,11 @@ rounded.
 
 A UDS DTC is 3 bytes: the SAE code in the first two (P = 00, C = 01, B = 10, U = 11 in the
 top two bits, then the 14 bits of the number, e.g. P0301 = 03 01), and a failure type byte.
+KWP service 18 returns a two-byte code plus status; the dash displays those code bytes
+as four hex digits and looks up the corresponding six-digit `[dtc]` entry with `00`
+as the failure-type byte (for example `030100`).
 
-Status bits (ISO 14229): 0x01 test failed, 0x02 test failed this cycle, 0x04 pending,
+UDS status bits (ISO 14229): 0x01 test failed, 0x02 test failed this cycle, 0x04 pending,
 0x08 confirmed, 0x10 not completed since clear, 0x20 failed since clear, 0x40 not
 completed this cycle, 0x80 warning indicator (MIL) requested.
 
@@ -91,13 +118,15 @@ completed this cycle, 0x80 warning indicator (MIL) requested.
 
 | Request | Meaning | Answer (`respond()`) |
 |---|---|---|
-| `3E 00` | tester present (ECU scan) | `7E 00` |
-| `10 01` / `10 03` | default / extended session | `50 xx 00 32 01 F4` (P2 50 ms, P2* 5000 ms); a non-default session falls back to default 5 s (S3) after the last request |
+| `3E 00` | tester present (UDS ECU scan) | `7E 00` |
+| `10 01` / `10 03` / `10 81` | UDS default / extended or KWP session start | `50 xx 00 32 01 F4` (simulated P2 50 ms, P2* 5000 ms); a non-default session falls back to default 5 s (S3) after the last request |
 | `3E 80` | tester present, no answer wanted (the dash sends it every 2 s while a session is open) | nothing; keeps the session alive |
 | `22 hh ll` | read DID | `62 hh ll` + data; unknown or no sim value: `7F 22 31` |
 | `19 02 mm` | DTCs by status mask | `59 02 FF` + per DTC (status & mm != 0): 3 DTC bytes + status |
+| `1A ll` | KWP read ECU identification by local ID | `5A ll` + the configured `[kwp_id]` data |
+| `18 ...` | KWP read DTCs by status | `58 nn` + `nn` records of 2 DTC bytes + status; request bytes are configured per ECU (default `18 00 FF 00`) |
 | `19 01 mm` | number of DTCs | `59 01 FF 01 nn nn` |
-| `14 FF FF FF` | clear all DTCs | `54`; the simulator forgets its DTCs until restart |
+| `14 FF FF FF` (UDS) / `14 FF 00` (KWP) | clear all DTCs | `54`; the simulator forgets its DTCs until restart |
 | service not in the ECU's list | | `7F sid 11` |
 | wrong length | | `7F sid 13` |
 
@@ -112,9 +141,9 @@ dash -> 7E0  19 02 FF       sim -> 7E8  59 02 FF 03 01 00 2F
 ## Editing
 
 `tools/obd_dash_tool.py` edits the file in tables, uploads it to the dash and has a
-console to try requests (through the dash or against the built-in simulator), see the
-README. A file saved by the tool is rewritten in the standard layout; comments are not
-kept.
+console to try UDS and KWP requests (through the dash or against the built-in simulator),
+see the decoding, and add an observed DID or local ID to the database. A file saved by
+the tool is rewritten in the standard layout; comments are not kept.
 
 ## Checking a file
 

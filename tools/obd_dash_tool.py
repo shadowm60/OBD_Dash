@@ -80,6 +80,15 @@ def describe(db, ecu, req, rsp):
             data = rsp[3:]
             txt = ''.join(chr(b) if 32 <= b < 127 else '.' for b in data)
             out.append(f'{did:04X} (not in the database), {len(data)} bytes, text "{txt}"')
+    elif rsp[0] == 0x5A and len(rsp) >= 2:
+        local_id = rsp[1]
+        d = db.kwp_id_for(ecu, local_id) if db else None
+        if d:
+            out.append(f'{local_id:02X} {d.name}: {diagdb.decode(d, rsp[2:])}')
+        else:
+            data = rsp[2:]
+            txt = ''.join(chr(b) if 32 <= b < 127 else '.' for b in data)
+            out.append(f'{local_id:02X} (not in the database), {len(data)} bytes, text "{txt}"')
     elif rsp[0] == 0x59 and len(rsp) >= 3 and rsp[1] == 0x02:
         n = (len(rsp) - 3) // 4
         out.append(f'{n} DTC(s)')
@@ -88,6 +97,16 @@ def describe(db, ecu, req, rsp):
             code = int.from_bytes(p[:3], 'big')
             text = db.dtc_text(ecu, code) if db else None
             out.append(f'  {diagdb.format_dtc_code(code)}  status {p[3]:02X}  {text or "(no text)"}')
+    elif rsp[0] == 0x58 and len(rsp) >= 2:
+        off = 2
+        n = rsp[1]
+        if len(rsp) == off + n * 3:
+            out.append(f'{n} KWP DTC(s)')
+            for i in range(n):
+                p = rsp[off + 3 * i: off + 3 * i + 3]
+                code = int.from_bytes(p[:2], 'big') << 8
+                text = db.dtc_text(ecu, code) if db else None
+                out.append(f'  {code >> 8:04X}  status {p[2]:02X}  {text or "(no text)"}')
     return out
 
 
@@ -177,8 +196,9 @@ class App(tk.Tk):
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill='both', expand=True, padx=6)
         self.tables = {}
-        self._table('ecus', 'ECUs', ('name', 'tx', 'rx', 'protocol', 'services (sim)'))
+        self._table('ecus', 'ECUs', ('name', 'tx', 'rx', 'protocol', 'services (sim)', 'KWP DTC request'))
         self._table('dids', 'DIDs', ('ecu', 'did', 'name', 'type', 'scale', 'offset', 'unit', 'sim'))
+        self._table('kwp_ids', 'KWP IDs', ('ecu', 'local ID', 'name', 'type', 'scale', 'offset', 'unit', 'sim'))
         self._table('dtcs', 'DTCs', ('ecu', 'code', 'text', 'status (sim)'))
         self._console()
 
@@ -222,25 +242,31 @@ class App(tk.Tk):
         ttk.Button(top, text='Send', command=self.send).pack(side='left', padx=2)
         self.local = tk.BooleanVar(value=False)
         ttk.Checkbutton(top, text='built-in simulator (no dash)', variable=self.local).pack(side='left', padx=8)
-        self.add_btn = ttk.Button(top, text='Add this DID...', command=self.add_seen_did, state='disabled')
+        self.add_btn = ttk.Button(top, text='Add this identifier...', command=self.add_seen_did, state='disabled')
         self.add_btn.pack(side='left', padx=2)
         quick = ttk.Frame(f)
         quick.pack(fill='x')
         for text, req in (('Tester present', '3E 00'), ('VIN', '22 F1 90'), ('Part number', '22 F1 87'),
-                          ('Software', '22 F1 89'), ('DTCs', '19 02 FF'), ('Extended session', '10 03')):
+                          ('Software', '22 F1 89'), ('DTCs', '19 02 FF'), ('Extended session', '10 03'),
+                          ('KWP session', '10 81'), ('KWP ID 80', '1A 80'),
+                          ('KWP DTCs', '18 00 FF 00')):
             ttk.Button(quick, text=text, command=lambda r=req: (self.req.set(r), self.send())).pack(side='left', padx=2)
         self.log = tk.Text(f, height=20, font=('monospace', 10))
         self.log.pack(fill='both', expand=True, pady=4)
-        self.last_did = None
+        self.last_identifier = None
 
     # ---- database view
     def _rows(self, key):
         if key == 'ecus':
-            return [(e.name, f'{e.tx:03X}', f'{e.rx:03X}', e.protocol, ' '.join(f'{s:02X}' for s in e.services))
+            return [(e.name, f'{e.tx:03X}', f'{e.rx:03X}', e.protocol,
+                     ' '.join(f'{s:02X}' for s in e.services), e.kwp_dtc_req)
                     for e in self.db.ecus]
         if key == 'dids':
             return [(d.ecu, f'{d.did:04X}', d.name, d.type, f'{d.scale:g}', f'{d.offset:g}', d.unit, d.sim)
                     for d in self.db.dids]
+        if key == 'kwp_ids':
+            return [(d.ecu, f'{d.local_id:02X}', d.name, d.type, f'{d.scale:g}', f'{d.offset:g}', d.unit, d.sim)
+                    for d in self.db.kwp_ids]
         return [(d.ecu, diagdb.format_dtc_code(d.code), d.text, '' if d.status is None else f'{d.status:02X}')
                 for d in self.db.dtcs]
 
@@ -261,7 +287,7 @@ class App(tk.Tk):
         return int(s[0]) if s else None
 
     def _list(self, key):
-        return {'ecus': self.db.ecus, 'dids': self.db.dids, 'dtcs': self.db.dtcs}[key]
+        return {'ecus': self.db.ecus, 'dids': self.db.dids, 'kwp_ids': self.db.kwp_ids, 'dtcs': self.db.dtcs}[key]
 
     def edit(self, key, idx):
         lst = self._list(key)
@@ -269,13 +295,20 @@ class App(tk.Tk):
         if key == 'ecus':
             e = lst[idx] if idx is not None else diagdb.Ecu('', 0x7E0, 0x7E8)
             fields = [('Name', e.name, None), ('Request ID (tx, hex)', f'{e.tx:03X}', None),
-                      ('Answer ID (rx, hex)', f'{e.rx:03X}', None), ('Protocol', e.protocol, ['uds']),
-                      ('Services (sim)', ' '.join(f'{s:02X}' for s in e.services), None)]
+                      ('Answer ID (rx, hex)', f'{e.rx:03X}', None), ('Protocol', e.protocol, ['uds', 'kwp', 'auto']),
+                      ('Services (sim)', ' '.join(f'{s:02X}' for s in e.services), None),
+                      ('KWP DTC request (hex)', e.kwp_dtc_req, None)]
         elif key == 'dids':
             e = lst[idx] if idx is not None else diagdb.Did('*', 0xF190, '', 'ascii')
             fields = [('ECU', e.ecu, ecus), ('DID (hex)', f'{e.did:04X}', None), ('Name', e.name, None),
                       ('Type', e.type, list(diagdb.TYPES)), ('Scale', f'{e.scale:g}', None),
                       ('Offset', f'{e.offset:g}', None), ('Unit', e.unit, None), ('Sim value', e.sim, None)]
+        elif key == 'kwp_ids':
+            e = lst[idx] if idx is not None else diagdb.KwpId('*', 0x80, '', 'ascii')
+            fields = [('ECU', e.ecu, ecus), ('Local ID (hex, 1 byte)', f'{e.local_id:02X}', None),
+                      ('Name', e.name, None), ('Type', e.type, list(diagdb.TYPES)),
+                      ('Scale', f'{e.scale:g}', None), ('Offset', f'{e.offset:g}', None),
+                      ('Unit', e.unit, None), ('Sim value', e.sim, None)]
         else:
             e = lst[idx] if idx is not None else diagdb.Dtc('*', 0x030100, '')
             fields = [('ECU', e.ecu, ecus), ('Code (P0301 / P0301-1C / 030100)', diagdb.format_dtc_code(e.code), None),
@@ -286,7 +319,7 @@ class App(tk.Tk):
             return
         try:
             line = ' | '.join(d.result)
-            section = {'ecus': 'ecu', 'dids': 'did', 'dtcs': 'dtc'}[key]
+            section = {'ecus': 'ecu', 'dids': 'did', 'kwp_ids': 'kwp_id', 'dtcs': 'dtc'}[key]
             # parse the entry the same way as the file, against the current ECUs
             pre = diagdb.dump(diagdb.Db(ecus=[x for x in self.db.ecus if key != 'ecus' or x is not e]))
             new = diagdb.parse(pre + f'[{section}]\n{line}\n')
@@ -300,7 +333,7 @@ class App(tk.Tk):
             old = lst[idx]
             lst[idx] = item
             if key == 'ecus' and old.name != item.name:        # rename references
-                for x in self.db.dids + self.db.dtcs:
+                for x in self.db.dids + self.db.kwp_ids + self.db.dtcs:
                     if x.ecu.lower() == old.name.lower():
                         x.ecu = item.name
         self.changed()
@@ -312,11 +345,12 @@ class App(tk.Tk):
         lst = self._list(key)
         if key == 'ecus':
             name = lst[idx].name
-            used = [x for x in self.db.dids + self.db.dtcs if x.ecu.lower() == name.lower()]
-            if used and not messagebox.askyesno('Delete ECU', f'{len(used)} DID / DTC entries belong to {name}. '
+            used = [x for x in self.db.dids + self.db.kwp_ids + self.db.dtcs if x.ecu.lower() == name.lower()]
+            if used and not messagebox.askyesno('Delete ECU', f'{len(used)} DID / KWP ID / DTC entries belong to {name}. '
                                                 'Delete them too?', parent=self):
                 return
             self.db.dids = [x for x in self.db.dids if x.ecu.lower() != name.lower()]
+            self.db.kwp_ids = [x for x in self.db.kwp_ids if x.ecu.lower() != name.lower()]
             self.db.dtcs = [x for x in self.db.dtcs if x.ecu.lower() != name.lower()]
         del lst[idx]
         self.changed()
@@ -447,27 +481,39 @@ class App(tk.Tk):
             for ev in self.sim.events:
                 self._say('  [simulator] ' + ev)
             self.sim.events.clear()
-        self.last_did = None
+        self.last_identifier = None
         if rsp and rsp[0] == 0x62 and len(rsp) >= 3:
-            self.last_did = (ecu, rsp[1] << 8 | rsp[2], rsp[3:])
-        self.add_btn.configure(state='normal' if self.last_did else 'disabled')
+            self.last_identifier = ('uds', ecu, rsp[1] << 8 | rsp[2], rsp[3:])
+        elif rsp and rsp[0] == 0x5A and len(rsp) >= 2:
+            self.last_identifier = ('kwp', ecu, rsp[1], rsp[2:])
+        self.add_btn.configure(state='normal' if self.last_identifier else 'disabled')
 
     def add_seen_did(self):
-        if not self.last_did:
+        if not self.last_identifier:
             return
-        ecu, did, data = self.last_did
+        protocol, ecu, identifier, data = self.last_identifier
         printable = data and all(32 <= b < 127 or b in (0, 0xFF) for b in data)
         typ = 'ascii' if printable else {1: 'u8', 2: 'u16', 4: 'u32'}.get(len(data), 'hex')
         sim = data.rstrip(b' \x00\xff').decode('latin-1') if printable else (
             str(int.from_bytes(data, 'big')) if typ != 'hex' else data.hex(' ').upper())
-        self.nb.select(1)
-        existing = self.db.did_for(ecu, did)
-        if existing and existing.ecu.lower() == ecu.name.lower():
-            messagebox.showinfo('Add DID', f'{did:04X} is already in the database for {ecu.name}.', parent=self)
-            return
-        self.db.dids.append(diagdb.Did(ecu.name, did, f'DID {did:04X}', typ, sim=sim))
-        self.changed()
-        self.edit('dids', len(self.db.dids) - 1)            # name it, fix the type / scale
+        if protocol == 'kwp':
+            self.nb.select(2)
+            existing = self.db.kwp_id_for(ecu, identifier)
+            if existing and existing.ecu.lower() == ecu.name.lower():
+                messagebox.showinfo('Add KWP ID', f'{identifier:02X} is already in the database for {ecu.name}.', parent=self)
+                return
+            self.db.kwp_ids.append(diagdb.KwpId(ecu.name, identifier, f'KWP ID {identifier:02X}', typ, sim=sim))
+            self.changed()
+            self.edit('kwp_ids', len(self.db.kwp_ids) - 1)
+        else:
+            self.nb.select(1)
+            existing = self.db.did_for(ecu, identifier)
+            if existing and existing.ecu.lower() == ecu.name.lower():
+                messagebox.showinfo('Add DID', f'{identifier:04X} is already in the database for {ecu.name}.', parent=self)
+                return
+            self.db.dids.append(diagdb.Did(ecu.name, identifier, f'DID {identifier:04X}', typ, sim=sim))
+            self.changed()
+            self.edit('dids', len(self.db.dids) - 1)
 
     def quit_app(self):
         if self._discard_ok():
@@ -476,7 +522,7 @@ class App(tk.Tk):
 
 
 def _list_of(db, key):
-    return {'ecus': db.ecus, 'dids': db.dids, 'dtcs': db.dtcs}[key]
+    return {'ecus': db.ecus, 'dids': db.dids, 'kwp_ids': db.kwp_ids, 'dtcs': db.dtcs}[key]
 
 
 def main():

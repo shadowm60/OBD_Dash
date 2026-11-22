@@ -5,9 +5,10 @@ Diagnostic database parser — ECUs, data identifiers and DTC texts of one make.
 ## What it does
 
 Parses `/db/diag/<make>.txt` (format: [../../docs/diag_db.md](../../docs/diag_db.md))
-into tables the Diag page uses to scan a car, read identifiers (Service 22),
-decode them, and name DTCs. The columns marked *sim* in the spec (for a bench
-simulator) are skipped by this parser.
+into tables the Diag page uses to scan candidate ECU addresses, read UDS DIDs
+(Service 22) or KWP local identifiers (Service 1A), configure the KWP DTC request,
+decode them, and name DTCs.
+The columns marked *sim* in the spec (for a bench simulator) are skipped by this parser.
 
 `tools/diagdb.py` is the reference implementation of the same format and also
 powers the bench simulator and the PC tool's console.
@@ -28,6 +29,7 @@ Not thread safe; the caller provides the tables (PSRAM on the dash).
 diagdb_t db = {
     .ecus = ecu_tbl, .max_ecu = MAX_ECU,
     .dids = did_tbl, .max_did = MAX_DID,
+    .kwp_ids = kwp_tbl, .max_kwp_id = MAX_KWP_ID,
     .dtcs = dtc_tbl, .max_dtc = MAX_DTC,
 };
 FILE *f = fopen("/sdcard/db/diag/generic.txt", "r");
@@ -45,6 +47,7 @@ Lookups (ECU-specific entry wins over a `*` wildcard entry):
 ```c
 int e = diagdb_find_ecu(&db, "Engine");
 const diagdb_did_t *d = diagdb_find_did(&db, e, 0xF190);     /* NULL if none */
+const diagdb_kwp_id_t *k = diagdb_find_kwp_id(&db, e, 0x80); /* NULL if none */
 const char *txt = diagdb_dtc_text(&db, e, 0x030100);         /* NULL if none */
 ```
 
@@ -64,9 +67,9 @@ diagdb_decode(d, data, len, out, sizeof out);   /* 0x62 data bytes → "850 rpm"
 
 ## Gotchas
 
-- `DIAGDB_ALL` (`-1`) is the `*` wildcard ECU (e.g. the standard identification
-  DIDs). An ECU-specific line always wins over a `*` line with the same DID.
-- The dash reads **only**; this component describes read services. There is no
-  write / security-access / routine support, by design.
+-   `DIAGDB_ALL` (`-1`) is the `*` wildcard ECU. An ECU-specific line always wins
+  over a `*` line with the same DID or KWP local ID.
+- KWP local IDs are one byte and ECU-specific; list them in `[kwp_id]`.
+- This component describes read services; there is no security-access or routine support.
 - Keep this parser and `tools/diagdb.py` in step — they must accept the same
   files. The PC test script checks the C parser against reference files.

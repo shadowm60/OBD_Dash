@@ -332,14 +332,16 @@ const char *web_svc_pin(void)
     return s_pin;
 }
 
-/* read-only: tester present, default / extended session, read DID, read DTCs */
+/* Read-only services used by UDS and KWP diagnostics. */
 static bool allowed(const uint8_t *req, int len)
 {
     switch (req[0]) {
     case 0x3E: return len == 2;
-    case 0x10: return len == 2 && (req[1] == 0x01 || req[1] == 0x03);
+    case 0x10: return len == 2 && (req[1] == 0x01 || req[1] == 0x03 || req[1] == 0x81);
+    case 0x1A: return len == 2;
     case 0x22: return len >= 3 && (len - 1) % 2 == 0;
     case 0x19: return len >= 2;
+    case 0x18: return len >= 2 && len <= 7;
     default:   return false;
     }
 }
@@ -406,7 +408,7 @@ static esp_err_t uds_post(httpd_req_t *req)
     }
     if (!allowed(data, n)) {
         return json(req, "403 Forbidden",
-                    "{\"error\":\"only read requests: 3E 00, 10 01, 10 03, 22 <DID>.., 19 ..\"}");
+                    "{\"error\":\"only read requests: UDS 22/19 and KWP 1A/18, plus 3E and diagnostic sessions\"}");
     }
     /* the Diag page may be using the link: wait up to 2 s for a free slot */
     esp_err_t err = ESP_ERR_INVALID_STATE;

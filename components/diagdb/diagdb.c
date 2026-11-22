@@ -8,7 +8,7 @@
 #define LINE_LEN  256
 #define MAX_COLS  9
 
-enum { SEC_NONE, SEC_ECU, SEC_DID, SEC_DTC };
+enum { SEC_NONE, SEC_ECU, SEC_DID, SEC_KWP_ID, SEC_DTC };
 
 static char *trim(char *s)
 {
@@ -45,6 +45,29 @@ static bool number(const char *s, double dflt, double *out)
     char *e;
     *out = strtod(s, &e);
     return *e == '\0';
+}
+
+static int hexbyte(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    c = (char)toupper((unsigned char)c);
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static bool hexbytes(const char *s, uint8_t *out, uint8_t *len)
+{
+    *len = 0;
+    while (*s) {
+        while (isspace((unsigned char)*s)) s++;
+        if (*s == '\0') break;
+        int hi = hexbyte(s[0]), lo = s[1] ? hexbyte(s[1]) : -1;
+        if (hi < 0 || lo < 0 || (s[2] && !isspace((unsigned char)s[2])) || *len >= 7) return false;
+        out[(*len)++] = (uint8_t)(hi << 4 | lo);
+        s += 2;
+        if (*s && !isspace((unsigned char)*s)) return false;
+    }
+    return *len > 0;
 }
 
 bool diagdb_parse_dtc(const char *in, uint32_t *code)
@@ -118,7 +141,7 @@ static void bad(diagdb_t *db, int lineno, const char *what)
 
 bool diagdb_parse(diagdb_t *db, FILE *f)
 {
-    db->necu = db->ndid = db->ndtc = 0;
+    db->necu = db->ndid = db->nkwp_id = db->ndtc = 0;
     db->skipped = 0;
     db->error[0] = '\0';
     char *line = malloc(LINE_LEN);
@@ -140,6 +163,7 @@ bool diagdb_parse(diagdb_t *db, FILE *f)
         if (*p == '[') {
             if (strcasecmp(p, "[ecu]") == 0) sec = SEC_ECU;
             else if (strcasecmp(p, "[did]") == 0) sec = SEC_DID;
+            else if (strcasecmp(p, "[kwp_id]") == 0) sec = SEC_KWP_ID;
             else if (strcasecmp(p, "[dtc]") == 0) sec = SEC_DTC;
             else { sec = SEC_NONE; bad(db, lineno, "unknown section"); }
             continue;
@@ -162,8 +186,10 @@ bool diagdb_parse(diagdb_t *db, FILE *f)
                 continue;
             }
             if (col[3][0] && strcasecmp(col[3], "uds") != 0) {
-                bad(db, lineno, "only protocol uds is supported");
-                continue;
+                if (strcasecmp(col[3], "kwp") != 0 && strcasecmp(col[3], "auto") != 0) {
+                    bad(db, lineno, "protocol must be uds, kwp or auto");
+                    continue;
+                }
             }
             if (diagdb_find_ecu(db, col[0]) >= 0) {
                 bad(db, lineno, "ECU name used twice");
@@ -174,6 +200,20 @@ bool diagdb_parse(diagdb_t *db, FILE *f)
             copy(e->name, sizeof(e->name), col[0]);
             e->tx = (uint16_t)tx;
             e->rx = (uint16_t)rx;
+            e->protocol = strcasecmp(col[3], "kwp") == 0 ? DIAGDB_PROTOCOL_KWP
+                        : strcasecmp(col[3], "auto") == 0 ? DIAGDB_PROTOCOL_AUTO : DIAGDB_PROTOCOL_UDS;
+            if (col[5][0]) {
+                if (!hexbytes(col[5], e->kwp_dtc_req, &e->kwp_dtc_len) || e->kwp_dtc_len < 2 ||
+                    e->kwp_dtc_req[0] != 0x18) {
+                    db->necu--;
+                    bad(db, lineno, "KWP DTC request must be 1..7 bytes and start with 18");
+                    continue;
+                }
+            } else {
+                static const uint8_t default_kwp_dtc[] = { 0x18, 0x00, 0xFF, 0x00 };
+                memcpy(e->kwp_dtc_req, default_kwp_dtc, sizeof(default_kwp_dtc));
+                e->kwp_dtc_len = sizeof(default_kwp_dtc);
+            }
         } else if (sec == SEC_DID) {
             unsigned long did;
             diagdb_type_t t;
@@ -189,6 +229,26 @@ bool diagdb_parse(diagdb_t *db, FILE *f)
             diagdb_did_t *d = &db->dids[db->ndid++];
             d->ecu = (int16_t)ecu;
             d->did = (uint16_t)did;
+            copy(d->name, sizeof(d->name), col[2]);
+            d->type = t;
+            d->scale = scale;
+            d->offset = offset;
+            copy(d->unit, sizeof(d->unit), col[6]);
+        } else if (sec == SEC_KWP_ID) {
+            unsigned long local_id;
+            diagdb_type_t t;
+            double scale, offset;
+            int ecu = ecu_ref(db, col[0]);
+            if (ecu == -2) { bad(db, lineno, "KWP identifier for an unknown ECU"); continue; }
+            if (!hexnum(col[1], 0xFF, &local_id) || !type_of(col[3], &t) ||
+                !number(col[4], 1.0, &scale) || !number(col[5], 0.0, &offset)) {
+                bad(db, lineno, "KWP ID needs ecu | local ID (hex) | name | type [| scale | offset | unit]");
+                continue;
+            }
+            if (db->nkwp_id >= db->max_kwp_id) { bad(db, lineno, "too many KWP identifiers"); continue; }
+            diagdb_kwp_id_t *d = &db->kwp_ids[db->nkwp_id++];
+            d->ecu = (int16_t)ecu;
+            d->local_id = (uint8_t)local_id;
             copy(d->name, sizeof(d->name), col[2]);
             d->type = t;
             d->scale = scale;
@@ -218,6 +278,18 @@ const diagdb_did_t *diagdb_find_did(const diagdb_t *db, int ecu, uint16_t did)
     for (int i = 0; i < db->ndid; i++) {
         const diagdb_did_t *d = &db->dids[i];
         if (d->did != did) continue;
+        if (d->ecu == ecu) return d;
+        if (d->ecu == DIAGDB_ALL && any == NULL) any = d;
+    }
+    return any;
+}
+
+const diagdb_kwp_id_t *diagdb_find_kwp_id(const diagdb_t *db, int ecu, uint8_t local_id)
+{
+    const diagdb_kwp_id_t *any = NULL;
+    for (int i = 0; i < db->nkwp_id; i++) {
+        const diagdb_kwp_id_t *d = &db->kwp_ids[i];
+        if (d->local_id != local_id) continue;
         if (d->ecu == ecu) return d;
         if (d->ecu == DIAGDB_ALL && any == NULL) any = d;
     }

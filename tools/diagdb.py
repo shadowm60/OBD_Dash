@@ -18,6 +18,8 @@ import time
 from dataclasses import dataclass, field
 
 DEFAULT_SERVICES = [0x10, 0x3E, 0x22, 0x19, 0x14]
+KWP_DEFAULT_SERVICES = [0x10, 0x3E, 0x1A, 0x18, 0x14]
+AUTO_DEFAULT_SERVICES = [0x10, 0x3E, 0x22, 0x19, 0x1A, 0x18, 0x14]
 TYPES = {'ascii': 0, 'hex': 0, 'u8': 1, 'u16': 2, 'u32': 4, 's8': 1, 's16': 2, 's32': 4}
 
 
@@ -30,14 +32,27 @@ class Ecu:
     name: str
     tx: int
     rx: int
-    protocol: str = 'uds'
-    services: list = field(default_factory=lambda: list(DEFAULT_SERVICES))
+    protocol: str = 'uds'      # uds (UDS-first, then KWP fallback), kwp (KWP first), or auto
+    services: list = field(default_factory=list)
+    kwp_dtc_req: str = '18 00 FF 00'
 
 
 @dataclass
 class Did:
     ecu: str            # name or '*'
     did: int
+    name: str
+    type: str
+    scale: float = 1.0
+    offset: float = 0.0
+    unit: str = ''
+    sim: str = ''
+
+
+@dataclass
+class KwpId:
+    ecu: str
+    local_id: int
     name: str
     type: str
     scale: float = 1.0
@@ -58,6 +73,7 @@ class Dtc:
 class Db:
     ecus: list = field(default_factory=list)
     dids: list = field(default_factory=list)
+    kwp_ids: list = field(default_factory=list)
     dtcs: list = field(default_factory=list)
 
     def ecu(self, name):
@@ -79,6 +95,16 @@ class Db:
             if d.did == did and d.ecu.lower() == ecu.name.lower():
                 return d
             if d.did == did and d.ecu == '*':
+                best = best or d
+        return best
+
+    def kwp_id_for(self, ecu, local_id):
+        """ECU-specific local identifier first, then '*'."""
+        best = None
+        for d in self.kwp_ids:
+            if d.local_id == local_id and d.ecu.lower() == ecu.name.lower():
+                return d
+            if d.local_id == local_id and d.ecu == '*':
                 best = best or d
         return best
 
@@ -141,6 +167,13 @@ def _num(s, dflt, what, lineno):
         raise DbError(f'line {lineno}: {what} {s!r} is not a number')
 
 
+def _hexbytes(s, what, lineno):
+    parts = s.split()
+    if not parts or any(len(part) != 2 for part in parts):
+        raise DbError(f'line {lineno}: {what} must be space-separated hex bytes')
+    return bytes(_hex(part, what, lineno, 0xFF) for part in parts)
+
+
 def parse(text):
     db = Db()
     section = None
@@ -150,17 +183,26 @@ def parse(text):
             continue
         if line.startswith('[') and line.endswith(']'):
             section = line[1:-1].strip().lower()
-            if section not in ('ecu', 'did', 'dtc'):
+            if section not in ('ecu', 'did', 'kwp_id', 'dtc'):
                 raise DbError(f'line {lineno}: unknown section [{section}]')
             continue
         cols = [c.strip() for c in line.split('|')]
         if section == 'ecu':
-            cols += [''] * (5 - len(cols))
+            cols += [''] * (6 - len(cols))
             if not cols[0]:
                 raise DbError(f'line {lineno}: ECU without a name')
-            services = [_hex(x, 'service', lineno, 0xFF) for x in cols[4].split()] or list(DEFAULT_SERVICES)
+            protocol = (cols[3] or 'uds').lower()
+            services = [_hex(x, 'service', lineno, 0xFF) for x in cols[4].split()]
+            if not services:
+                defaults = {'uds': DEFAULT_SERVICES, 'kwp': KWP_DEFAULT_SERVICES,
+                            'auto': AUTO_DEFAULT_SERVICES}.get(protocol, DEFAULT_SERVICES)
+                services = list(defaults)
+            kwp_dtc_req = cols[5] or '18 00 FF 00'
+            dtc_req = _hexbytes(kwp_dtc_req, 'KWP DTC request', lineno)
+            if not 2 <= len(dtc_req) <= 7 or dtc_req[0] != 0x18:
+                raise DbError(f'line {lineno}: KWP DTC request must be 2..7 bytes and start with 18')
             db.ecus.append(Ecu(cols[0], _hex(cols[1], 'tx', lineno, 0x7FF), _hex(cols[2], 'rx', lineno, 0x7FF),
-                               (cols[3] or 'uds').lower(), services))
+                               protocol, services, dtc_req.hex(' ').upper()))
         elif section == 'did':
             cols += [''] * (8 - len(cols))
             t = cols[3].lower()
@@ -169,6 +211,14 @@ def parse(text):
             db.dids.append(Did(cols[0] or '*', _hex(cols[1], 'did', lineno, 0xFFFF), cols[2], t,
                                _num(cols[4], 1.0, 'scale', lineno), _num(cols[5], 0.0, 'offset', lineno),
                                cols[6], cols[7]))
+        elif section == 'kwp_id':
+            cols += [''] * (8 - len(cols))
+            t = cols[3].lower()
+            if t not in TYPES:
+                raise DbError(f'line {lineno}: unknown type {cols[3]!r} (one of {", ".join(TYPES)})')
+            db.kwp_ids.append(KwpId(cols[0] or '*', _hex(cols[1], 'local ID', lineno, 0xFF), cols[2], t,
+                                    _num(cols[4], 1.0, 'scale', lineno), _num(cols[5], 0.0, 'offset', lineno),
+                                    cols[6], cols[7]))
         elif section == 'dtc':
             cols += [''] * (4 - len(cols))
             try:
@@ -189,9 +239,9 @@ def check(db):
         if e.name.lower() in names:
             raise DbError(f'ECU {e.name!r} twice')
         names.add(e.name.lower())
-        if e.protocol not in ('uds',):
-            raise DbError(f'ECU {e.name!r}: protocol {e.protocol!r} not supported yet')
-    for d in db.dids + db.dtcs:
+        if e.protocol not in ('uds', 'kwp', 'auto'):
+            raise DbError(f'ECU {e.name!r}: protocol must be uds, kwp or auto')
+    for d in db.dids + db.kwp_ids + db.dtcs:
         if d.ecu != '*' and d.ecu.lower() not in names:
             raise DbError(f'{type(d).__name__} for unknown ECU {d.ecu!r}')
     for d in db.dids:
@@ -237,11 +287,17 @@ def dump(db, header=None):
         lines.append(f'# {h}' if h else '#')
     lines += ['', '[ecu]', '# name | tx | rx | protocol | services (sim)']
     lines += _table([[e.name, f'{e.tx:03X}', f'{e.rx:03X}', e.protocol,
-                      '' if e.services == DEFAULT_SERVICES else ' '.join(f'{x:02X}' for x in e.services)]
+                      '' if e.services == (KWP_DEFAULT_SERVICES if e.protocol == 'kwp' else
+                                           AUTO_DEFAULT_SERVICES if e.protocol == 'auto' else DEFAULT_SERVICES)
+                      else ' '.join(f'{x:02X}' for x in e.services),
+                      '' if e.kwp_dtc_req == '18 00 FF 00' else e.kwp_dtc_req]
                      for e in db.ecus])
     lines += ['', '[did]', '# ecu | did | name | type | scale | offset | unit | sim']
     lines += _table([[d.ecu, f'{d.did:04X}', d.name, d.type, _g(d.scale, 1.0), _g(d.offset, 0.0), d.unit, d.sim]
                      for d in db.dids])
+    lines += ['', '[kwp_id]', '# ecu | local ID | name | type | scale | offset | unit | sim']
+    lines += _table([[d.ecu, f'{d.local_id:02X}', d.name, d.type, _g(d.scale, 1.0), _g(d.offset, 0.0), d.unit, d.sim]
+                     for d in db.kwp_ids])
     lines += ['', '[dtc]', '# ecu | code | text | status (sim)']
     lines += _table([[d.ecu, format_dtc_code(d.code), d.text, '' if d.status is None else f'{d.status:02X}']
                      for d in db.dtcs])
@@ -340,6 +396,12 @@ class Simulator:
                 self.events.append(f'{ecu.name}: session {sess[0]:02X} -> {req[1]:02X}')
             sess[0] = req[1]
             return bytes([0x50, req[1], 0x00, 0x32, 0x01, 0xF4])
+        if sid == 0x1A:
+            if len(req) != 2:
+                return bytes([0x7F, sid, 0x13])
+            d = self.db.kwp_id_for(ecu, req[1])
+            data = _encode_sim(d, self.clock()) if d else None
+            return bytes([0x7F, sid, 0x31]) if data is None else bytes([0x5A, req[1]]) + data
         if sid == 0x22:
             if len(req) < 3 or len(req) % 2 != 1:
                 return bytes([0x7F, sid, 0x13])
@@ -365,8 +427,21 @@ class Simulator:
             for d in dtcs:
                 out += d.code.to_bytes(3, 'big') + bytes([d.status])
             return bytes(out)
+        if sid == 0x18:
+            if not 2 <= len(req) <= 7:
+                return bytes([0x7F, sid, 0x13])
+            mask = req[1]
+            dtcs = [] if ecu.name.lower() in self.cleared else [
+                d for d in self.db.dtcs
+                if d.status is not None and d.ecu.lower() in ('*', ecu.name.lower()) and
+                (mask == 0 or d.status & mask)]
+            dtcs = dtcs[:255]
+            out = bytearray([0x58, len(dtcs)])
+            for d in dtcs:
+                out += (d.code >> 8).to_bytes(2, 'big') + bytes([d.status])
+            return bytes(out)
         if sid == 0x14:
-            if len(req) != 4:
+            if len(req) not in (3, 4):
                 return bytes([0x7F, sid, 0x13])
             self.cleared.add(ecu.name.lower())
             return bytes([0x54])

@@ -207,11 +207,12 @@ static void session_end(const char *why)
 }
 
 /* after a UDS answer: follow session changes, push the keepalive back */
-static void session_track(bool positive)
+static void session_track(bool positive, const uint8_t *r, uint16_t len)
 {
     uint32_t now = can_if_now_ms();
     if (positive && s_cur_sid == 0x10) {
-        if (s_cur_sub == 0x01) {
+        uint8_t session = len >= 2 ? r[1] : s_cur_sub;
+        if (session == 0x01) {
             if (s_sess_on && s_sess_tx == s_cur_tx) {
                 session_end("back to the default session");
             }
@@ -220,7 +221,7 @@ static void session_track(bool positive)
                 session_end("session on another ECU");
             }
             s_sess_on = true;
-            s_sess_type = s_cur_sub;
+            s_sess_type = session;
             s_sess_tx = s_cur_tx;
             s_sess_rx = s_cur_rx;
             status_update(st_session, 0);
@@ -477,7 +478,7 @@ static void on_request_finished(obd_req_status_t st)
         s_uds.seq++;
         portEXIT_CRITICAL(&s_lock);
         s_uds_last_ms = can_if_now_ms();
-        session_track(us == COMSM_UDS_DONE);
+        session_track(us == COMSM_UDS_DONE, r, len);
         obd_client_set_functional();        /* hardware filter back to OBD */
         break;
     }

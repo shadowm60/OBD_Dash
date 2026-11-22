@@ -11,7 +11,7 @@ reads a status snapshot; nobody else blocks on the bus. It handles:
 - the connect lifecycle and automatic reconnect;
 - Service-01 PID polling into [../vehicle_data](../vehicle_data);
 - OBD diagnostics (DTC read / clear, freeze frame — Service 03/04/07/0A/02);
-- raw **UDS** requests for the Diag page (any tx/rx, Service 22/19/10/3E…);
+- raw diagnostic requests for the Diag page (UDS and KWP services, any tx/rx);
 - a **diagnostic session keepalive** (tester present);
 - a **broadcast monitor** on the adapter link for the Dash page.
 
@@ -62,11 +62,11 @@ comsm_set_link_monitor(true, filter, mask, cb, arg);   /* frames → cb in comsm
 
 OBD has priority: Connect pauses the monitor, Disconnect resumes it.
 
-### UDS (Diag page) — one raw request at a time
+### Diagnostic request (Diag page) — one raw request at a time
 
 ```c
 esp_err_t e = comsm_uds_request(0x714, 0x77E, req, len);   /* req ≤ 7 bytes (single frame) */
-/* ESP_ERR_INVALID_STATE if OBD is connected or a request is still running */
+/* Also used for KWP services; ESP_ERR_INVALID_STATE if OBD is connected or a request is running */
 comsm_uds_result_t r; comsm_uds_get(&r);
 /* r.state: IDLE/BUSY/DONE/NEGATIVE/TIMEOUT/ERROR; r.seq bumps per finished request */
 ```

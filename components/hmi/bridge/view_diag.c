@@ -1,12 +1,12 @@
 /*
- * Diag pages (roadmap C1 / C2), with a diagnostic database from the SD card
+ * Diag pages with a diagnostic database from the SD card
  * (/db/diag/<make>.txt, docs/diag_db.md).
  *
  *   diag       database dropdown (diag_files / diag_file_sel, setting diag_db),
  *              Scan ECUs (diag_scan_text), diag_status, ECU rows built here in
  *              objects.diag_ecu_list (tap = ECU page).
- *   diag_ecu   one ECU: Identification (every database DID F180..F1FF of this
- *              ECU), Read DTCs (19 02 FF, texts from the database, status
+ *   diag_ecu   one ECU: Identification (UDS DIDs or configured KWP local IDs),
+ *              Read DTCs (19 02 FF or 18 FF, texts from the database, status
  *              decoded), Clear DTCs (14 FF FF FF after a confirmation, then read
  *              again), Save to SD (dtc_<ECU>_<date>.txt).
  *              diag_ecu_title, diag_ecu_text.
@@ -14,9 +14,9 @@
  *              diag_did_sel, entry 0 = the hex field diag_did_hex), Read, Live
  *              (every second); diag_did_result (decoded), diag_did_raw (bytes).
  *
- * Requests go one after the other through comsm (UDS over the chosen car
- * interface), only while OBD is not connected. Scan = Tester Present (3E 00);
- * a negative answer still means the ECU is there.
+ * Requests go one after the other through comsm (UDS or KWP over ISO-TP on the
+ * chosen car interface), only while OBD is not connected. Scan probes candidate
+ * ECU addresses from the database with UDS first and then KWP if needed.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +43,7 @@ static const char *TAG = "view_diag";
 #define DIAG_DIR    MOUNT_POINT "/db/diag"
 #define MAX_ECU     64
 #define MAX_DID     1024
+#define MAX_KWP_ID  512
 #define MAX_DTC     4096
 #define MAX_FILES   16
 #define MAX_INFO    32              /* identification DIDs per ECU */
@@ -67,6 +68,8 @@ typedef enum { ECU_UNKNOWN, ECU_ASKING, ECU_YES, ECU_NO, ECU_ERROR } ecu_state_t
 
 static diagdb_t     s_db;
 static ecu_state_t *s_ecu_st;
+typedef enum { ECU_PROTO_UNKNOWN, ECU_PROTO_UDS, ECU_PROTO_KWP } ecu_proto_t;
+static ecu_proto_t *s_ecu_proto;
 static uint8_t     *s_ecu_nrc;
 static lv_obj_t   **s_row_lbl;              /* label of each ECU row */
 static char         s_file[48];
@@ -125,16 +128,20 @@ static bool alloc_tables(void)
     }
     s_db.ecus = heap_caps_calloc(MAX_ECU, sizeof(diagdb_ecu_t), MALLOC_CAP_SPIRAM);
     s_db.dids = heap_caps_calloc(MAX_DID, sizeof(diagdb_did_t), MALLOC_CAP_SPIRAM);
+    s_db.kwp_ids = heap_caps_calloc(MAX_KWP_ID, sizeof(diagdb_kwp_id_t), MALLOC_CAP_SPIRAM);
     s_db.dtcs = heap_caps_calloc(MAX_DTC, sizeof(diagdb_dtc_t), MALLOC_CAP_SPIRAM);
     s_ecu_st = heap_caps_calloc(MAX_ECU, sizeof(ecu_state_t), MALLOC_CAP_SPIRAM);
+    s_ecu_proto = heap_caps_calloc(MAX_ECU, sizeof(ecu_proto_t), MALLOC_CAP_SPIRAM);
     s_ecu_nrc = heap_caps_calloc(MAX_ECU, 1, MALLOC_CAP_SPIRAM);
     s_row_lbl = heap_caps_calloc(MAX_ECU, sizeof(lv_obj_t *), MALLOC_CAP_SPIRAM);
     s_ecu_ndtc = heap_caps_calloc(MAX_ECU, sizeof(int16_t), MALLOC_CAP_SPIRAM);
     s_ecu_dtc = heap_caps_calloc(MAX_ECU, ECU_DTC_LEN, MALLOC_CAP_SPIRAM);
     s_db.max_ecu = MAX_ECU;
     s_db.max_did = MAX_DID;
+    s_db.max_kwp_id = MAX_KWP_ID;
     s_db.max_dtc = MAX_DTC;
-    return s_db.ecus && s_db.dids && s_db.dtcs && s_ecu_st && s_ecu_nrc && s_row_lbl && s_ecu_ndtc && s_ecu_dtc;
+    return s_db.ecus && s_db.dids && s_db.kwp_ids && s_db.dtcs && s_ecu_st && s_ecu_proto &&
+           s_ecu_nrc && s_row_lbl && s_ecu_ndtc && s_ecu_dtc;
 }
 
 static int list_files(void)
@@ -238,21 +245,25 @@ static void update_rows(void)
         const diagdb_ecu_t *e = &s_db.ecus[i];
         const char *st = s_ecu_st[i] == ECU_ASKING ? "asking..." : s_ecu_st[i] == ECU_YES ? "answers"
                        : s_ecu_st[i] == ECU_NO ? "no answer" : s_ecu_st[i] == ECU_ERROR ? "link error" : "";
-        char t[140], d[40] = "";
+        char t[140], d[40] = "", p[16] = "";
+        if (s_ecu_st[i] == ECU_YES) {
+            snprintf(p, sizeof(p), " (%s)", s_ecu_proto[i] == ECU_PROTO_KWP ? "KWP" :
+                     s_ecu_proto[i] == ECU_PROTO_UDS ? "UDS" : "protocol?");
+        }
         if (s_ecu_st[i] == ECU_YES && s_ecu_ndtc[i] > 0) {
             snprintf(d, sizeof(d), ", %d DTC%s", s_ecu_ndtc[i], s_ecu_ndtc[i] == 1 ? "" : "s");
         } else if (s_ecu_st[i] == ECU_YES && s_ecu_ndtc[i] == 0) {
             snprintf(d, sizeof(d), ", no DTCs");
         } else if (s_ecu_st[i] == ECU_YES && s_ecu_dtc[i * ECU_DTC_LEN]) {
             snprintf(d, sizeof(d), ", DTCs: %.24s", s_ecu_dtc + i * ECU_DTC_LEN);
-        } else if (s_job == JOB_SCAN && s_scan_phase == 1 && s_step == i) {
+        } else if (s_job == JOB_SCAN && s_scan_phase == 2 && s_step == i) {
             snprintf(d, sizeof(d), ", reading DTCs...");
         }
         if (s_ecu_st[i] == ECU_YES && s_ecu_nrc[i]) {
-            snprintf(t, sizeof(t), "%-20s  %03X / %03X   %s (negative answer %02X)%s", e->name, e->tx, e->rx, st,
+            snprintf(t, sizeof(t), "%-20s  %03X / %03X   %s%s (negative answer %02X)%s", e->name, e->tx, e->rx, st, p,
                      s_ecu_nrc[i], d);
         } else {
-            snprintf(t, sizeof(t), "%-20s  %03X / %03X   %s%s", e->name, e->tx, e->rx, st, d);
+            snprintf(t, sizeof(t), "%-20s  %03X / %03X   %s%s%s", e->name, e->tx, e->rx, st, p, d);
         }
         if (strcmp(lv_label_get_text(s_row_lbl[i]), t) != 0) {
             lv_label_set_text(s_row_lbl[i], t);
@@ -263,7 +274,7 @@ static void update_rows(void)
 static void load(const char *name)
 {
     s_job = JOB_NONE;
-    s_db.necu = s_db.ndid = s_db.ndtc = 0;
+    s_db.necu = s_db.ndid = s_db.nkwp_id = s_db.ndtc = 0;
     memset(s_row_lbl, 0, MAX_ECU * sizeof(lv_obj_t *));
     strlcpy(s_file, name, sizeof(s_file));
     char path[96];
@@ -285,8 +296,8 @@ static void load(const char *name)
         s_msg[0] = '\0';
     }
     build_rows();
-    ESP_LOGI(TAG, "%s: %u ECUs, %u DIDs, %u DTC texts, %lu lines skipped", name, s_db.necu, s_db.ndid,
-             s_db.ndtc, (unsigned long)s_db.skipped);
+    ESP_LOGI(TAG, "%s: %u ECUs, %u DIDs, %u KWP IDs, %u DTC texts, %lu lines skipped", name, s_db.necu,
+             s_db.ndid, s_db.nkwp_id, s_db.ndtc, (unsigned long)s_db.skipped);
 }
 
 static void enter(void)
@@ -339,9 +350,16 @@ static void start_job(job_t j)
     s_sent = false;
 }
 
+static bool ecu_uses_kwp(int ecu)
+{
+    if (s_ecu_proto[ecu] == ECU_PROTO_KWP) return true;
+    return s_ecu_proto[ecu] == ECU_PROTO_UNKNOWN && s_db.ecus[ecu].protocol == DIAGDB_PROTOCOL_KWP;
+}
+
 static void clear_results(void)
 {
     memset(s_ecu_st, 0, MAX_ECU * sizeof(ecu_state_t));
+    memset(s_ecu_proto, 0, MAX_ECU * sizeof(ecu_proto_t));
     for (int i = 0; i < MAX_ECU; i++) {
         s_ecu_ndtc[i] = -1;
         s_ecu_dtc[i * ECU_DTC_LEN] = '\0';
@@ -395,25 +413,40 @@ void view_diag_read_info(void)
     if (s_job != JOB_NONE || s_ecu < 0 || !obd_idle("diagnostics")) {
         return;
     }
-    /* identification = the database's DIDs F180..F1FF for this ECU (own and '*') */
+    bool kwp = ecu_uses_kwp(s_ecu);
     s_ninfo = 0;
-    for (int i = 0; i < s_db.ndid && s_ninfo < MAX_INFO; i++) {
-        const diagdb_did_t *d = &s_db.dids[i];
-        if (d->did < 0xF180 || d->did > 0xF1FF || (d->ecu != s_ecu && d->ecu != DIAGDB_ALL)) {
-            continue;
+    if (kwp) {
+        for (int i = 0; i < s_db.nkwp_id && s_ninfo < MAX_INFO; i++) {
+            const diagdb_kwp_id_t *d = &s_db.kwp_ids[i];
+            if (d->ecu != s_ecu && d->ecu != DIAGDB_ALL) continue;
+            bool dup = false;
+            for (int k = 0; k < s_ninfo; k++) dup |= s_info_did[k] == d->local_id;
+            if (!dup) {
+                s_info_did[s_ninfo] = d->local_id;
+                snprintf(s_info[s_ninfo], INFO_LEN, "%.60s: ...",
+                         diagdb_find_kwp_id(&s_db, s_ecu, d->local_id)->name);
+                s_ninfo++;
+            }
         }
-        bool dup = false;
-        for (int k = 0; k < s_ninfo; k++) {
-            dup |= s_info_did[k] == d->did;
-        }
-        if (!dup) {
-            s_info_did[s_ninfo] = d->did;
-            snprintf(s_info[s_ninfo], INFO_LEN, "%.60s: ...", diagdb_find_did(&s_db, s_ecu, d->did)->name);
-            s_ninfo++;
+    } else {
+        for (int i = 0; i < s_db.ndid && s_ninfo < MAX_INFO; i++) {
+            const diagdb_did_t *d = &s_db.dids[i];
+            if (d->did < 0xF180 || d->did > 0xF1FF || (d->ecu != s_ecu && d->ecu != DIAGDB_ALL)) {
+                continue;
+            }
+            bool dup = false;
+            for (int k = 0; k < s_ninfo; k++) dup |= s_info_did[k] == d->did;
+            if (!dup) {
+                s_info_did[s_ninfo] = d->did;
+                snprintf(s_info[s_ninfo], INFO_LEN, "%.60s: ...", diagdb_find_did(&s_db, s_ecu, d->did)->name);
+                s_ninfo++;
+            }
         }
     }
     if (s_ninfo == 0) {
-        view_show_message("Identification", "The database has no identification DIDs (F180..F1FF) for this ECU.");
+        view_show_message("Identification", kwp
+                          ? "The database has no [kwp_id] entries for this ECU."
+                          : "The database has no identification DIDs (F180..F1FF) for this ECU.");
         return;
     }
     s_have_info = true;
@@ -527,10 +560,47 @@ static int format_dtcs(const comsm_uds_result_t *r, int ecu, char *out, size_t l
     return n;
 }
 
+static int format_kwp_dtcs(const comsm_uds_result_t *r, int ecu, char *out, size_t len)
+{
+    if (r->state == COMSM_UDS_NEGATIVE) {
+        snprintf(out, len, "KWP DTC request refused (NRC %02X)", r->nrc);
+        return -1;
+    }
+    if (r->state != COMSM_UDS_DONE || r->len < 2 || r->data[0] != 0x58) {
+        snprintf(out, len, "%s", r->state == COMSM_UDS_TIMEOUT ? "no answer to KWP DTC request" : "invalid KWP DTC response");
+        return -1;
+    }
+    size_t off = 2;                     /* 58 + numberOfDTC */
+    if (r->data[1] > (r->len - off) / 3 || r->len != off + 3u * r->data[1]) {
+        snprintf(out, len, "malformed KWP DTC response (%u bytes)", r->len);
+        return -1;
+    }
+    int n = r->data[1];
+    if (n == 0) {
+        snprintf(out, len, "no trouble codes");
+        return 0;
+    }
+    size_t o = (size_t)snprintf(out, len, "%d trouble code%s:", n, n == 1 ? "" : "s");
+    for (int i = 0; i < n && o + 120 < len; i++) {
+        const uint8_t *p = r->data + off + 3 * i;
+        uint32_t code = ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8);
+        char c[8];
+        snprintf(c, sizeof(c), "%02X%02X", p[0], p[1]);
+        const char *text = diagdb_dtc_text(&s_db, ecu, code);
+        o += snprintf(out + o, len - o, "\n  %s  %.64s\n      KWP status %02X",
+                      c, text ? text : "(no text in the database)", p[2]);
+    }
+    return n;
+}
+
 static void dtc_result(const comsm_uds_result_t *r)
 {
     stamp(s_dtc_when, sizeof(s_dtc_when));
-    format_dtcs(r, s_ecu, s_dtc_text, sizeof(s_dtc_text));
+    if (ecu_uses_kwp(s_ecu)) {
+        format_kwp_dtcs(r, s_ecu, s_dtc_text, sizeof(s_dtc_text));
+    } else {
+        format_dtcs(r, s_ecu, s_dtc_text, sizeof(s_dtc_text));
+    }
 }
 
 static void did_result(const comsm_uds_result_t *r)
@@ -538,16 +608,28 @@ static void did_result(const comsm_uds_result_t *r)
     char when[32];
     stamp(when, sizeof(when));
     s_did_count++;
-    const diagdb_did_t *d = diagdb_find_did(&s_db, s_ecu, s_did);
-    if (r->state == COMSM_UDS_DONE && r->len >= 3 && r->data[0] == 0x62 && (r->data[1] << 8 | r->data[2]) == s_did) {
-        const uint8_t *p = r->data + 3;
-        int n = r->len - 3;
+    bool kwp = ecu_uses_kwp(s_ecu);
+    const diagdb_did_t *d = kwp ? NULL : diagdb_find_did(&s_db, s_ecu, s_did);
+    const diagdb_kwp_id_t *kd = kwp ? diagdb_find_kwp_id(&s_db, s_ecu, (uint8_t)s_did) : NULL;
+    bool valid = kwp
+                 ? r->state == COMSM_UDS_DONE && r->len >= 2 && r->data[0] == 0x5A && r->data[1] == (uint8_t)s_did
+                 : r->state == COMSM_UDS_DONE && r->len >= 3 && r->data[0] == 0x62 &&
+                   (r->data[1] << 8 | r->data[2]) == s_did;
+    if (valid) {
+        const uint8_t *p = r->data + (kwp ? 2 : 3);
+        int n = r->len - (kwp ? 2 : 3);
         char v[96];
         if (d) {
             diagdb_decode(d, p, n, v, sizeof(v));
             snprintf(s_did_res, sizeof(s_did_res), "%04X  %.48s:  %s", s_did, d->name, v);
+        } else if (kd) {
+            diagdb_did_t value = { .type = kd->type, .scale = kd->scale, .offset = kd->offset };
+            strlcpy(value.unit, kd->unit, sizeof(value.unit));
+            diagdb_decode(&value, p, n, v, sizeof(v));
+            snprintf(s_did_res, sizeof(s_did_res), "%02X  %.48s:  %s", (uint8_t)s_did, kd->name, v);
         } else {
-            snprintf(s_did_res, sizeof(s_did_res), "%04X  (not in the database): %d bytes", s_did, n);
+            snprintf(s_did_res, sizeof(s_did_res), kwp ? "%02X  (not in the database): %d bytes"
+                         : "%04X  (not in the database): %d bytes", kwp ? (uint8_t)s_did : s_did, n);
         }
         size_t o = snprintf(s_did_raw, sizeof(s_did_raw), "raw (%d bytes):", n);
         for (int i = 0; i < n && o + 4 < sizeof(s_did_raw); i++) {
@@ -568,11 +650,14 @@ static void did_result(const comsm_uds_result_t *r)
                  (unsigned long)s_did_count, s_did_count == 1 ? "" : "s");
     } else {
         if (r->state == COMSM_UDS_NEGATIVE) {
-            snprintf(s_did_res, sizeof(s_did_res), "%04X: %s (NRC %02X)", s_did, nrc_text(r->nrc), r->nrc);
+            snprintf(s_did_res, sizeof(s_did_res), kwp ? "%02X: %s (NRC %02X)" : "%04X: %s (NRC %02X)",
+                     kwp ? (uint8_t)s_did : s_did, nrc_text(r->nrc), r->nrc);
         } else if (r->state == COMSM_UDS_TIMEOUT) {
-            snprintf(s_did_res, sizeof(s_did_res), "%04X: no answer", s_did);
+            snprintf(s_did_res, sizeof(s_did_res), kwp ? "%02X: no answer" : "%04X: no answer",
+                     kwp ? (uint8_t)s_did : s_did);
         } else {
-            snprintf(s_did_res, sizeof(s_did_res), "%04X: error %s", s_did, r->error);
+            snprintf(s_did_res, sizeof(s_did_res), kwp ? "%02X: error %s" : "%04X: error %s",
+                     kwp ? (uint8_t)s_did : s_did, r->error);
         }
         snprintf(s_did_raw, sizeof(s_did_raw), "%s, read %lu time%s", when, (unsigned long)s_did_count,
                  s_did_count == 1 ? "" : "s");
@@ -597,22 +682,58 @@ static void job_step(void)
         uint8_t len = 0;
         switch (s_job) {
         case JOB_SCAN:
+            if (s_scan_phase == 0 && s_db.ecus[ecu].protocol == DIAGDB_PROTOCOL_KWP) {
+                s_scan_phase = 1;
+            }
             if (s_scan_phase == 0) {
                 req[0] = 0x3E; req[1] = 0x00; len = 2;
+            } else if (s_scan_phase == 1) {
+                req[0] = 0x10; req[1] = 0x81; len = 2;
+            } else {
+                if (ecu_uses_kwp(ecu)) {
+                    memcpy(req, s_db.ecus[ecu].kwp_dtc_req, s_db.ecus[ecu].kwp_dtc_len);
+                    len = s_db.ecus[ecu].kwp_dtc_len;
+                } else {
+                    req[0] = 0x19; req[1] = 0x02; req[2] = 0xFF; len = 3;
+                }
+            }
+            break;
+        case JOB_INFO:
+            if (ecu_uses_kwp(ecu)) {
+                req[0] = 0x1A; req[1] = (uint8_t)s_info_did[s_step]; len = 2;
+            } else {
+                req[0] = 0x22; req[1] = s_info_did[s_step] >> 8; req[2] = s_info_did[s_step] & 0xFF; len = 3;
+            }
+            break;
+        case JOB_DTC:
+            if (ecu_uses_kwp(ecu)) {
+                memcpy(req, s_db.ecus[ecu].kwp_dtc_req, s_db.ecus[ecu].kwp_dtc_len);
+                len = s_db.ecus[ecu].kwp_dtc_len;
             } else {
                 req[0] = 0x19; req[1] = 0x02; req[2] = 0xFF; len = 3;
             }
             break;
-        case JOB_INFO:  req[0] = 0x22; req[1] = s_info_did[s_step] >> 8; req[2] = s_info_did[s_step] & 0xFF; len = 3; break;
-        case JOB_DTC:   req[0] = 0x19; req[1] = 0x02; req[2] = 0xFF; len = 3; break;
-        case JOB_CLEAR: req[0] = 0x14; req[1] = 0xFF; req[2] = 0xFF; req[3] = 0xFF; len = 4; break;
-        case JOB_DID:   req[0] = 0x22; req[1] = s_did >> 8; req[2] = s_did & 0xFF; len = 3; break;
+        case JOB_CLEAR:
+            req[0] = 0x14;
+            if (ecu_uses_kwp(ecu)) {
+                req[1] = 0xFF; req[2] = 0x00; len = 3;
+            } else {
+                req[1] = 0xFF; req[2] = 0xFF; req[3] = 0xFF; len = 4;
+            }
+            break;
+        case JOB_DID:
+            if (ecu_uses_kwp(ecu)) {
+                req[0] = 0x1A; req[1] = (uint8_t)s_did; len = 2;
+            } else {
+                req[0] = 0x22; req[1] = s_did >> 8; req[2] = s_did & 0xFF; len = 3;
+            }
+            break;
         default: return;
         }
         if (comsm_uds_request(s_db.ecus[ecu].tx, s_db.ecus[ecu].rx, req, len) == ESP_OK) {
             s_sent = true;
             s_seq = r.seq;
-            if (s_job == JOB_SCAN && s_scan_phase == 0) {
+            if (s_job == JOB_SCAN && s_ecu_st[ecu] == ECU_UNKNOWN) {
                 s_ecu_st[ecu] = ECU_ASKING;
             }
         } else {
@@ -634,33 +755,87 @@ static void job_step(void)
     }
     switch (s_job) {
     case JOB_SCAN:
-        if (s_scan_phase == 1) {                /* DTCs of an answering ECU */
-            s_ecu_ndtc[ecu] = (int16_t)format_dtcs(&r, ecu, s_ecu_dtc + ecu * ECU_DTC_LEN, ECU_DTC_LEN);
+        if (s_scan_phase == 2) {                /* DTCs of an answering ECU */
+            int n = ecu_uses_kwp(ecu)
+                    ? format_kwp_dtcs(&r, ecu, s_ecu_dtc + ecu * ECU_DTC_LEN, ECU_DTC_LEN)
+                    : format_dtcs(&r, ecu, s_ecu_dtc + ecu * ECU_DTC_LEN, ECU_DTC_LEN);
+            s_ecu_ndtc[ecu] = (int16_t)n;
             s_scan_phase = 0;
             s_step++;
             break;
         }
-        s_ecu_st[ecu] = r.state == COMSM_UDS_DONE || r.state == COMSM_UDS_NEGATIVE ? ECU_YES
-                      : r.state == COMSM_UDS_TIMEOUT ? ECU_NO : ECU_ERROR;
-        s_ecu_nrc[ecu] = r.state == COMSM_UDS_NEGATIVE ? r.nrc : 0;
-        if (s_scan_dtc && s_ecu_st[ecu] == ECU_YES) {
-            s_scan_phase = 1;                   /* same ECU: read its DTCs next */
-        } else {
-            s_step++;
+        if (s_scan_phase == 0 && r.state == COMSM_UDS_TIMEOUT) {
+            s_scan_phase = 1;                   /* try KWP session start on the same IDs */
+            break;
         }
+        if (s_scan_phase == 0) {
+            bool uds_answer = r.state == COMSM_UDS_DONE || r.state == COMSM_UDS_NEGATIVE;
+            if (uds_answer) {
+                s_ecu_st[ecu] = ECU_YES;
+                s_ecu_proto[ecu] = ECU_PROTO_UDS;
+                s_ecu_nrc[ecu] = r.state == COMSM_UDS_NEGATIVE ? r.nrc : 0;
+                s_scan_phase = 1;           /* disambiguate KWP even if Tester Present answered */
+                break;
+            }
+            s_scan_phase = 1;               /* try KWP session start on the same IDs */
+            break;
+        }
+        bool was_present = s_ecu_st[ecu] == ECU_YES;
+        bool got_response = r.state == COMSM_UDS_DONE || r.state == COMSM_UDS_NEGATIVE;
+        bool kwp_session = r.state == COMSM_UDS_DONE && r.len >= 2 &&
+                           r.data[0] == 0x50 && r.data[1] == 0x81;
+        bool uds_default = r.state == COMSM_UDS_DONE && r.len >= 2 &&
+                           r.data[0] == 0x50 && (r.data[1] & 0x7F) == 0x01;
+        bool configured_kwp = s_db.ecus[ecu].protocol == DIAGDB_PROTOCOL_KWP;
+        if (kwp_session || (!was_present && configured_kwp && got_response)) {
+            s_ecu_st[ecu] = ECU_YES;
+            s_ecu_proto[ecu] = ECU_PROTO_KWP;
+            s_ecu_nrc[ecu] = r.state == COMSM_UDS_NEGATIVE ? r.nrc : 0;
+        } else if (!was_present && uds_default) {
+            s_ecu_st[ecu] = ECU_YES;
+            s_ecu_proto[ecu] = ECU_PROTO_UDS;
+            s_ecu_nrc[ecu] = 0;
+        } else if (!was_present && got_response) {
+            s_ecu_st[ecu] = ECU_YES;
+            s_ecu_proto[ecu] = ECU_PROTO_UNKNOWN;
+            s_ecu_nrc[ecu] = r.state == COMSM_UDS_NEGATIVE ? r.nrc : 0;
+        } else if (!was_present) {
+            s_ecu_st[ecu] = r.state == COMSM_UDS_ERROR ? ECU_ERROR : ECU_NO;
+            s_ecu_nrc[ecu] = 0;
+        }
+        if (s_scan_dtc && s_ecu_st[ecu] == ECU_YES) s_scan_phase = 2;
+        else { s_scan_phase = 0; s_step++; }
         break;
     case JOB_INFO: {
-        const diagdb_did_t *d = diagdb_find_did(&s_db, s_ecu, s_info_did[s_step]);
         char v[72];
-        if (r.state == COMSM_UDS_DONE && r.len >= 3 && r.data[0] == 0x62 &&
-            (r.data[1] << 8 | r.data[2]) == s_info_did[s_step] && d) {
-            diagdb_decode(d, r.data + 3, r.len - 3, v, sizeof(v));
+        if (ecu_uses_kwp(s_ecu)) {
+            const diagdb_kwp_id_t *d = diagdb_find_kwp_id(&s_db, s_ecu, (uint8_t)s_info_did[s_step]);
+            if (r.state == COMSM_UDS_DONE && r.len >= 2 && r.data[0] == 0x5A &&
+                r.data[1] == (uint8_t)s_info_did[s_step] && d) {
+                diagdb_did_t value = { .type = d->type, .scale = d->scale, .offset = d->offset };
+                strlcpy(value.unit, d->unit, sizeof(value.unit));
+                diagdb_decode(&value, r.data + 2, r.len - 2, v, sizeof(v));
+            } else if (r.state == COMSM_UDS_NEGATIVE) {
+                snprintf(v, sizeof(v), "(%s)", nrc_text(r.nrc));
+            } else {
+                snprintf(v, sizeof(v), "%s", r.state == COMSM_UDS_TIMEOUT ? "(no answer)" : "(error)");
+            }
+            snprintf(s_info[s_step], INFO_LEN, "%02X %.34s: %.50s", (uint8_t)s_info_did[s_step],
+                     d ? d->name : "KWP ID", v);
         } else if (r.state == COMSM_UDS_NEGATIVE) {
+            const diagdb_did_t *d = diagdb_find_did(&s_db, s_ecu, s_info_did[s_step]);
             snprintf(v, sizeof(v), "(%s)", nrc_text(r.nrc));
+            snprintf(s_info[s_step], INFO_LEN, "%.40s: %.50s", d ? d->name : "?", v);
         } else {
-            snprintf(v, sizeof(v), r.state == COMSM_UDS_TIMEOUT ? "(no answer)" : "(error)");
+            const diagdb_did_t *d = diagdb_find_did(&s_db, s_ecu, s_info_did[s_step]);
+            if (r.state == COMSM_UDS_DONE && r.len >= 3 && r.data[0] == 0x62 &&
+                (r.data[1] << 8 | r.data[2]) == s_info_did[s_step] && d) {
+                diagdb_decode(d, r.data + 3, r.len - 3, v, sizeof(v));
+            } else {
+                snprintf(v, sizeof(v), r.state == COMSM_UDS_TIMEOUT ? "(no answer)" : "(error)");
+            }
+            snprintf(s_info[s_step], INFO_LEN, "%.40s: %.50s", d ? d->name : "?", v);
         }
-        snprintf(s_info[s_step], INFO_LEN, "%.40s: %.50s", d ? d->name : "?", v);
         s_step++;
         break;
     }
@@ -785,7 +960,9 @@ void view_diag_save_report(void)
         const diagdb_ecu_t *e = &s_db.ecus[i];
         const char *state = s_ecu_st[i] == ECU_YES ? "answers" : s_ecu_st[i] == ECU_NO ? "no answer"
                           : s_ecu_st[i] == ECU_ERROR ? "link error" : "not asked";
-        fprintf(f, "\n%s (request %03X, answer %03X): %s\n", e->name, e->tx, e->rx, state);
+        const char *proto = s_ecu_proto[i] == ECU_PROTO_KWP ? "KWP" :
+                            s_ecu_proto[i] == ECU_PROTO_UDS ? "UDS" : "unknown protocol";
+        fprintf(f, "\n%s (request %03X, answer %03X, %s): %s\n", e->name, e->tx, e->rx, proto, state);
         if (s_ecu_st[i] == ECU_YES) {
             fprintf(f, "  %s\n", s_ecu_dtc[i * ECU_DTC_LEN] ? s_ecu_dtc + i * ECU_DTC_LEN : "trouble codes not read");
         }
@@ -810,7 +987,10 @@ static void update_ecu_page(void)
         s_job_msg[0] = '\0';
     }
     const diagdb_ecu_t *e = &s_db.ecus[s_ecu];
-    uv_strf(&v_title, "%s  (%03X / %03X)%s", e->name, e->tx, e->rx, s_job != JOB_NONE ? "  - working..." : "");
+    const char *proto = s_ecu_proto[s_ecu] == ECU_PROTO_KWP ? "KWP" :
+                        s_ecu_proto[s_ecu] == ECU_PROTO_UDS ? "UDS" : "unscanned";
+    uv_strf(&v_title, "%s  (%03X / %03X)  %s%s", e->name, e->tx, e->rx, proto,
+            s_job != JOB_NONE ? "  - working..." : "");
     build_page();
     uv_str(&v_text, s_page);
 }
@@ -820,22 +1000,31 @@ static void update_ecu_page(void)
 static void did_enter(void)
 {
     s_ndid_list = 0;
-    size_t o = snprintf(s_did_opts, sizeof(s_did_opts), "(DID typed in the field ->)");
-    for (int i = 0; i < s_db.ndid && s_ndid_list < MAX_DID_LIST; i++) {
-        const diagdb_did_t *d = &s_db.dids[i];
-        if (d->ecu != s_ecu && d->ecu != DIAGDB_ALL) {
-            continue;
+    bool kwp = ecu_uses_kwp(s_ecu);
+    size_t o = snprintf(s_did_opts, sizeof(s_did_opts), kwp
+                        ? "(KWP local ID typed in the field ->)" : "(DID typed in the field ->)");
+    if (kwp) {
+        for (int i = 0; i < s_db.nkwp_id && s_ndid_list < MAX_DID_LIST; i++) {
+            const diagdb_kwp_id_t *d = &s_db.kwp_ids[i];
+            if (d->ecu != s_ecu && d->ecu != DIAGDB_ALL) continue;
+            bool dup = false;
+            for (int k = 0; k < s_ndid_list; k++) dup |= s_did_ids[k] == d->local_id;
+            if (dup) continue;
+            const diagdb_kwp_id_t *best = diagdb_find_kwp_id(&s_db, s_ecu, d->local_id);
+            s_did_ids[s_ndid_list++] = d->local_id;
+            o += snprintf(s_did_opts + o, sizeof(s_did_opts) - o, "\n%02X  %.60s", d->local_id, best->name);
         }
-        bool dup = false;
-        for (int k = 0; k < s_ndid_list; k++) {
-            dup |= s_did_ids[k] == d->did;
+    } else {
+        for (int i = 0; i < s_db.ndid && s_ndid_list < MAX_DID_LIST; i++) {
+            const diagdb_did_t *d = &s_db.dids[i];
+            if (d->ecu != s_ecu && d->ecu != DIAGDB_ALL) continue;
+            bool dup = false;
+            for (int k = 0; k < s_ndid_list; k++) dup |= s_did_ids[k] == d->did;
+            if (dup) continue;
+            const diagdb_did_t *best = diagdb_find_did(&s_db, s_ecu, d->did);
+            s_did_ids[s_ndid_list++] = d->did;
+            o += snprintf(s_did_opts + o, sizeof(s_did_opts) - o, "\n%04X  %.60s", d->did, best->name);
         }
-        if (dup) {
-            continue;
-        }
-        const diagdb_did_t *best = diagdb_find_did(&s_db, s_ecu, d->did);
-        s_did_ids[s_ndid_list++] = d->did;
-        o += snprintf(s_did_opts + o, sizeof(s_did_opts) - o, "\n%04X  %.60s", d->did, best->name);
     }
     uv_str(&v_did_list, s_did_opts);
     uv_int(&v_did_sel, s_ndid_list ? 1 : 0);
@@ -856,8 +1045,11 @@ static bool chosen_did(uint16_t *did)
     uv_get_str(&v_did_hex, t, sizeof(t));
     char *end;
     unsigned long v = strtoul(t, &end, 16);
-    if (t[0] == '\0' || *end != '\0' || v > 0xFFFF) {
-        view_show_message("Read data", "Choose a DID from the list, or type 4 hex digits (e.g. F190) in the field.");
+    bool kwp = ecu_uses_kwp(s_ecu);
+    if (t[0] == '\0' || *end != '\0' || v > (kwp ? 0xFF : 0xFFFF)) {
+        view_show_message("Read data", kwp
+                          ? "Choose a KWP local ID, or type 2 hex digits (e.g. 80) in the field."
+                          : "Choose a DID from the list, or type 4 hex digits (e.g. F190) in the field.");
         return false;
     }
     *did = (uint16_t)v;
@@ -916,7 +1108,8 @@ static void update_did_page(void)
         did_start();
     }
     const diagdb_ecu_t *e = &s_db.ecus[s_ecu];
-    uv_strf(&v_did_title, "%s  (%03X / %03X) - read data by identifier (22)%s", e->name, e->tx, e->rx,
+    uv_strf(&v_did_title, "%s  (%03X / %03X) - %s%s", e->name, e->tx, e->rx,
+            ecu_uses_kwp(s_ecu) ? "read ECU ID (1A)" : "read data by identifier (22)",
             s_job == JOB_DID ? "  - reading..." : "");
     uv_str(&v_did_live, s_live ? "Stop live" : "Live");
     uv_str(&v_did_result, s_did_res[0] ? s_did_res : "Choose a DID and press Read (or Live: every second).");

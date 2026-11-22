@@ -20,6 +20,7 @@ TEXT = """
 [ecu]
 Engine | 7E0 | 7E8 | uds | 10 3E 22 19 14
 Cluster | 714 | 77E | uds | 3E 22      # only these two
+Airbag | 715 | 77F | kwp
 [did]
 * | F190 | VIN | ascii | | | | WVWZZZ1KZ6W000001
 Engine | F40C | Engine speed | u16 | 0.25 | 0 | rpm | 850
@@ -27,10 +28,14 @@ Engine | 1000 | Coolant | s8 | 1 | 0 | C | -12
 Engine | 1001 | Sweep | u16 | 1 | 0 | | 0..100
 Engine | 1002 | Raw | hex | | | | 01 02 0A
 Engine | 1003 | No sim | u8
+[kwp_id]
+Airbag | 80 | ECU name | ascii | | | | SRS
+* | 81 | ECU serial | hex | | | | 01 02
 [dtc]
 * | P0301 | Cylinder 1 misfire detected
 Engine | P0301 | Cylinder 1 misfire (engine) | 2F
 Engine | U0100-87 | Lost communication with ECM | 08
+Airbag | P0301 | Airbag fault | 2F
 """
 
 check(diagdb.parse_dtc_code('P0301') == 0x030100, 'P0301')
@@ -39,9 +44,14 @@ check(diagdb.parse_dtc_code('B1234') == 0x923400, 'B1234')
 check(diagdb.format_dtc_code(0xC10087) == 'U0100-87', 'format')
 
 db = diagdb.parse(TEXT)
-check(len(db.ecus) == 2 and len(db.dids) == 6 and len(db.dtcs) == 3, 'counts')
+check(len(db.ecus) == 3 and len(db.dids) == 6 and len(db.kwp_ids) == 2 and len(db.dtcs) == 4, 'counts')
 eng, clu = db.ecu('engine'), db.ecu_by_tx(0x714)
+airbag = db.ecu('airbag')
 check(clu.services == [0x3E, 0x22], 'services')
+check(airbag.protocol == 'kwp' and airbag.services == diagdb.KWP_DEFAULT_SERVICES and
+      airbag.kwp_dtc_req == '18 00 FF 00', 'KWP ECU defaults')
+custom_kwp = diagdb.parse('[ecu]\nA | 7E0 | 7E8 | kwp | | 18 02 FF 00\n')
+check(custom_kwp.ecus[0].kwp_dtc_req == '18 02 FF 00', 'custom KWP DTC request')
 sim = diagdb.Simulator(db, clock=lambda: 5.0)
 
 def r(ecu, hexreq):
@@ -58,11 +68,17 @@ check(r(eng, '221000') == '621000F4', 'signed -12')
 check(r(eng, '221001') == '6210010019', 'sweep at t=5 s: 25')
 check(r(eng, '221002') == '621002' + '01020A', 'hex')
 check(r(eng, '221003') == '7F2231', 'no sim value')
+check(r(airbag, '1081') == '5081003201F4', 'KWP diagnostic session')
+check(r(airbag, '1A80') == '5A80535253', 'KWP ECU identification')
+check(r(airbag, '1A81') == '5A810102', 'KWP wildcard identification')
 check(r(eng, '22F190F40C') == '62F190' + b'WVWZZZ1KZ6W000001'.hex().upper() + 'F40C0D48', 'two DIDs')
 check(r(eng, '22F1') == '7F2213', 'length')
 check(r(eng, '1902FF') == '5902FF0301002FC1008708', 'DTCs')
 check(r(eng, '190208') == '5902FF0301002FC1008708', 'mask 08: both have bit 3')
 check(r(eng, '190201') == '5902FF0301002F', 'mask 01: only 2F')
+check(r(airbag, airbag.kwp_dtc_req) == '580103012F', 'KWP DTC service')
+check(r(airbag, '14FF00') == '54', 'KWP clear')
+check(r(airbag, airbag.kwp_dtc_req) == '5800', 'KWP DTCs cleared')
 check(r(eng, '1901FF') == '5901FF010002', 'count')
 check(r(clu, '1902FF') == '7F1911', 'cluster has no 19')
 check(r(eng, '14FFFFFF') == '54', 'clear')
@@ -77,6 +93,9 @@ check(db.dtc_text(clu, 0x030100) == 'Cylinder 1 misfire detected', '* text')
 check(db.dtc_text(clu, 0x03011C) == 'Cylinder 1 misfire detected', 'generic failure type')
 
 for bad in ['[did]\n* | F190 | VIN | float', '[ecu]\nA | 7E0 | 7E8\nA | 7E1 | 7E9', '[dtc]\nX | P0301 | t',
+            '[ecu]\nA | 7E0 | 7E8 | can', '[kwp_id]\nMissing | 80 | ID | ascii',
+            '[ecu]\nA | 7E0 | 7E8 | kwp | | 22 00',
+            '[ecu]\nA | 7E0 | 7E8 | kwp | | 1800FF00',
             '[ecu]\nA | 8000 | 7E8', 'Engine | 7E0']:
     try:
         diagdb.parse(bad)
@@ -102,7 +121,8 @@ for src in (db, gen):
     text = diagdb.dump(src)
     back = diagdb.parse(text)
     check(back == src, 'dump / parse round trip')
-check(diagdb.dump(db).count('[ecu]') == 1 and 'U0100-87' in diagdb.dump(db), 'dump content')
+check(diagdb.dump(db).count('[ecu]') == 1 and 'U0100-87' in diagdb.dump(db) and '[kwp_id]' in diagdb.dump(db),
+      'dump content')
 bad_db = diagdb.parse(TEXT)
 bad_db.dids[0].name = 'VIN # comment'
 try:
